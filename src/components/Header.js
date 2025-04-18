@@ -11,7 +11,7 @@ export class Header extends Component {
         {/* Left */}
         <div className="relative flex items-center h-15 cursor-pointer my-auto w-24">
           <Image
-            src="/Instacares_final.png"
+            src="/logo.png"
             fill
             alt="Instacares Logo"
             style={{ objectFit: "contain" }}
