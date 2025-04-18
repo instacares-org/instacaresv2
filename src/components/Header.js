@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import React, { Component } from "react";
-import { Bars3Icon, GlobeAltIcon, MagnifyingGlassIcon, UserCircleIcon, Bars3BottomLeftIcon } from "@heroicons/react/24/solid";
+import { GlobeAltIcon, MagnifyingGlassIcon, UserCircleIcon, Bars3BottomLeftIcon } from "@heroicons/react/24/solid";
 
 export class Header extends Component {
   render() {
