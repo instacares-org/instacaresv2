@@ -1,0 +1,168 @@
+import jwt from 'jsonwebtoken';
+import { NextRequest } from 'next/server';
+
+// JWT configuration
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secure-jwt-secret-key-change-in-production';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+
+export interface JWTPayload {
+  userId: string;
+  email: string;
+  userType: 'PARENT' | 'CAREGIVER' | 'ADMIN';
+  approvalStatus: string;
+  iat?: number;
+  exp?: number;
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  userType: 'PARENT' | 'CAREGIVER' | 'ADMIN';
+  approvalStatus: string;
+  profile?: {
+    firstName: string;
+    lastName: string;
+    phone?: string;
+    avatar?: string;
+  };
+}
+
+/**
+ * Generate a JWT token for a user
+ */
+export function generateToken(payload: Omit<JWTPayload, 'iat' | 'exp'>, rememberMe: boolean = false): string {
+  // If remember me is true, token expires in 30 days, otherwise 7 days
+  const expiresIn = rememberMe ? '30d' : JWT_EXPIRES_IN;
+  
+  return jwt.sign(payload, JWT_SECRET, {
+    expiresIn,
+    issuer: 'instacares',
+    audience: 'instacares-users'
+  });
+}
+
+/**
+ * Verify and decode a JWT token
+ */
+export function verifyToken(token: string): JWTPayload | null {
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET, {
+      issuer: 'instacares',
+      audience: 'instacares-users'
+    }) as JWTPayload;
+    
+    return decoded;
+  } catch (error) {
+    console.error('JWT verification failed:', error);
+    return null;
+  }
+}
+
+/**
+ * Extract JWT token from request headers or cookies
+ */
+export function extractTokenFromRequest(request: NextRequest): string | null {
+  // Try Authorization header first
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+
+  // Try cookies as fallback
+  const cookieToken = request.cookies.get('auth-token')?.value;
+  if (cookieToken) {
+    return cookieToken;
+  }
+
+  return null;
+}
+
+/**
+ * Verify user authentication from request
+ */
+export async function verifyAuthFromRequest(request: NextRequest): Promise<{
+  isAuthenticated: boolean;
+  user?: JWTPayload;
+  error?: string;
+}> {
+  const token = extractTokenFromRequest(request);
+  
+  if (!token) {
+    return { isAuthenticated: false, error: 'No token provided' };
+  }
+
+  const payload = verifyToken(token);
+  
+  if (!payload) {
+    return { isAuthenticated: false, error: 'Invalid token' };
+  }
+
+  // Check if user is approved (unless admin)
+  if (payload.userType !== 'ADMIN' && payload.approvalStatus !== 'APPROVED') {
+    return { 
+      isAuthenticated: false, 
+      error: 'Account not approved' 
+    };
+  }
+
+  return { isAuthenticated: true, user: payload };
+}
+
+/**
+ * Generate a secure refresh token (for future implementation)
+ */
+export function generateRefreshToken(): string {
+  return jwt.sign(
+    { type: 'refresh', timestamp: Date.now() },
+    JWT_SECRET + '-refresh',
+    { expiresIn: '30d' }
+  );
+}
+
+/**
+ * Create auth cookie configuration
+ */
+export function createAuthCookieConfig(isProduction: boolean = false, rememberMe: boolean = false) {
+  // If remember me is true, cookie expires in 30 days, otherwise 7 days
+  const maxAge = rememberMe ? 30 * 24 * 60 * 60 : 7 * 24 * 60 * 60;
+  
+  return {
+    name: 'auth-token',
+    options: {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'strict' as const,
+      maxAge, // in seconds
+      path: '/',
+    }
+  };
+}
+
+/**
+ * Verify token from NextRequest with proper error handling
+ */
+export function verifyTokenFromRequest(request: NextRequest): { isValid: boolean; user: JWTPayload | null; error?: string } {
+  try {
+    const token = extractTokenFromRequest(request);
+    
+    if (!token) {
+      return { isValid: false, user: null, error: 'No token provided' };
+    }
+
+    const payload = verifyToken(token);
+    
+    if (!payload) {
+      return { isValid: false, user: null, error: 'Invalid or expired token. Please log in again.' };
+    }
+    
+    // Check if user is approved (unless admin)
+    if (payload.userType !== 'ADMIN' && payload.approvalStatus !== 'APPROVED') {
+      return { isValid: false, user: null, error: 'Account not approved' };
+    }
+
+    return { isValid: true, user: payload };
+  } catch (error) {
+    console.error('JWT verification failed:', error);
+    return { isValid: false, user: null, error: error instanceof Error ? error.message : 'Token verification failed' };
+  }
+}

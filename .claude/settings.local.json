@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(rm:*)",
+      "Bash(node:*)",
+      "Bash(npm run build:*)",
+      "Bash(ESLINT_NO_DEV_ERRORS=true npm run build)",
+      "Bash(npx next build:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Bash(cp:*)"
+    ],
+    "deny": [],
+    "ask": [],
+    "defaultMode": "acceptEdits",
+    "additionalDirectories": [
+      "C:\\c\\Users\\fhabib"
+    ]
+  }
+}

@@ -1,0 +1,774 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserType {
+  PARENT
+  CAREGIVER
+  ADMIN
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+  FAILED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+}
+
+enum InvoiceType {
+  PARENT
+  CAREGIVER
+  PLATFORM
+}
+
+enum CertificationType {
+  CPR
+  FIRST_AID
+  BACKGROUND_CHECK
+  CHILDCARE_LICENSE
+  EDUCATION
+  ID_VERIFICATION
+  INSURANCE_VERIFICATION
+  OTHER
+}
+
+enum ServiceType {
+  BABYSITTING
+  NANNY
+  DAYCARE
+  AFTER_SCHOOL
+  OVERNIGHT
+  SPECIAL_NEEDS
+  TUTORING
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String?
+  userType      UserType
+  approvalStatus ApprovalStatus @default(PENDING)
+  emailVerified Boolean        @default(false)
+  phoneVerified Boolean        @default(false)
+  isActive      Boolean        @default(true)
+  lastLogin     DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  
+  // Profile relationship
+  profile       UserProfile?
+  
+  // Type-specific relationships
+  caregiver     Caregiver?
+  
+  // Booking relationships
+  parentBookings    Booking[] @relation("ParentBookings")
+  caregiverBookings Booking[] @relation("CaregiverBookings")
+  
+  // Review relationships
+  givenReviews     Review[] @relation("ReviewGiver")
+  receivedReviews  Review[] @relation("ReviewReceiver")
+  
+  // Manual payout relationships (for demo account tracking)
+  manualPayouts    ManualPayout[]
+  
+  // Notification relationships
+  notifications    Notification[]
+  
+  // Chat relationships
+  parentChatRooms     ChatRoom[] @relation("ParentChatRooms")
+  caregiverChatRooms  ChatRoom[] @relation("CaregiverChatRooms") 
+  sentMessages        Message[]
+  
+  // Safety relationships
+  children            Child[]
+  emergencyContacts   EmergencyContact[]
+  
+  // Live availability relationships
+  reservations        BookingReservation[] @relation("ParentReservations")
+  
+  @@map("users")
+}
+
+model UserProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  firstName       String
+  lastName        String
+  phone           String?
+  avatar          String?   // S3 URL
+  dateOfBirth     DateTime?
+  
+  // Address information
+  streetAddress   String?
+  apartment       String?
+  city            String?
+  state           String?
+  zipCode         String?
+  country         String   @default("US")
+  
+  // Location for search
+  latitude        Float?
+  longitude       Float?
+  
+  // Emergency contact
+  emergencyName   String?
+  emergencyPhone  String?
+  emergencyRelation String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("user_profiles")
+}
+
+model Caregiver {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Professional information
+  hourlyRate        Float
+  experienceYears   Int      @default(0)
+  bio               String?
+  languages         Json?    // Array of languages spoken
+  
+  // Availability
+  availability      Json?    // Weekly schedule object
+  maxChildren       Int      @default(3)
+  minAge            Int      @default(0) // months
+  maxAge            Int      @default(144) // months (12 years)
+  
+  // Live Spots Capacity Settings
+  dailyCapacity     Int      @default(6)  // Maximum children per day
+  enableDynamicPricing Boolean @default(false)
+  capacityThresholds Json?   // Pricing thresholds based on capacity
+  
+  // Verification status
+  isVerified        Boolean  @default(false)
+  backgroundCheck   Boolean  @default(false)
+  backgroundCheckDate DateTime?
+  
+  // Stripe information
+  stripeAccountId   String?
+  stripeOnboarded   Boolean  @default(false)
+  canReceivePayments Boolean @default(false)
+  
+  // Statistics
+  totalBookings     Int      @default(0)
+  averageRating     Float?
+  totalEarnings     Int      @default(0) // in cents
+  
+  // Status
+  isAvailable       Boolean  @default(true)
+  lastActiveAt      DateTime @default(now())
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relationships
+  certifications    CaregiverCertification[]
+  services          CaregiverService[]
+  photos            CaregiverPhoto[]
+  bookings          Booking[] @relation("CaregiverBookings")
+  verification      CaregiverVerification?
+  availabilitySlots AvailabilitySlot[]
+  
+  @@map("caregivers")
+}
+
+model CaregiverCertification {
+  id              String            @id @default(cuid())
+  caregiverId     String
+  caregiver       Caregiver         @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
+  
+  type            CertificationType
+  title           String
+  issuingBody     String
+  issueDate       DateTime
+  expirationDate  DateTime?
+  certificateUrl  String?           // S3 URL for certificate image
+  isVerified      Boolean           @default(false)
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@map("caregiver_certifications")
+}
+
+model CaregiverService {
+  id          String      @id @default(cuid())
+  caregiverId String
+  caregiver   Caregiver   @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
+  
+  serviceType ServiceType
+  rate        Float?      // Override hourly rate for this service
+  description String?
+  isOffered   Boolean     @default(true)
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  @@unique([caregiverId, serviceType])
+  @@map("caregiver_services")
+}
+
+model CaregiverPhoto {
+  id          String    @id @default(cuid())
+  caregiverId String
+  caregiver   Caregiver @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
+  
+  url         String    // S3 URL
+  caption     String?
+  isProfile   Boolean   @default(false)
+  sortOrder   Int       @default(0)
+  
+  createdAt   DateTime  @default(now())
+  
+  @@map("caregiver_photos")
+}
+
+model Booking {
+  id              String        @id @default(cuid())
+  
+  // Participants
+  parentId        String
+  caregiverId     String
+  parent          User          @relation("ParentBookings", fields: [parentId], references: [id])
+  caregiver       User          @relation("CaregiverBookings", fields: [caregiverId], references: [id])
+  caregiverData   Caregiver     @relation("CaregiverBookings", fields: [caregiverId], references: [userId])
+  
+  // Booking details
+  startTime       DateTime
+  endTime         DateTime
+  childrenCount   Int
+  specialRequests String?
+  
+  // Location (usually parent's address)
+  address         String
+  latitude        Float?
+  longitude       Float?
+  
+  // Pricing
+  hourlyRate      Float
+  totalHours      Float
+  subtotal        Int           // in cents
+  platformFee     Int           // in cents
+  totalAmount     Int           // in cents
+  
+  // Status
+  status          BookingStatus @default(PENDING)
+  
+  // Timestamps
+  requestedAt     DateTime      @default(now())
+  confirmedAt     DateTime?
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // Relationships
+  payments        Payment[]
+  reviews         Review[]
+  invoices        Invoice[]
+  chatRoom        ChatRoom?
+  checkInOuts     CheckInOut[]
+  slotBookings    SlotBooking[] @relation("SlotBookings")
+  reservations    BookingReservation[] @relation("BookingReservations")
+  
+  @@map("bookings")
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  bookingId             String
+  booking               Booking       @relation(fields: [bookingId], references: [id])
+  
+  // Stripe information
+  stripePaymentIntentId String        @unique
+  stripeChargeId        String?
+  
+  // Amounts (in cents)
+  amount                Int
+  platformFee           Int
+  caregiverPayout       Int
+  
+  // Status
+  status                PaymentStatus @default(PENDING)
+  
+  // Metadata
+  paymentMethod         Json?         // Stripe payment method details
+  receiptUrl            String?
+  failureReason         String?
+  
+  // Timestamps
+  paidAt                DateTime?
+  refundedAt            DateTime?
+  
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  
+  @@map("payments")
+}
+
+model Invoice {
+  id              String        @id @default(cuid())
+  bookingId       String
+  booking         Booking       @relation(fields: [bookingId], references: [id])
+  
+  // Invoice details
+  invoiceNumber   String        @unique
+  type            InvoiceType
+  recipientEmail  String
+  recipientName   String
+  
+  // Amounts (in cents)
+  amount          Int
+  
+  // Status
+  status          InvoiceStatus @default(DRAFT)
+  
+  // Dates
+  issueDate       DateTime      @default(now())
+  dueDate         DateTime
+  paidDate        DateTime?
+  
+  // File storage
+  pdfUrl          String?       // S3 URL for generated PDF
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@map("invoices")
+}
+
+model Review {
+  id            String   @id @default(cuid())
+  bookingId     String   @unique
+  booking       Booking  @relation(fields: [bookingId], references: [id])
+  
+  // Reviewer and reviewee
+  reviewerId    String
+  revieweeId    String
+  reviewer      User     @relation("ReviewGiver", fields: [reviewerId], references: [id])
+  reviewee      User     @relation("ReviewReceiver", fields: [revieweeId], references: [id])
+  
+  // Review content
+  rating        Int      // 1-5 stars
+  comment       String?
+  
+  // Moderation
+  isApproved    Boolean  @default(false)
+  moderatedAt   DateTime?
+  moderatorNotes String?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("reviews")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type      String   // e.g., "booking_request", "payment_received", etc.
+  title     String
+  message   String
+  
+  isRead    Boolean  @default(false)
+  readAt    DateTime?
+  
+  // Optional related resource
+  resourceType String? // "booking", "payment", etc.
+  resourceId   String?
+  
+  createdAt DateTime @default(now())
+  
+  @@map("notifications")
+}
+
+// For tracking manual payouts to demo account caregivers
+model ManualPayout {
+  id            String   @id @default(cuid())
+  caregiverId   String
+  caregiver     User     @relation(fields: [caregiverId], references: [id])
+  
+  // Payout details
+  amount        Int      // Amount in cents
+  method        String   // e.g., "BANK_TRANSFER", "PAYPAL", "CHECK", "MANUAL"
+  notes         String?
+  bookingIds    String   // Comma-separated booking IDs this payout covers
+  
+  // Status tracking
+  status        String   @default("PENDING") // "PENDING", "SENT", "RECEIVED", "FAILED"
+  processedAt   DateTime?
+  confirmedAt   DateTime?
+  
+  // Reference info
+  referenceNumber String? // External reference (bank transfer ID, etc.)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("manual_payouts")
+}
+
+// For storing system-wide settings
+model Setting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("settings")
+}
+
+// Chat system models
+model ChatRoom {
+  id          String   @id @default(cuid())
+  bookingId   String   @unique
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  parentId    String
+  caregiverId String
+  parent      User     @relation("ParentChatRooms", fields: [parentId], references: [id])
+  caregiver   User     @relation("CaregiverChatRooms", fields: [caregiverId], references: [id])
+  
+  isActive    Boolean  @default(true)
+  lastMessageAt DateTime?
+  
+  messages    Message[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("chat_rooms")
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  chatRoomId  String
+  chatRoom    ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  
+  senderId    String
+  sender      User     @relation(fields: [senderId], references: [id])
+  
+  content     String
+  messageType MessageType @default(TEXT)
+  
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+  
+  createdAt   DateTime @default(now())
+  
+  @@map("messages")
+}
+
+enum MessageType {
+  TEXT
+  SYSTEM
+}
+
+// Child profiles for safety and medical information
+model Child {
+  id                    String   @id @default(cuid())
+  parentId              String
+  parent                User     @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  
+  // Basic information
+  firstName             String
+  lastName              String
+  dateOfBirth           DateTime
+  gender                String?
+  
+  // Medical information
+  allergies             Json?    // Array of allergy objects
+  medications           Json?    // Array of medication objects
+  medicalConditions     Json?    // Array of medical condition objects
+  emergencyMedicalInfo  String?  // Additional emergency medical notes
+  bloodType             String?
+  
+  // Emergency contacts (in addition to parent)
+  emergencyContacts     Json?    // Array of emergency contact objects
+  
+  // Preferences and special instructions
+  dietaryRestrictions   Json?    // Array of dietary restrictions
+  specialInstructions   String?  // Special care instructions
+  pickupInstructions    String?  // Who can pick up the child
+  
+  // Photo for identification
+  photoUrl              String?
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  // Relationships
+  checkIns              CheckInOut[]
+  
+  @@map("children")
+}
+
+// Check-in/Check-out system with photos
+model CheckInOut {
+  id                String           @id @default(cuid())
+  bookingId         String
+  booking           Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  childId           String
+  child             Child            @relation(fields: [childId], references: [id], onDelete: Cascade)
+  caregiverId       String
+  
+  // Check-in information
+  checkInTime       DateTime?
+  checkInPhotoUrl   String?          // Photo taken at check-in
+  checkInNotes      String?          // Notes from caregiver at check-in
+  checkInLocation   Json?            // GPS coordinates for verification
+  
+  // Check-out information  
+  checkOutTime      DateTime?
+  checkOutPhotoUrl  String?          // Photo taken at check-out
+  checkOutNotes     String?          // Daily report from caregiver
+  checkOutLocation  Json?            // GPS coordinates for verification
+  
+  // Status
+  status            CheckInOutStatus @default(PENDING)
+  
+  // Activities and meals (daily report)
+  activities        Json?            // Activities done during care
+  meals             Json?            // Meals and snacks provided
+  napTime           Json?            // Nap/sleep information
+  behaviorNotes     String?          // Behavior observations
+  
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  @@map("check_in_outs")
+}
+
+enum CheckInOutStatus {
+  PENDING
+  CHECKED_IN
+  CHECKED_OUT
+  COMPLETED
+}
+
+// Enhanced emergency contacts system
+model EmergencyContact {
+  id           String @id @default(cuid())
+  userId       String
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Contact information
+  name         String
+  relationship String
+  phoneNumber  String
+  email        String?
+  address      String?
+  
+  // Priority and permissions
+  priority     Int    @default(1) // 1 = primary, 2 = secondary, etc.
+  canPickup    Boolean @default(false)
+  canMakeDecisions Boolean @default(false)
+  
+  // Additional info
+  notes        String?
+  isActive     Boolean @default(true)
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@map("emergency_contacts")
+}
+
+// Enhanced caregiver verification system
+model CaregiverVerification {
+  id                  String              @id @default(cuid())
+  caregiverId         String
+  caregiver           Caregiver           @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
+  
+  // ID Verification
+  idVerificationStatus VerificationStatus @default(PENDING)
+  idDocumentUrl       String?             // Government ID upload
+  idVerifiedAt        DateTime?
+  idVerifiedBy        String?             // Admin who verified
+  
+  // Background Check
+  backgroundCheckStatus VerificationStatus @default(PENDING)
+  backgroundCheckProvider String?         // Company that ran the check
+  backgroundCheckDate   DateTime?
+  backgroundCheckReportUrl String?        // Report document
+  
+  // Insurance Verification
+  insuranceStatus     VerificationStatus @default(PENDING)
+  insuranceProvider   String?
+  insurancePolicyNumber String?
+  insuranceExpiryDate DateTime?
+  insuranceDocumentUrl String?
+  
+  // References
+  referencesStatus    VerificationStatus @default(PENDING)
+  references          Json?              // Array of reference objects
+  
+  // Overall verification status
+  overallStatus       VerificationStatus @default(PENDING)
+  verificationScore   Int?               // 0-100 trust score
+  
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  
+  @@unique([caregiverId])
+  @@map("caregiver_verifications")
+}
+
+enum VerificationStatus {
+  PENDING
+  IN_PROGRESS
+  APPROVED
+  REJECTED
+  EXPIRED
+  REQUIRES_UPDATE
+}
+
+enum SlotStatus {
+  AVAILABLE
+  RESERVED
+  BOOKED
+  COMPLETED
+  CANCELLED
+}
+
+enum ReservationStatus {
+  ACTIVE
+  EXPIRED
+  CONVERTED_TO_BOOKING
+  CANCELLED
+}
+
+// Live Spots Availability System
+model AvailabilitySlot {
+  id                String      @id @default(cuid())
+  caregiverId       String
+  caregiver         Caregiver   @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
+  
+  // Time slot information
+  date              DateTime    // Date for this slot (time set to midnight)
+  startTime         DateTime    // Full datetime for slot start
+  endTime           DateTime    // Full datetime for slot end
+  
+  // Capacity tracking
+  totalCapacity     Int         // Maximum children for this slot
+  currentOccupancy  Int         @default(0) // Currently booked children
+  availableSpots    Int         // Computed: totalCapacity - currentOccupancy
+  
+  // Pricing
+  baseRate          Float       // Base hourly rate for this slot
+  currentRate       Float       // Current rate (may be dynamic)
+  
+  // Status
+  status            SlotStatus  @default(AVAILABLE)
+  isRecurring       Boolean     @default(false)
+  recurringPattern  Json?       // Weekly/daily recurrence rules
+  
+  // Special settings
+  specialRequirements Json?     // Special needs, age groups, etc.
+  notes             String?     // Internal notes
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  // Relationships
+  reservations      BookingReservation[]
+  slotBookings      SlotBooking[]
+  
+  @@unique([caregiverId, date, startTime])
+  @@index([caregiverId, date])
+  @@index([date, status])
+  @@map("availability_slots")
+}
+
+// Temporary reservations before booking confirmation
+model BookingReservation {
+  id                String           @id @default(cuid())
+  slotId            String
+  slot              AvailabilitySlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  
+  // User who made reservation
+  parentId          String
+  parent            User             @relation("ParentReservations", fields: [parentId], references: [id])
+  
+  // Reservation details
+  childrenCount     Int
+  reservedSpots     Int              // Number of spots reserved
+  
+  // Status and timing
+  status            ReservationStatus @default(ACTIVE)
+  expiresAt         DateTime         // When reservation expires (15 mins)
+  
+  // Linked booking (if converted)
+  bookingId         String?
+  booking           Booking?         @relation("BookingReservations", fields: [bookingId], references: [id])
+  
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  @@index([parentId])
+  @@index([status, expiresAt])
+  @@map("booking_reservations")
+}
+
+// Junction table for many-to-many relationship between slots and bookings
+model SlotBooking {
+  id                String           @id @default(cuid())
+  slotId            String
+  slot              AvailabilitySlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  bookingId         String
+  booking           Booking          @relation("SlotBookings", fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  // Booking details for this slot
+  childrenCount     Int              // Children in this specific slot
+  spotsUsed         Int              // Spots consumed in this slot
+  rateApplied       Float            // Rate applied at booking time
+  
+  createdAt         DateTime         @default(now())
+  
+  @@unique([slotId, bookingId])
+  @@map("slot_bookings")
+}
