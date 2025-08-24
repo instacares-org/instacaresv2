@@ -2,6 +2,63 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { apiCache, cacheKeys, cacheTTL } from '@/lib/cache';
 
+// Helper function to calculate availability status
+function calculateAvailabilityStatus(availabilitySlots: any[]) {
+  if (!availabilitySlots || availabilitySlots.length === 0) {
+    return "No Availability Posted Yet";
+  }
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  const nextWeek = new Date(today);
+  nextWeek.setDate(today.getDate() + 7);
+
+  // Check for availability today
+  const todaySlots = availabilitySlots.filter(slot => {
+    const slotDate = new Date(slot.date);
+    return slotDate.toDateString() === today.toDateString() && slot.availableSpots > 0;
+  });
+
+  if (todaySlots.length > 0) {
+    return "Available today";
+  }
+
+  // Check for availability tomorrow
+  const tomorrowSlots = availabilitySlots.filter(slot => {
+    const slotDate = new Date(slot.date);
+    return slotDate.toDateString() === tomorrow.toDateString() && slot.availableSpots > 0;
+  });
+
+  if (tomorrowSlots.length > 0) {
+    return "Available tomorrow";
+  }
+
+  // Check for availability this week
+  const thisWeekSlots = availabilitySlots.filter(slot => {
+    const slotDate = new Date(slot.date);
+    return slotDate >= today && slotDate < nextWeek && slot.availableSpots > 0;
+  });
+
+  if (thisWeekSlots.length > 0) {
+    return "Available this week";
+  }
+
+  // Has future availability
+  const futureSlots = availabilitySlots.filter(slot => {
+    const slotDate = new Date(slot.date);
+    return slotDate >= today && slot.availableSpots > 0;
+  });
+
+  if (futureSlots.length > 0) {
+    const nextAvailableDate = new Date(Math.min(...futureSlots.map(slot => new Date(slot.date).getTime())));
+    return `Next available: ${nextAvailableDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  }
+
+  return "No upcoming availability";
+}
+
 // GET /api/caregivers - Search and list caregivers
 export async function GET(request: NextRequest) {
   try {
@@ -17,10 +74,11 @@ export async function GET(request: NextRequest) {
     const minRating = searchParams.get('minRating') ? parseFloat(searchParams.get('minRating')!) : undefined;
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 20;
     const offset = searchParams.get('offset') ? parseInt(searchParams.get('offset')!) : 0;
+    const allowedCountries = searchParams.get('countries')?.split(',') || ['CA']; // Default to Canada only
 
     // Debug logging
     console.log(`\n🔍 API Request - Radius: ${radius}km, Location: ${latitude}, ${longitude}`);
-    console.log(`📋 Parameters:`, { latitude, longitude, radius, limit, offset });
+    console.log(`📋 Parameters:`, { latitude, longitude, radius, limit, offset, allowedCountries });
 
     // Generate cache key for this search
     const searchQuery = {
@@ -33,6 +91,7 @@ export async function GET(request: NextRequest) {
       minRating,
       limit,
       offset,
+      allowedCountries,
     };
     const cacheKey = cacheKeys.caregivers(searchQuery);
     
@@ -46,6 +105,14 @@ export async function GET(request: NextRequest) {
       caregivers = await db.caregiver.findMany({
         where: {
           isVerified: true,
+          // Filter out caregivers with deleted/deactivated user accounts
+          user: {
+            isActive: true,
+            approvalStatus: 'APPROVED',
+            profile: {
+              country: { in: allowedCountries }
+            }
+          },
           ...(minRate || maxRate ? {
             hourlyRate: {
               ...(minRate ? { gte: minRate } : {}),
@@ -63,7 +130,17 @@ export async function GET(request: NextRequest) {
             }
           },
           services: true,
-          photos: true
+          photos: true,
+          availabilitySlots: {
+            where: {
+              status: 'AVAILABLE',
+              availableSpots: { gt: 0 },
+              date: { gte: new Date() } // Only future/current availability
+            },
+            orderBy: {
+              startTime: 'asc'
+            }
+          }
         },
         take: limit,
         skip: offset,
@@ -84,6 +161,22 @@ export async function GET(request: NextRequest) {
     const formattedCaregivers = caregivers.map(caregiver => {
       // Check if this is fallback data (already formatted) or database data
       if ('user' in caregiver) {
+        // Debug logging for Isabella specifically
+        if (caregiver.user.profile?.firstName === 'Isabella') {
+          console.log('🔍 Isabella Debug - Raw Data:', {
+            caregiverRecordId: caregiver.id,
+            userId: caregiver.userId,
+            name: `${caregiver.user.profile?.firstName} ${caregiver.user.profile?.lastName}`,
+            availabilitySlots: caregiver.availabilitySlots?.length || 0,
+            slotsData: caregiver.availabilitySlots?.map(slot => ({
+              id: slot.id,
+              date: slot.date,
+              availableSpots: slot.availableSpots,
+              caregiverId: slot.caregiverId
+            }))
+          });
+        }
+        
         // Database format
         return {
           id: caregiver.userId, // Use USER ID for bookings, not caregiver record ID
@@ -95,6 +188,7 @@ export async function GET(request: NextRequest) {
           hourlyRate: caregiver.hourlyRate,
           experienceYears: caregiver.experienceYears,
           bio: caregiver.bio,
+          description: caregiver.bio || 'No description available', // Map bio to description for compatibility
           languages: caregiver.languages as string[] || [],
           maxChildren: caregiver.maxChildren,
           minAge: caregiver.minAge,
@@ -102,7 +196,7 @@ export async function GET(request: NextRequest) {
           isVerified: caregiver.isVerified,
           backgroundCheck: caregiver.backgroundCheck,
           totalBookings: caregiver.totalBookings,
-          averageRating: caregiver.averageRating,
+          averageRating: Math.round(caregiver.averageRating * 100) / 100, // Round to 2 decimal places
           image: `/caregivers/${caregiver.userId}.jpg`, // Use userId for image filename
           profilePhoto: caregiver.user.profile?.avatar || caregiver.photos?.find(photo => photo.isProfile)?.url,
           address: {
@@ -119,6 +213,19 @@ export async function GET(request: NextRequest) {
             rate: service.rate || caregiver.hourlyRate,
             description: service.description,
           })) || [],
+          // Add actual availability information
+          availability: calculateAvailabilityStatus(caregiver.availabilitySlots),
+          availabilitySlots: caregiver.availabilitySlots?.map(slot => ({
+            id: slot.id,
+            date: slot.date,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            totalCapacity: slot.totalCapacity,
+            availableSpots: slot.availableSpots,
+            baseRate: slot.baseRate,
+            status: slot.status
+          })) || [],
+          hasAvailability: (caregiver.availabilitySlots?.length || 0) > 0,
           lastActiveAt: caregiver.lastActiveAt,
           createdAt: caregiver.createdAt,
         };

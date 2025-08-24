@@ -6,11 +6,27 @@ import { StarIcon as StarIconSolid, HeartIcon as HeartIconSolid } from "@heroico
 import { useState, memo, useMemo } from "react";
 import CaregiverProfileImage from "./CaregiverProfileImage";
 import BookingModal from "./BookingModal";
-import SafetyBadges, { VerificationData } from "./SafetyBadges";
+import CaregiverDetailModal from "./CaregiverDetailModal";
+
+export interface AvailabilitySlot {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  totalCapacity: number;
+  availableSpots: number;
+  baseRate: number;
+  status: string;
+}
+
+export interface VerificationData {
+  backgroundCheck?: boolean;
+  verificationScore?: number;
+}
 
 export interface Caregiver {
   id: string; // This is the USER ID (for booking creation)
-  caregiverId?: string; // This is the CAREGIVER record ID (for reference)
+  caregiverId: string; // This is the CAREGIVER record ID (for reference) - REQUIRED
   name: string;
   email?: string; // Add email for unique identification
   image: string;
@@ -21,6 +37,8 @@ export interface Caregiver {
   distance: string;
   numericDistance?: number | null; // Add numeric distance for sorting
   description: string;
+  bio?: string; // Add bio field from database
+  experienceYears?: number; // Add experience years from database
   specialties: string[];
   location: {
     lat: number;
@@ -36,6 +54,8 @@ export interface Caregiver {
     longitude?: number;
   };
   availability: string;
+  availabilitySlots?: AvailabilitySlot[]; // Add availability slots data
+  hasAvailability?: boolean; // Quick check for availability
   verified: boolean;
   experience: string;
   stripeAccountId?: string;
@@ -53,6 +73,17 @@ interface CaregiverCardProps {
 function CaregiverCard({ caregiver, onHover, isSelected }: CaregiverCardProps) {
   const [isFavorited, setIsFavorited] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+
+  // Debug logging for Isabella specifically
+  if (caregiver.name === 'Isabella Rodriguez') {
+    console.log('🎯 CaregiverCard - Isabella Props:', {
+      'caregiver.id': caregiver.id,
+      'caregiver.caregiverId': caregiver.caregiverId,
+      hasId: !!caregiver.id,
+      hasCaregiverId: !!caregiver.caregiverId
+    });
+  }
 
   // Memoize expensive star calculations
   const starElements = useMemo(() => {
@@ -76,6 +107,7 @@ function CaregiverCard({ caregiver, onHover, isSelected }: CaregiverCardProps) {
       }`}
       onMouseEnter={() => onHover?.(caregiver)}
       onMouseLeave={() => onHover?.(null)}
+      onDoubleClick={() => setShowDetailModal(true)}
     >
       {/* Image */}
       <div className="relative h-32 overflow-hidden rounded-t-lg">
@@ -107,12 +139,29 @@ function CaregiverCard({ caregiver, onHover, isSelected }: CaregiverCardProps) {
           )}
         </button>
         
-        {caregiver.verified && (
-          <div className="absolute top-2 left-2 bg-green-500 text-white px-1.5 py-0.5 rounded text-xs font-medium flex items-center">
-            <ShieldCheckIcon className="h-2.5 w-2.5 mr-0.5" />
-            <span className="text-xs">Verified</span>
-          </div>
-        )}
+        {/* Enhanced Trust Indicators - Brand Aligned Colors */}
+        <div className="absolute top-2 left-2 flex flex-col space-y-1">
+          {caregiver.verified && (
+            <div className="bg-teal-600 text-white px-2 py-1 rounded-md text-xs font-bold flex items-center shadow-lg">
+              <ShieldCheckIcon className="h-3 w-3 mr-1" />
+              <span>VERIFIED</span>
+            </div>
+          )}
+          
+          {caregiver.verification?.backgroundCheck && (
+            <div className="bg-rose-600 text-white px-2 py-1 rounded-md text-xs font-bold flex items-center shadow-lg">
+              <ShieldCheckIcon className="h-3 w-3 mr-1" />
+              <span>BACKGROUND CHECK ✓</span>
+            </div>
+          )}
+          
+          {caregiver.verification?.verificationScore && caregiver.verification.verificationScore >= 90 && (
+            <div className="bg-amber-600 text-white px-2 py-1 rounded-md text-xs font-bold flex items-center shadow-lg">
+              <StarIcon className="h-3 w-3 mr-1" />
+              <span>TOP RATED</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Content */}
@@ -136,10 +185,24 @@ function CaregiverCard({ caregiver, onHover, isSelected }: CaregiverCardProps) {
                 : caregiver.city || caregiver.distance}
             </span>
           </div>
-          <div className="flex items-center text-xs text-green-600">
+          <div className={`flex items-center text-xs ${
+            caregiver.availability === "No Availability Posted Yet" 
+              ? 'text-gray-500' 
+              : caregiver.availability.includes("Available today") || caregiver.availability.includes("Available tomorrow")
+              ? 'text-green-600'
+              : caregiver.availability.includes("Available this week")
+              ? 'text-blue-600'  
+              : 'text-orange-600'
+          }`}>
             <ClockIcon className="h-3 w-3 mr-1" />
             <span>{caregiver.availability}</span>
+            {caregiver.hasAvailability && caregiver.availabilitySlots && caregiver.availabilitySlots.length > 0 && (
+              <span className="ml-1 text-xs text-gray-400">
+                ({caregiver.availabilitySlots.length} slot{caregiver.availabilitySlots.length !== 1 ? 's' : ''})
+              </span>
+            )}
           </div>
+
         </div>
 
         {/* Rating */}
@@ -147,7 +210,7 @@ function CaregiverCard({ caregiver, onHover, isSelected }: CaregiverCardProps) {
           <div className="flex items-center">
             {starElements}
             <span className="ml-1 text-xs font-medium text-gray-900 dark:text-white">
-              {caregiver.rating}
+              {caregiver.rating.toFixed(2)}
             </span>
             <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
               ({caregiver.reviewCount})
@@ -155,15 +218,6 @@ function CaregiverCard({ caregiver, onHover, isSelected }: CaregiverCardProps) {
           </div>
         </div>
 
-        {/* Safety Badges */}
-        {caregiver.verification && (
-          <div className="mb-2">
-            <SafetyBadges 
-              verification={caregiver.verification} 
-              compact={true}
-            />
-          </div>
-        )}
 
         {/* Specialties */}
         <div className="flex flex-wrap gap-1 mb-2">
@@ -208,6 +262,14 @@ function CaregiverCard({ caregiver, onHover, isSelected }: CaregiverCardProps) {
           caregiver={caregiver}
           isOpen={showBookingModal}
           onClose={() => setShowBookingModal(false)}
+        />
+      )}
+      
+      {showDetailModal && (
+        <CaregiverDetailModal
+          caregiver={caregiver}
+          isOpen={showDetailModal}
+          onClose={() => setShowDetailModal(false)}
         />
       )}
     </div>

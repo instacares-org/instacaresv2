@@ -316,7 +316,8 @@ function SearchPageContent() {
     specialServices: [],
     experience: 'any',
     availability: [],
-    highlyRated: false
+    highlyRated: false,
+    sortBy: 'recommended'
   });
 
   // Function to get coordinates from search location
@@ -388,8 +389,8 @@ function SearchPageContent() {
       setLoading(true);
       setError(null);
       
-      // Build query parameters - use searchLocation (from URL) or userLocation (from browser)
-      let queryParams = `_cacheBust=${Date.now()}`;
+      // Build query parameters - use searchLocation (from URL) or userLocation (from browser)  
+      let queryParams = `_cacheBust=${Date.now()}&fixVersion=2`;
       const locationToUse = searchLocation || userLocation;
       if (locationToUse) {
         queryParams += `&lat=${locationToUse.lat}&lng=${locationToUse.lng}&radius=50`; // Use 50km radius for search
@@ -430,8 +431,21 @@ function SearchPageContent() {
             });
           }
           
+          // Debug logging for Isabella specifically
+          if (caregiver.name === 'Isabella Rodriguez') {
+            console.log('🔧 Search Page Fix - Isabella Data:', {
+              'caregiver.id (User ID)': caregiver.id,
+              'caregiver.caregiverId (Caregiver Record ID)': caregiver.caregiverId,
+              'Passing to CaregiverCard': {
+                id: caregiver.id,
+                caregiverId: caregiver.caregiverId
+              }
+            });
+          }
+
           return {
-            id: caregiver.id,
+            id: caregiver.id, // User ID for bookings
+            caregiverId: caregiver.caregiverId, // Caregiver Record ID for availability queries
             name: caregiver.name,
             email: caregiver.email, // Add email for unique identification
             phone: caregiver.phone, // Add phone for additional identification
@@ -443,13 +457,17 @@ function SearchPageContent() {
             hourlyRate: caregiver.hourlyRate,
             distance: "0.8 km", // TODO: Calculate based on location
             description: caregiver.bio || "Experienced caregiver",
+            bio: caregiver.bio, // Add bio field for CaregiverDetailModal
+            experienceYears: caregiver.experienceYears || 0, // Add experience years
             specialties: caregiver.services?.map((s: any) => s.type) || ["General Care"],
             location: {
               lat: parseFloat(caregiver.address.latitude) || 0,
               lng: parseFloat(caregiver.address.longitude) || 0,
               address: `${caregiver.address.city}, ${caregiver.address.province || 'ON'}`
             },
-            availability: "Available today",
+            availability: caregiver.availability || "No Availability Posted Yet",
+            availabilitySlots: caregiver.availabilitySlots || [],
+            hasAvailability: caregiver.hasAvailability || false,
             verified: caregiver.isVerified,
             experience: `${caregiver.experienceYears || 0}+ years experience`
           };
@@ -519,6 +537,45 @@ function SearchPageContent() {
       setSearchLocation(null);
     }
   }, [searchParams]);
+
+  // Sorting logic
+  const sortCaregivers = (caregivers: Caregiver[], sortBy: string): Caregiver[] => {
+    const sorted = [...caregivers];
+    
+    switch (sortBy) {
+      case 'price-low':
+        return sorted.sort((a, b) => a.hourlyRate - b.hourlyRate);
+      
+      case 'price-high':
+        return sorted.sort((a, b) => b.hourlyRate - a.hourlyRate);
+      
+      case 'rating-high':
+        return sorted.sort((a, b) => {
+          // Sort by rating first, then by review count for tie-breaking
+          const ratingDiff = b.rating - a.rating;
+          if (ratingDiff !== 0) return ratingDiff;
+          return b.reviewCount - a.reviewCount;
+        });
+      
+      case 'reviews-most':
+        return sorted.sort((a, b) => b.reviewCount - a.reviewCount);
+      
+      case 'newest':
+        // For now, reverse the current order (newest first)
+        // In a real app, this would sort by registration date
+        return sorted.reverse();
+      
+      case 'recommended':
+      default:
+        // Recommended sorting: blend of rating, reviews, and availability
+        return sorted.sort((a, b) => {
+          // Calculate recommendation score
+          const scoreA = (a.rating * 0.4) + (Math.min(a.reviewCount / 10, 5) * 0.3) + (a.verified ? 2 : 0) + (a.availability.includes('Available') ? 1 : 0);
+          const scoreB = (b.rating * 0.4) + (Math.min(b.reviewCount / 10, 5) * 0.3) + (b.verified ? 2 : 0) + (b.availability.includes('Available') ? 1 : 0);
+          return scoreB - scoreA;
+        });
+    }
+  };
 
   // Comprehensive filtering logic
   const filterCaregivers = (criteria: typeof searchCriteria, filters: FilterState) => {
@@ -731,7 +788,12 @@ function SearchPageContent() {
     }
 
     console.log('✅ Final filtered result:', filtered.length, 'caregivers');
-    return filtered;
+    
+    // 8. SORTING
+    const sorted = sortCaregivers(filtered, filters.sortBy);
+    console.log('🔄 Applied sorting:', filters.sortBy);
+    
+    return sorted;
   };
 
   const handleCaregiverSelect = (caregiver: Caregiver) => {
@@ -807,7 +869,7 @@ function SearchPageContent() {
                   </button>
                   {(activeFilters.priceRange !== 'any' || activeFilters.ageGroups.length > 0 || 
                     activeFilters.specialServices.length > 0 || activeFilters.experience !== 'any' ||
-                    activeFilters.availability.length > 0 || activeFilters.highlyRated) && (
+                    activeFilters.availability.length > 0 || activeFilters.highlyRated || activeFilters.sortBy !== 'recommended') && (
                     <button 
                       onClick={() => setActiveFilters({
                         priceRange: 'any',
@@ -815,7 +877,8 @@ function SearchPageContent() {
                         specialServices: [],
                         experience: 'any',
                         availability: [],
-                        highlyRated: false
+                        highlyRated: false,
+                        sortBy: 'recommended'
                       })}
                       className="px-3 py-1 bg-red-500 text-white text-xs rounded-lg hover:bg-red-600 transition"
                     >

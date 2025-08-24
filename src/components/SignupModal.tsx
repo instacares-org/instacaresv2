@@ -430,14 +430,15 @@ export default function SignupModal({ isOpen, onClose }: SignupModalProps) {
                 required
               />
               <label className="text-sm text-gray-700 dark:text-gray-300">
-                I agree to the{' '}
-                <a href="#" className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline">
+                I acknowledge that I have read, understood, and agree to be bound by InstaCares'{' '}
+                <a href="/terms" target="_blank" className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline font-medium">
                   Terms of Service
                 </a>{' '}
                 and{' '}
-                <a href="#" className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline">
+                <a href="/privacy" target="_blank" className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline font-medium">
                   Privacy Policy
                 </a>
+                . I understand that I am waiving certain legal rights, including the right to sue or claim compensation in certain circumstances.
               </label>
             </div>
           </div>

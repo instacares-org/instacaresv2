@@ -151,6 +151,12 @@ function CaregiverDashboardContent() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState<string | null>(user?.profile?.avatar || null);
   
+  // About Me editing state
+  const [bio, setBio] = useState<string>('');
+  const [experienceYears, setExperienceYears] = useState<number>(0);
+  const [isEditingBio, setIsEditingBio] = useState(false);
+  const [savingBio, setSavingBio] = useState(false);
+  
   // Address editing state
   const [addressData, setAddressData] = useState({
     streetAddress: user?.profile?.streetAddress || '',
@@ -189,6 +195,31 @@ function CaregiverDashboardContent() {
       });
     }
   }, [user]);
+
+  // Fetch caregiver bio and experience
+  const fetchCaregiverProfile = async () => {
+    if (!caregiverId) return;
+    
+    try {
+      const response = await fetch(`/api/caregivers/${caregiverId}`);
+      if (!response.ok) throw new Error('Failed to fetch caregiver profile');
+      
+      const data = await response.json();
+      if (data.caregiver) {
+        setBio(data.caregiver.bio || '');
+        setExperienceYears(data.caregiver.experienceYears || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching caregiver profile:', error);
+    }
+  };
+
+  // Fetch caregiver profile when caregiverId is available
+  useEffect(() => {
+    if (caregiverId) {
+      fetchCaregiverProfile();
+    }
+  }, [caregiverId]);
 
   // Fetch caregiver bookings
   const fetchBookings = async () => {
@@ -554,6 +585,45 @@ function CaregiverDashboardContent() {
       country: user?.profile?.country || 'US'
     });
     setIsEditingAddress(false);
+  };
+
+  // About Me save function
+  const handleSaveBio = async () => {
+    if (!caregiverId) return;
+    
+    setSavingBio(true);
+    try {
+      const response = await fetch(`/api/caregivers/${caregiverId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          bio: bio.trim(),
+          experienceYears: experienceYears
+        }),
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        setIsEditingBio(false);
+        alert('Profile updated successfully!');
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to update profile');
+      }
+    } catch (error) {
+      console.error('Bio update error:', error);
+      alert('Failed to update profile');
+    } finally {
+      setSavingBio(false);
+    }
+  };
+
+  const handleCancelBioEdit = () => {
+    // Reset to original values
+    fetchCaregiverProfile();
+    setIsEditingBio(false);
   };
 
   // Stripe Connect functions
@@ -1382,6 +1452,136 @@ function CaregiverDashboardContent() {
                     </p>
                   </div>
                 </div>
+              </div>
+              
+              {/* About Me Section */}
+              <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-900 dark:text-white">About Me</h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      Tell parents about yourself, your experience, and your approach to childcare
+                    </p>
+                  </div>
+                  {!isEditingBio && (
+                    <button
+                      onClick={() => setIsEditingBio(true)}
+                      className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                    >
+                      <PencilIcon className="h-4 w-4 mr-2" />
+                      {bio || experienceYears > 0 ? 'Edit Bio' : 'Add Bio'}
+                    </button>
+                  )}
+                </div>
+
+                {isEditingBio ? (
+                  <div className="space-y-4">
+                    {/* Experience Years */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Years of Experience
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="50"
+                        value={experienceYears}
+                        onChange={(e) => setExperienceYears(parseInt(e.target.value) || 0)}
+                        className="w-32 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        placeholder="0"
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        How many years have you been providing childcare?
+                      </p>
+                    </div>
+
+                    {/* Bio */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        About Me
+                      </label>
+                      <textarea
+                        value={bio}
+                        onChange={(e) => setBio(e.target.value)}
+                        maxLength={500}
+                        rows={6}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+                        placeholder="Tell parents about your experience, qualifications, and approach to childcare. What makes you special? What do you enjoy about working with children?"
+                      />
+                      <div className="flex justify-between items-center mt-2">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Share your passion for childcare, certifications, and what makes you unique
+                        </p>
+                        <span className="text-xs text-gray-400">
+                          {bio.length}/500
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end space-x-3 pt-4">
+                      <button
+                        onClick={handleCancelBioEdit}
+                        disabled={savingBio}
+                        className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveBio}
+                        disabled={savingBio}
+                        className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center"
+                      >
+                        {savingBio ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                            Saving...
+                          </>
+                        ) : (
+                          'Save Profile'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                    {experienceYears > 0 && (
+                      <div className="flex items-center mb-3">
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+                          {experienceYears} year{experienceYears !== 1 ? 's' : ''} of experience
+                        </span>
+                      </div>
+                    )}
+                    
+                    {bio ? (
+                      <div className="prose prose-sm dark:prose-invert max-w-none">
+                        <p className="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+                          {bio}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="text-center py-6">
+                        <DocumentTextIcon className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                        <p className="text-gray-500 dark:text-gray-400 font-medium mb-2">
+                          No bio added yet
+                        </p>
+                        <p className="text-gray-400 dark:text-gray-500 text-sm">
+                          Add your bio to help parents get to know you better
+                        </p>
+                      </div>
+                    )}
+                    
+                    {(!bio || experienceYears === 0) && (
+                      <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                        <div className="flex items-center">
+                          <DocumentTextIcon className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2" />
+                          <p className="text-sm text-blue-800 dark:text-blue-200">
+                            Complete your bio to build trust with parents and increase booking requests
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               
               {/* Address Section */}

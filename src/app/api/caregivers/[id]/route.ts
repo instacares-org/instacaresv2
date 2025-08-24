@@ -122,7 +122,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: formattedCaregiver,
+      caregiver: formattedCaregiver,  // Changed from 'data' to 'caregiver' to match dashboard expectation
     });
 
   } catch (error) {
@@ -148,8 +148,8 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
-    // First check if caregiver exists
-    const existingCaregiver = await caregiverOperations.findCaregiverById(id);
+    // First check if caregiver exists  
+    const existingCaregiver = await smartCaregiverOperations.findCaregiverById(id);
     if (!existingCaregiver) {
       return NextResponse.json(
         {
@@ -198,6 +198,79 @@ export async function PUT(
 
   } catch (error) {
     console.error('Error updating caregiver:', error);
+    
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Failed to update caregiver',
+        message: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error',
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// PATCH /api/caregivers/[id] - Update caregiver profile (partial update)
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<Params> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+
+    // First check if caregiver exists
+    const existingCaregiver = await smartCaregiverOperations.findCaregiverById(id);
+    if (!existingCaregiver) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Caregiver not found',
+        },
+        { status: 404 }
+      );
+    }
+
+    // Update caregiver using Prisma directly
+    const { db } = await import('@/lib/db');
+    
+    // Build update data object only with provided fields
+    const updateData: any = {};
+    if (body.hourlyRate !== undefined) updateData.hourlyRate = body.hourlyRate;
+    if (body.experienceYears !== undefined) updateData.experienceYears = body.experienceYears;
+    if (body.bio !== undefined) updateData.bio = body.bio;
+    if (body.languages !== undefined) updateData.languages = body.languages;
+    if (body.maxChildren !== undefined) updateData.maxChildren = body.maxChildren;
+    if (body.minAge !== undefined) updateData.minAge = body.minAge;
+    if (body.maxAge !== undefined) updateData.maxAge = body.maxAge;
+    if (body.isAvailable !== undefined) updateData.isAvailable = body.isAvailable;
+    if (body.stripeAccountId !== undefined) updateData.stripeAccountId = body.stripeAccountId;
+    if (body.stripeOnboarded !== undefined) updateData.stripeOnboarded = body.stripeOnboarded;
+    if (body.canReceivePayments !== undefined) updateData.canReceivePayments = body.canReceivePayments;
+
+    const updatedCaregiver = await db.caregiver.update({
+      where: { id },
+      data: updateData,
+      include: {
+        user: {
+          include: {
+            profile: true,
+          },
+        },
+        services: true,
+        certifications: true,
+        photos: true,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      caregiver: updatedCaregiver,
+      message: 'Caregiver profile updated successfully',
+    });
+
+  } catch (error) {
+    console.error('Error updating caregiver (PATCH):', error);
     
     return NextResponse.json(
       {

@@ -18,6 +18,7 @@ interface FilterState {
   experience: string;
   availability: string[];
   highlyRated: boolean;
+  sortBy: string;
 }
 
 interface HeaderProps {
@@ -49,7 +50,8 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
     specialServices: [],
     experience: 'any',
     availability: [],
-    highlyRated: false
+    highlyRated: false,
+    sortBy: 'recommended'
   });
   
   // Use passed filters or local state
@@ -208,12 +210,12 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
     <>
     <header className="sticky top-0 z-50 grid grid-cols-3 items-center bg-white dark:bg-gray-800 shadow-md p-2 transition-colors duration-200">
       {/* Left */}
-      <div className="flex items-center h-15 cursor-pointer my-auto w-24">
+      <div className="flex items-center h-12 cursor-pointer my-auto w-20">
         <div suppressHydrationWarning>
           <Image
             src="/logo.png"
-            width={96}
-            height={60}
+            width={80}
+            height={50}
             alt="Instacares Logo"
             className="object-contain w-full h-auto"
             priority={true}
@@ -619,6 +621,49 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
                 </div>
               </div>
 
+              {/* Sort By */}
+              <div className="space-y-2">
+                <label className="flex items-center space-x-2 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  <span className="text-lg">🔄</span>
+                  <span>Sort By</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: "Recommended", value: "recommended", popular: true },
+                    { label: "Price: Low to High", value: "price-low" },
+                    { label: "Price: High to Low", value: "price-high" },
+                    { label: "Highest Rated", value: "rating-high" },
+                    { label: "Most Reviews", value: "reviews-most" },
+                    { label: "Newest First", value: "newest" }
+                  ].map((option) => (
+                    <label key={option.value} className="relative cursor-pointer group">
+                      <input 
+                        type="radio" 
+                        name="sortBy" 
+                        value={option.value}
+                        className="sr-only peer"
+                        checked={currentFilters.sortBy === option.value}
+                        onChange={(e) => updateFilters({ ...currentFilters, sortBy: e.target.value })}
+                      />
+                      <div className={`p-2.5 rounded-xl border-2 transition-all duration-200 text-center relative
+                        ${option.popular ? 'ring-1 ring-blue-200 dark:ring-blue-800' : ''}
+                        peer-checked:border-rose-500 peer-checked:bg-rose-50 dark:peer-checked:bg-rose-900/20 
+                        border-gray-200 dark:border-gray-700 hover:border-rose-300 dark:hover:border-rose-600
+                        group-hover:shadow-md`}>
+                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300 peer-checked:text-rose-700 dark:peer-checked:text-rose-300">
+                          {option.label}
+                        </span>
+                        {option.popular && (
+                          <div className="absolute -top-1 -right-1 w-4 h-4 bg-gradient-to-r from-blue-500 to-cyan-600 rounded-full flex items-center justify-center">
+                            <span className="text-[8px] font-bold text-white">⭐</span>
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               {/* Highly Rated Filter */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -649,17 +694,22 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
               <div className="flex space-x-3">
                 <button 
                   onClick={() => {
+                    console.log('🧹 Clear All button clicked');
                     const clearedFilters = {
                       priceRange: 'any',
                       ageGroups: [],
                       specialServices: [],
                       experience: 'any',
                       availability: [],
-                      highlyRated: false
+                      highlyRated: false,
+                      sortBy: 'recommended'
                     };
+                    console.log('🧹 Clearing filters to:', clearedFilters);
                     updateFilters(clearedFilters);
+                    // Close the filter dropdown after clearing
+                    setShowFilters(false);
                   }}
-                  className="flex-1 py-3 px-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
+                  className="flex-1 py-3 px-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-red-300 dark:hover:border-red-600 transition-all duration-200"
                 >
                   Clear All
                 </button>

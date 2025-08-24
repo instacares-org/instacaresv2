@@ -93,7 +93,7 @@ export default function SignupPage() {
     }
 
     if (!formData.agreeToTerms) {
-      newErrors.agreeToTerms = "You must agree to the terms and conditions";
+      newErrors.agreeToTerms = "You must acknowledge and agree to the Terms of Service and Privacy Policy to create an account";
     }
 
     setErrors(newErrors);
@@ -423,14 +423,15 @@ export default function SignupPage() {
                   className="mt-1 h-4 w-4 text-rose-600 focus:ring-rose-500 border-gray-300 rounded"
                 />
                 <label htmlFor="agreeToTerms" className="ml-2 text-sm text-gray-700">
-                  I agree to the{" "}
-                  <Link href="/terms" className="text-rose-600 hover:text-rose-500">
+                  I acknowledge that I have read, understood, and agree to be bound by InstaCares'{" "}
+                  <Link href="/terms" className="text-rose-600 hover:text-rose-500 font-medium" target="_blank">
                     Terms of Service
                   </Link>{" "}
                   and{" "}
-                  <Link href="/privacy" className="text-rose-600 hover:text-rose-500">
+                  <Link href="/privacy" className="text-rose-600 hover:text-rose-500 font-medium" target="_blank">
                     Privacy Policy
                   </Link>
+                  . I understand that I am waiving certain legal rights, including the right to sue or claim compensation in certain circumstances.
                 </label>
               </div>
               {errors.agreeToTerms && <p className="text-red-500 text-xs">{errors.agreeToTerms}</p>}
