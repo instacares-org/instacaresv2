@@ -28,9 +28,9 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
       aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
     >
       {theme === 'light' ? (
-        <MoonIcon className="h-5 w-5" />
+        <MoonIcon className="h-5 w-5" suppressHydrationWarning />
       ) : (
-        <SunIcon className="h-5 w-5" />
+        <SunIcon className="h-5 w-5" suppressHydrationWarning />
       )}
       
       {showLabel && (

@@ -9,13 +9,43 @@
       "Bash(npx next build:*)",
       "Bash(npm run dev:*)",
       "Bash(curl:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(git log:*)",
+      "Read(/C:\\Users\\fhabib\\Pictures/**)",
+      "Bash(npx next:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(npx prisma:*)",
+      "Bash(export:*)",
+      "Bash(adb:*)",
+      "Bash(npx react-native:*)",
+      "Bash(set JAVA_HOME=C:Program FilesEclipse Adoptiumjdk-21.0.8.9-hotspot)",
+      "Bash(set ANDROID_HOME=C:UsersfhabibAppDataLocalAndroidSdk)",
+      "Bash(set PATH=%JAVA_HOME%bin)",
+      "Bash(%ANDROID_HOME%platform-tools)",
+      "Bash(%PATH%)",
+      "Bash(npm start)",
+      "Read(/C:\\c\\Users\\fhabib\\instacares/**)",
+      "Bash(\"C:\\Users\\fhabib\\AppData\\Local\\Android\\Sdk\\emulator\\emulator.exe\" -avd Pixel_6)",
+      "Bash(\"C:\\Users\\fhabib\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe\" devices)",
+      "Bash(\"C:\\Users\\fhabib\\AppData\\Local\\Android\\Sdk\\emulator\\emulator.exe\" -list-avds)",
+      "Bash(\"C:\\Users\\fhabib\\AppData\\Local\\Android\\Sdk\\emulator\\emulator.exe\" -avd Pixel_6 -netdelay none -netspeed full)",
+      "Bash(\"C:\\Users\\fhabib\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe\" shell am start -n com.instacaresmobile/com.instacaresmobile.MainActivity -a android.intent.action.MAIN -c android.intent.category.LAUNCHER)",
+      "Bash(\"C:\\Users\\fhabib\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe\" shell \"dumpsys window displays | grep ''mCurrentFocus''\")",
+      "Bash(tasklist:*)",
+      "Bash(cmd /c:*)",
+      "Bash(powershell:*)",
+      "Bash(taskkill:*)",
+      "Bash(\"C:\\Users\\fhabib\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe\" shell am force-stop com.instacaresmobile)",
+      "Bash(\"C:\\Users\\fhabib\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe\" shell am start -n com.instacaresmobile/com.instacaresmobile.MainActivity)",
+      "Read(/C:\\Users\\fhabib\\Pictures/**)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": [],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [
-      "C:\\c\\Users\\fhabib"
+      "C:\\c\\Users\\fhabib",
+      "C:\\c\\Users\\fhabib\\AppData\\Local\\Android\\Sdk"
     ]
   }
 }

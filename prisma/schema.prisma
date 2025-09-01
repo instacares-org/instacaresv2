@@ -105,6 +105,7 @@ model User {
   
   // Notification relationships
   notifications    Notification[]
+  notificationPreferences NotificationPreferences?
   
   // Chat relationships
   parentChatRooms     ChatRoom[] @relation("ParentChatRooms")
@@ -771,4 +772,272 @@ model SlotBooking {
   
   @@unique([slotId, bookingId])
   @@map("slot_bookings")
+}
+
+// Enhanced notification tracking system for legal compliance
+model NotificationEvent {
+  id              String                @id @default(cuid())
+  
+  // Basic information
+  type            NotificationType     
+  channel         NotificationChannel  
+  templateId      String               // Template identifier
+  priority        NotificationPriority @default(NORMAL)
+  
+  // Recipients
+  recipientId     String?              // User ID (optional for manual sends)
+  recipientEmail  String?              // Email address
+  recipientPhone  String?              // Phone number
+  recipientName   String?              // Recipient name
+  
+  // Content
+  subject         String?              // Email subject or SMS title
+  content         String               // Message content
+  htmlContent     String?              // HTML version for emails
+  
+  // Status tracking
+  status          NotificationStatus   @default(PENDING)
+  deliveryStatus  DeliveryStatus?      // Final delivery status
+  
+  // Timestamps
+  scheduledAt     DateTime?            // When to send (null = immediate)
+  sentAt          DateTime?            // When actually sent
+  deliveredAt     DateTime?            // When delivered (from webhook)
+  failedAt        DateTime?            // When failed (from webhook)
+  openedAt        DateTime?            // When opened (email tracking)
+  clickedAt       DateTime?            // When clicked (link tracking)
+  
+  // Provider information
+  providerId      String?              // Resend/Twilio message ID
+  providerData    Json?                // Additional provider-specific data
+  
+  // Retry logic
+  retryCount      Int                  @default(0)
+  maxRetries      Int                  @default(3)
+  nextRetryAt     DateTime?            // When to retry if failed
+  
+  // Error handling
+  errorCode       String?              // Error code if failed
+  errorMessage    String?              // Human readable error
+  errorDetails    Json?                // Full error details
+  
+  // Legal compliance
+  isTransactional Boolean              @default(true) // Legal compliance flag
+  consentId       String?              // Link to consent record
+  unsubscribeToken String?             // Unique unsubscribe token
+  
+  // Context
+  contextType     String?              // "booking", "payment", "verification"
+  contextId       String?              // Related resource ID
+  triggeredBy     String?              // System or user ID who triggered
+  
+  // Relationships
+  retries         NotificationRetry[]  // Retry attempts
+  webhooks        NotificationWebhook[] // Webhook events
+  
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  
+  @@index([recipientEmail, status])
+  @@index([recipientPhone, status])
+  @@index([status, scheduledAt])
+  @@index([contextType, contextId])
+  @@index([type, channel, createdAt])
+  @@map("notification_events")
+}
+
+// Retry attempts for failed notifications
+model NotificationRetry {
+  id               String            @id @default(cuid())
+  notificationId   String
+  notification     NotificationEvent @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  
+  attemptNumber    Int               // 1, 2, 3, etc.
+  status           NotificationStatus
+  errorCode        String?
+  errorMessage     String?
+  errorDetails     Json?
+  
+  // Provider response
+  providerId       String?           // New provider ID for retry
+  providerResponse Json?             // Full provider response
+  
+  attemptedAt      DateTime          @default(now())
+  
+  @@map("notification_retries")
+}
+
+// Webhook events from notification providers
+model NotificationWebhook {
+  id               String            @id @default(cuid())
+  notificationId   String?           // May be null if we can't match
+  notification     NotificationEvent? @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+  
+  // Provider information
+  provider         String            // "resend", "twilio"
+  providerId       String            // Provider's message ID
+  eventType        String            // delivered, failed, opened, etc.
+  
+  // Webhook payload
+  rawPayload       Json              // Full webhook payload
+  signature        String?           // Webhook signature for verification
+  
+  // Processing status
+  processed        Boolean           @default(false)
+  processedAt      DateTime?
+  processingError  String?
+  
+  receivedAt       DateTime          @default(now())
+  
+  @@index([provider, providerId])
+  @@index([processed, receivedAt])
+  @@map("notification_webhooks")
+}
+
+// Template management for consistent messaging
+model NotificationTemplate {
+  id              String              @id @default(cuid())
+  
+  // Template identification
+  templateId      String              @unique // "booking_confirmation", "pickup_reminder", etc.
+  name            String              // Human readable name
+  description     String?             // Template description
+  
+  // Template content
+  type            NotificationType
+  channel         NotificationChannel
+  
+  // Content templates
+  subject         String?             // Email subject template
+  textContent     String              // Plain text template
+  htmlContent     String?             // HTML template (emails only)
+  
+  // Template variables
+  variables       Json?               // Available template variables
+  
+  // Settings
+  isActive        Boolean             @default(true)
+  isTransactional Boolean             @default(true)
+  priority        NotificationPriority @default(NORMAL)
+  
+  // Legal compliance
+  requiresConsent Boolean             @default(false)
+  retentionDays   Int?                // How long to keep notification records
+  
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  
+  @@map("notification_templates")
+}
+
+// User notification preferences and consent
+model NotificationPreferences {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Email preferences
+  emailEnabled    Boolean  @default(true)
+  marketingEmails Boolean  @default(false)
+  
+  // SMS preferences  
+  smsEnabled      Boolean  @default(true)
+  marketingSms    Boolean  @default(false)
+  
+  // Specific notification types
+  bookingUpdates  Boolean  @default(true)
+  paymentAlerts   Boolean  @default(true)
+  reminderAlerts  Boolean  @default(true)
+  securityAlerts  Boolean  @default(true)
+  
+  // Consent tracking
+  emailConsent    DateTime? // When email consent was given
+  smsConsent      DateTime? // When SMS consent was given
+  
+  // Compliance
+  unsubscribeToken String?  @unique // For one-click unsubscribe
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("notification_preferences")
+}
+
+// Notification system settings
+model NotificationSettings {
+  id              String   @id @default(cuid())
+  
+  // Provider settings
+  emailProvider   String   @default("resend")
+  smsProvider     String   @default("twilio")
+  
+  // Rate limiting
+  emailRateLimit  Int      @default(100)  // per hour
+  smsRateLimit    Int      @default(50)   // per hour
+  
+  // Retry settings
+  maxRetries      Int      @default(3)
+  retryDelays     Json     // [300, 900, 3600] seconds
+  
+  // Critical notification overrides
+  emergencyBypass Boolean  @default(true) // Bypass rate limits for critical
+  
+  // Legal compliance
+  requireDoubleOptIn Boolean @default(false)
+  retentionDays   Int      @default(365)
+  
+  updatedAt       DateTime @updatedAt
+  
+  @@map("notification_settings")
+}
+
+enum NotificationType {
+  BOOKING_REQUEST
+  BOOKING_CONFIRMATION  
+  BOOKING_CANCELLED
+  BOOKING_REMINDER
+  PICKUP_REMINDER
+  DROPOFF_CONFIRMATION
+  PAYMENT_RECEIVED
+  PAYMENT_FAILED
+  VERIFICATION_CODE
+  ACCOUNT_APPROVED
+  SECURITY_ALERT
+  EMERGENCY_ALERT
+  REVIEW_REQUEST
+  SYSTEM_MAINTENANCE
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+  IN_APP
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum NotificationStatus {
+  PENDING
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  DELIVERED
+  FAILED
+  BOUNCED
+  SPAM
+  UNSUBSCRIBED
+  OPENED
+  CLICKED
 }

@@ -1,244 +1,98 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import jwt from 'jsonwebtoken';
-import { cookies } from 'next/headers';
 
-
-
-// POST /api/reviews - Create a new review
-export async function POST(request: NextRequest) {
-  try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('auth-token');
-
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const decoded = jwt.verify(token.value, process.env.JWT_SECRET!) as { userId: string };
-    const body = await request.json();
-    
-    const { bookingId, revieweeId, rating, comment } = body;
-
-    // Validation
-    if (!bookingId || !revieweeId || !rating || rating < 1 || rating > 5) {
-      return NextResponse.json({ error: 'Invalid request data' }, { status: 400 });
-    }
-
-    if (!comment || comment.trim().length < 10 || comment.trim().length > 1000) {
-      return NextResponse.json({ error: 'Comment must be between 10 and 1000 characters' }, { status: 400 });
-    }
-
-    // Check if booking exists and user participated
-    const booking = await db.booking.findFirst({
-      where: {
-        id: bookingId,
-        OR: [
-          { parentId: decoded.userId },
-          { caregiverId: decoded.userId }
-        ],
-        status: 'COMPLETED'
-      },
-      include: {
-        parent: { include: { profile: true } },
-        caregiver: { include: { profile: true } },
-        reviews: true
-      }
-    });
-
-    if (!booking) {
-      return NextResponse.json({ 
-        error: 'Booking not found or not eligible for review' 
-      }, { status: 404 });
-    }
-
-    // Check if user already reviewed this booking
-    const existingReview = booking.reviews.find(r => r.reviewerId === decoded.userId);
-    if (existingReview) {
-      return NextResponse.json({ 
-        error: 'You have already reviewed this booking' 
-      }, { status: 409 });
-    }
-
-    // Verify reviewee is the other participant in the booking
-    const isParent = booking.parentId === decoded.userId;
-    const expectedRevieweeId = isParent ? booking.caregiverId : booking.parentId;
-    
-    if (revieweeId !== expectedRevieweeId) {
-      return NextResponse.json({ 
-        error: 'Invalid reviewee' 
-      }, { status: 400 });
-    }
-
-    // Create review
-    const review = await db.review.create({
-      data: {
-        bookingId,
-        reviewerId: decoded.userId,
-        revieweeId,
-        rating,
-        comment: comment.trim(),
-        isApproved: false // Pending moderation
-      },
-      include: {
-        reviewer: {
-          include: { profile: true }
-        },
-        reviewee: {
-          include: { profile: true }
-        },
-        booking: true
-      }
-    });
-
-    // Update caregiver's average rating if reviewing a caregiver
-    if (!isParent) { // Parent is reviewing caregiver
-      await updateCaregiverRating(revieweeId);
-    }
-
-    // Create notification for reviewee
-    await db.notification.create({
-      data: {
-        userId: revieweeId,
-        type: 'review_received',
-        title: 'New Review Received',
-        message: `${review.reviewer.profile?.firstName} ${review.reviewer.profile?.lastName} left you a ${rating}-star review`,
-        resourceType: 'review',
-        resourceId: review.id
-      }
-    });
-
-    // Create notification for admin (moderation)
-    const adminUsers = await db.user.findMany({
-      where: { userType: 'ADMIN' }
-    });
-
-    for (const admin of adminUsers) {
-      await db.notification.create({
-        data: {
-          userId: admin.id,
-          type: 'review_moderation',
-          title: 'Review Pending Approval',
-          message: `New review from ${review.reviewer.profile?.firstName} ${review.reviewer.profile?.lastName} needs moderation`,
-          resourceType: 'review',
-          resourceId: review.id
-        }
-      });
-    }
-
-    return NextResponse.json({
-      success: true,
-      review: {
-        id: review.id,
-        rating: review.rating,
-        comment: review.comment,
-        isApproved: review.isApproved,
-        createdAt: review.createdAt,
-        reviewer: {
-          name: `${review.reviewer.profile?.firstName} ${review.reviewer.profile?.lastName}`,
-          avatar: review.reviewer.profile?.avatar
-        }
-      }
-    }, { status: 201 });
-
-  } catch (error) {
-    console.error('Error creating review:', error);
-    return NextResponse.json(
-      { error: 'Failed to create review' },
-      { status: 500 }
-    );
-  }
-}
-
-// GET /api/reviews - Get reviews (with filtering)
+// GET /api/reviews - Get all reviews (admin only) or caregiver reviews
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-    const type = searchParams.get('type'); // 'given' | 'received'
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const approved = searchParams.get('approved');
-
-    const whereClause: any = {};
+    const revieweeId = searchParams.get('revieweeId');
     
-    // If userId is provided, filter by it
-    if (userId) {
-      if (type === 'given') {
-        whereClause.reviewerId = userId;
-      } else if (type === 'received') {
-        whereClause.revieweeId = userId;
-      }
+    const skip = (page - 1) * limit;
+    
+    const where: any = {};
+    
+    // Filter by approval status if specified
+    if (approved !== null && approved !== undefined) {
+      where.isApproved = approved === 'true';
     }
-    // If no userId, admin is viewing all reviews
-
-    if (approved === 'true') {
-      whereClause.isApproved = true;
-    } else if (approved === 'false') {
-      whereClause.isApproved = false;
+    
+    // Filter by reviewee (caregiver) if specified
+    if (revieweeId) {
+      where.revieweeId = revieweeId;
     }
-
-    const [reviews, totalCount] = await Promise.all([
+    
+    // Get reviews with related data
+    const [reviews, total] = await Promise.all([
       db.review.findMany({
-        where: whereClause,
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
         include: {
           reviewer: {
-            include: { profile: true }
+            include: {
+              profile: true
+            }
           },
           reviewee: {
-            include: { profile: true }
+            include: {
+              profile: true
+            }
           },
           booking: {
-            include: {
-              parent: { include: { profile: true } },
-              caregiver: { include: { profile: true } }
+            select: {
+              id: true,
+              startTime: true,
+              endTime: true,
+              status: true
             }
           }
-        },
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit
+        }
       }),
-      db.review.count({ where: whereClause })
+      db.review.count({ where })
     ]);
-
+    
+    // Format reviews for response
     const formattedReviews = reviews.map(review => ({
       id: review.id,
       rating: review.rating,
       comment: review.comment,
       isApproved: review.isApproved,
-      createdAt: review.createdAt,
-      updatedAt: review.updatedAt,
-      moderatedAt: review.moderatedAt,
+      createdAt: review.createdAt.toISOString(),
+      updatedAt: review.updatedAt.toISOString(),
+      moderatedAt: review.moderatedAt?.toISOString() || null,
+      moderatorNotes: review.moderatorNotes || null,
       reviewer: {
         id: review.reviewer.id,
-        name: `${review.reviewer.profile?.firstName || ''} ${review.reviewer.profile?.lastName || ''}`.trim(),
-        avatar: review.reviewer.profile?.avatar
+        name: `${review.reviewer.profile?.firstName || ''} ${review.reviewer.profile?.lastName || ''}`.trim() || 'Anonymous',
+        avatar: review.reviewer.profile?.avatar || null
       },
       reviewee: {
         id: review.reviewee.id,
-        name: `${review.reviewee.profile?.firstName || ''} ${review.reviewee.profile?.lastName || ''}`.trim(),
-        avatar: review.reviewee.profile?.avatar
+        name: `${review.reviewee.profile?.firstName || ''} ${review.reviewee.profile?.lastName || ''}`.trim() || 'Reviewee',
+        avatar: review.reviewee.profile?.avatar || null
       },
-      booking: {
+      booking: review.booking ? {
         id: review.booking.id,
-        startTime: review.booking.startTime,
-        endTime: review.booking.endTime,
+        startTime: review.booking.startTime.toISOString(),
+        endTime: review.booking.endTime.toISOString(),
         status: review.booking.status
-      }
+      } : null
     }));
-
+    
     return NextResponse.json({
-      success: true,
       reviews: formattedReviews,
       pagination: {
         page,
         limit,
-        totalCount,
-        totalPages: Math.ceil(totalCount / limit)
+        total,
+        totalPages: Math.ceil(total / limit)
       }
     });
-
+    
   } catch (error) {
     console.error('Error fetching reviews:', error);
     return NextResponse.json(
@@ -248,29 +102,115 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Helper function to update caregiver's average rating
-async function updateCaregiverRating(caregiverId: string) {
+// POST /api/reviews - Create a new review
+export async function POST(request: NextRequest) {
   try {
-    // Get all approved reviews for this caregiver
-    const reviews = await db.review.findMany({
+    const body = await request.json();
+    const { bookingId, caregiverId, parentId, rating, comment } = body;
+    
+    if (!bookingId || !caregiverId || !parentId || !rating) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+    
+    // Verify the booking exists and belongs to the parent
+    const booking = await db.booking.findUnique({
+      where: { id: bookingId },
+      include: { parent: true }
+    });
+    
+    if (!booking) {
+      return NextResponse.json(
+        { error: 'Booking not found' },
+        { status: 404 }
+      );
+    }
+    
+    if (booking.parentId !== parentId) {
+      return NextResponse.json(
+        { error: 'Unauthorized to review this booking' },
+        { status: 403 }
+      );
+    }
+    
+    // Check if review already exists for this booking
+    const existingReview = await db.review.findFirst({
       where: {
-        revieweeId: caregiverId,
+        bookingId,
+        parentId,
+        caregiverId
+      }
+    });
+    
+    if (existingReview) {
+      return NextResponse.json(
+        { error: 'Review already exists for this booking' },
+        { status: 400 }
+      );
+    }
+    
+    // Create the review
+    const review = await db.review.create({
+      data: {
+        bookingId,
+        caregiverId,
+        parentId,
+        rating,
+        comment: comment || '',
+        isApproved: false // Reviews need admin approval
+      },
+      include: {
+        parent: {
+          include: { profile: true }
+        },
+        caregiver: {
+          include: {
+            user: {
+              include: { profile: true }
+            }
+          }
+        }
+      }
+    });
+    
+    // Update caregiver's average rating (only approved reviews)
+    const approvedReviews = await db.review.findMany({
+      where: {
+        caregiverId,
         isApproved: true
       }
     });
-
-    if (reviews.length > 0) {
-      const averageRating = reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length;
+    
+    if (approvedReviews.length > 0) {
+      const avgRating = approvedReviews.reduce((sum, r) => sum + r.rating, 0) / approvedReviews.length;
       
-      // Update caregiver's average rating
       await db.caregiver.update({
-        where: { userId: caregiverId },
+        where: { id: caregiverId },
         data: { 
-          averageRating: parseFloat(averageRating.toFixed(2))
+          averageRating: avgRating,
+          totalReviews: approvedReviews.length
         }
       });
     }
+    
+    return NextResponse.json({
+      success: true,
+      review: {
+        id: review.id,
+        rating: review.rating,
+        comment: review.comment,
+        isApproved: review.isApproved,
+        createdAt: review.createdAt.toISOString()
+      }
+    });
+    
   } catch (error) {
-    console.error('Error updating caregiver rating:', error);
+    console.error('Error creating review:', error);
+    return NextResponse.json(
+      { error: 'Failed to create review' },
+      { status: 500 }
+    );
   }
 }

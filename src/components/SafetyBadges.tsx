@@ -48,18 +48,37 @@ export default function SafetyBadges({
     return null;
   }
 
-  const getBadgeColor = (status: string | boolean | undefined) => {
-    if (status === true || status === 'APPROVED') return 'text-green-600 bg-green-100 dark:bg-green-900 dark:text-green-300';
-    if (status === 'PENDING' || status === 'IN_PROGRESS') return 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-300';
-    if (status === 'REJECTED' || status === 'EXPIRED') return 'text-red-600 bg-red-100 dark:bg-red-900 dark:text-red-300';
+  const getBadgeColor = (status: string | boolean | undefined, badgeType?: string) => {
+    if (status === true || status === 'APPROVED') {
+      // Use brand colors for different verification types
+      if (badgeType === 'background') return 'text-teal-700 bg-teal-100 dark:bg-teal-900 dark:text-teal-300';
+      if (badgeType === 'id') return 'text-rose-700 bg-rose-100 dark:bg-rose-900 dark:text-rose-300';
+      if (badgeType === 'insurance') return 'text-purple-700 bg-purple-100 dark:bg-purple-900 dark:text-purple-300';
+      return 'text-teal-700 bg-teal-100 dark:bg-teal-900 dark:text-teal-300'; // Default to teal for verified
+    }
+    if (status === 'PENDING' || status === 'IN_PROGRESS') return 'text-amber-700 bg-amber-100 dark:bg-amber-900 dark:text-amber-300';
+    if (status === 'REJECTED' || status === 'EXPIRED') return 'text-rose-700 bg-rose-100 dark:bg-rose-900 dark:text-rose-300';
     return 'text-gray-500 bg-gray-100 dark:bg-gray-700 dark:text-gray-400';
   };
 
   const getScoreColor = (score: number | undefined) => {
     if (!score) return 'text-gray-500';
-    if (score >= 90) return 'text-green-600 dark:text-green-400';
-    if (score >= 70) return 'text-yellow-600 dark:text-yellow-400';
-    return 'text-red-600 dark:text-red-400';
+    if (score >= 90) return 'text-teal-600 dark:text-teal-400';
+    if (score >= 70) return 'text-amber-600 dark:text-amber-400';
+    return 'text-rose-600 dark:text-rose-400';
+  };
+
+  const getBorderColorForBadge = (badgeType: string) => {
+    switch (badgeType) {
+      case 'background':
+        return 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/20';
+      case 'id':
+        return 'border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-900/20';
+      case 'insurance':
+        return 'border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20';
+      default:
+        return 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/20';
+    }
   };
 
   const badges = [
@@ -94,7 +113,7 @@ export default function SafetyBadges({
           return (
             <div
               key={badge.id}
-              className={`p-1 rounded-full ${getBadgeColor(badge.status)}`}
+              className={`p-1 rounded-full ${getBadgeColor(badge.status, badge.id)}`}
               title={badge.label}
             >
               <IconComponent className="h-3 w-3" />
@@ -102,7 +121,7 @@ export default function SafetyBadges({
           );
         })}
         {verification.verificationScore && (
-          <div className={`text-xs font-medium ${getScoreColor(verification.verificationScore)}`}>
+          <div className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${getScoreColor(verification.verificationScore)} bg-white dark:bg-gray-800 shadow-sm border`}>
             {verification.verificationScore}%
           </div>
         )}
@@ -112,14 +131,14 @@ export default function SafetyBadges({
 
   return (
     <div className={`space-y-2 ${className}`}>
-      {/* Verification Score */}
+      {/* Verification Score - Brand Aligned */}
       {verification.verificationScore && (
-        <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+        <div className="flex items-center justify-between p-2 bg-teal-50 dark:bg-teal-900/20 rounded-lg border border-teal-200 dark:border-teal-800">
           <div className="flex items-center">
-            <StarIcon className="h-4 w-4 text-yellow-500 mr-2" />
-            <span className="text-sm font-medium text-gray-900 dark:text-white">Trust Score</span>
+            <StarIcon className="h-4 w-4 text-amber-600 mr-2" />
+            <span className="text-sm font-medium text-teal-900 dark:text-teal-100">Trust Score</span>
           </div>
-          <span className={`text-sm font-bold ${getScoreColor(verification.verificationScore)}`}>
+          <span className={`text-sm font-bold px-2 py-1 rounded-full ${getScoreColor(verification.verificationScore)} bg-white dark:bg-gray-800 shadow-sm`}>
             {verification.verificationScore}%
           </span>
         </div>
@@ -136,11 +155,11 @@ export default function SafetyBadges({
               key={badge.id}
               className={`flex items-center p-2 rounded-lg border ${
                 isVerified 
-                  ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20' 
+                  ? getBorderColorForBadge(badge.id)
                   : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'
               }`}
             >
-              <div className={`p-1.5 rounded-full mr-3 ${getBadgeColor(badge.status)}`}>
+              <div className={`p-1.5 rounded-full mr-3 ${getBadgeColor(badge.status, badge.id)}`}>
                 <IconComponent className="h-4 w-4" />
               </div>
               
@@ -149,7 +168,7 @@ export default function SafetyBadges({
                   <span className="text-sm font-medium text-gray-900 dark:text-white">
                     {badge.label}
                   </span>
-                  <span className={`text-xs px-2 py-1 rounded-full ${getBadgeColor(badge.status)}`}>
+                  <span className={`text-xs px-2 py-1 rounded-full ${getBadgeColor(badge.status, badge.id)}`}>
                     {typeof badge.status === 'boolean' 
                       ? (badge.status ? 'Verified' : 'Unverified')
                       : badge.status || 'Pending'
@@ -178,15 +197,15 @@ export default function SafetyBadges({
                 key={index}
                 className={`flex items-center justify-between p-2 rounded ${
                   cert.isVerified 
-                    ? 'bg-green-50 dark:bg-green-900/20' 
-                    : 'bg-gray-50 dark:bg-gray-800'
+                    ? 'bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800' 
+                    : 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800'
                 }`}
               >
                 <div className="flex items-center">
                   {cert.isVerified ? (
-                    <HeartSolid className="h-3 w-3 text-green-600 dark:text-green-400 mr-2" />
+                    <HeartSolid className="h-3 w-3 text-teal-600 dark:text-teal-400 mr-2" />
                   ) : (
-                    <ExclamationTriangleIcon className="h-3 w-3 text-yellow-600 dark:text-yellow-400 mr-2" />
+                    <ExclamationTriangleIcon className="h-3 w-3 text-amber-600 dark:text-amber-400 mr-2" />
                   )}
                   <span className="text-xs font-medium text-gray-900 dark:text-white">
                     {cert.title}

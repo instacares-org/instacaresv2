@@ -1,0 +1,103 @@
+# Git
+.git
+.gitignore
+README.md
+
+# Docker
+.docker
+Dockerfile*
+docker-compose*
+
+# Node.js
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js
+.next/
+.next-env
+
+# Environment variables
+.env*
+!.env.example
+
+# IDE
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+
+# Temporary folders
+tmp/
+temp/
+
+# Build files
+build/
+dist/
+
+# Prisma
+prisma/dev.db*
+prisma/migrations/
+
+# Uploads (in development)
+public/uploads/*
+!public/uploads/.gitkeep
+
+# Scripts (some may contain sensitive info)
+scripts/*.js
+!scripts/setup-*.sh
+!scripts/deploy-*.sh
+!scripts/health-check.sh
+
+# Test files
+test/
+tests/
+__tests__/
+*.test.js
+*.spec.js

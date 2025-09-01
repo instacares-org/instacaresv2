@@ -22,13 +22,15 @@ import {
   BanknotesIcon,
   DocumentTextIcon,
   CalendarDaysIcon,
-  ClockIcon
+  ClockIcon,
+  BellIcon
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import Image from "next/image";
 import { generateStyledInvoice } from "@/components/InvoicePrintView";
 import AdminChatManagement from "@/components/AdminChatManagement";
 import AdminReviewList from "@/components/AdminReviewList";
+import AdvancedNotificationManager from "@/components/AdvancedNotificationManager";
 
 interface User {
   id: string;
@@ -400,10 +402,10 @@ export default function AdminDashboard() {
   }
 
   return (
-    <AdminAuthLayout title="Admin Dashboard" className="bg-gray-50">
+    <AdminAuthLayout title="Admin Dashboard" className="bg-gray-50 overflow-x-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Tab Navigation */}
-        <div className="flex space-x-1 mb-8 overflow-x-auto">
+        <div className="flex flex-wrap gap-2 mb-8">
           {[
             { key: 'overview', label: 'Overview', icon: ChartBarIcon },
             { key: 'users', label: 'Users', icon: UsersIcon },
@@ -411,6 +413,7 @@ export default function AdminDashboard() {
             { key: 'approvals', label: 'Approvals', icon: ShieldCheckIcon },
             { key: 'moderation', label: 'Reviews', icon: EyeIcon },
             { key: 'chats', label: 'Chat Management', icon: ChatBubbleLeftRightIcon },
+            { key: 'notifications', label: 'Notifications', icon: BellIcon },
             { key: 'analytics', label: 'Analytics', icon: DocumentChartBarIcon },
             { key: 'support', label: 'Support', icon: ExclamationTriangleIcon },
             { key: 'settings', label: 'Settings', icon: CogIcon }
@@ -915,15 +918,28 @@ export default function AdminDashboard() {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Auto-approve Caregivers
+                    Auto-approval Settings 
                   </label>
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                  />
-                  <span className="ml-2 text-sm text-gray-600">
-                    Automatically approve new caregiver registrations
-                  </span>
+                  <div className="space-y-3">
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                      />
+                      <span className="ml-2 text-sm text-gray-600">
+                        Automatically approve new caregiver registrations
+                      </span>
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                      />
+                      <span className="ml-2 text-sm text-gray-600">
+                        Automatically approve new parent registrations
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1189,7 +1205,7 @@ export default function AdminDashboard() {
 
         {/* Chat Management Tab */}
         {activeTab === 'chats' && (
-          <AdminChatManagement adminUserId="cmeed4ixm0000wmcsicjae17g" />
+          <AdminChatManagement adminUserId="cmeovt72y0000wmhocc32ymtr" />
         )}
 
         {/* Review Moderation Tab */}
@@ -1263,6 +1279,32 @@ export default function AdminDashboard() {
                   }
                 }}
               />
+            </div>
+          </div>
+        )}
+
+        {/* Notifications Tab */}
+        {activeTab === 'notifications' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow-sm">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center space-x-3">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                      <BellIcon className="w-4 h-4 text-white" />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Notification Management</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Test and manage email and SMS notifications
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-6">
+                <AdvancedNotificationManager />
+              </div>
             </div>
           </div>
         )}

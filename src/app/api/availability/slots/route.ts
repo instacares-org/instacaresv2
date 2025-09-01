@@ -21,7 +21,23 @@ export async function GET(request: NextRequest) {
     if (endDate) query.endDate = new Date(endDate);
     if (minAvailableSpots) query.minAvailableSpots = parseInt(minAvailableSpots);
 
+    console.log('🔍 Availability Slots Query:', {
+      caregiverId,
+      query,
+      searchParams: Object.fromEntries(searchParams.entries())
+    });
+
     const slots = await AvailabilityService.getAvailableSlots(query);
+    
+    console.log('📊 Slots Found:', {
+      caregiverId,
+      slotsCount: slots?.length || 0,
+      firstFewSlots: slots?.slice(0, 3).map(slot => ({
+        id: slot.id,
+        date: slot.date,
+        availableSpots: slot.availableSpots
+      }))
+    });
 
     return NextResponse.json({
       success: true,

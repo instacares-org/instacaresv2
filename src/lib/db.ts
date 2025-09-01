@@ -253,8 +253,10 @@ export const bookingOperations = {
     subtotal: number;
     platformFee: number;
     totalAmount: number;
+    slotId?: string; // Optional slot ID for slot-based bookings
+    reservationId?: string; // Optional reservation ID to convert
   }) {
-    // Create booking and chat room in a transaction
+    // Create booking and integrate with availability slot system in a transaction
     const result = await db.$transaction(async (tx) => {
       // Debug: Log the data being passed to create
       console.log('Creating booking with data:', {
@@ -264,7 +266,9 @@ export const bookingOperations = {
         endTime: data.endTime,
         childrenCount: data.childrenCount,
         address: data.address,
-        totalAmount: data.totalAmount
+        totalAmount: data.totalAmount,
+        slotId: data.slotId,
+        reservationId: data.reservationId
       });
       
       // Verify caregiver exists before creating booking
@@ -317,13 +321,104 @@ export const bookingOperations = {
                 },
               },
             },
+            slotBookings: {
+              include: {
+                slot: true
+              }
+            }
           },
         });
       }
 
+      // Handle slot-based booking logic
+      let availabilitySlot = null;
+      if (data.slotId) {
+        // Find the specific slot
+        availabilitySlot = await tx.availabilitySlot.findUnique({
+          where: { id: data.slotId },
+          include: { reservations: true }
+        });
+
+        if (!availabilitySlot) {
+          throw new Error(`Availability slot ${data.slotId} not found`);
+        }
+
+        if (availabilitySlot.caregiverId !== caregiverExists.caregiver.id) {
+          throw new Error(`Slot does not belong to the specified caregiver`);
+        }
+
+        // Check if there's enough capacity (accounting for active reservations)
+        const activeReservations = availabilitySlot.reservations.filter(
+          r => r.status === 'ACTIVE' && r.expiresAt > new Date()
+        );
+        const reservedSpots = activeReservations.reduce((sum, r) => sum + r.reservedSpots, 0);
+        const realTimeAvailable = availabilitySlot.totalCapacity - availabilitySlot.currentOccupancy - reservedSpots;
+
+        if (realTimeAvailable < data.childrenCount) {
+          throw new Error(`Insufficient capacity: ${realTimeAvailable} spots available, ${data.childrenCount} requested`);
+        }
+      } else {
+        // Auto-find matching availability slot for legacy bookings
+        const bookingDate = new Date(data.startTime.getFullYear(), data.startTime.getMonth(), data.startTime.getDate());
+        
+        availabilitySlot = await tx.availabilitySlot.findFirst({
+          where: {
+            caregiverId: caregiverExists.caregiver.id,
+            date: {
+              gte: bookingDate,
+              lt: new Date(bookingDate.getTime() + 24 * 60 * 60 * 1000)
+            },
+            startTime: {
+              lte: data.startTime
+            },
+            endTime: {
+              gte: data.endTime
+            },
+            status: 'AVAILABLE'
+          },
+          include: { reservations: true },
+          orderBy: { createdAt: 'asc' }
+        });
+
+        // If no matching slot exists, create one automatically
+        if (!availabilitySlot) {
+          console.log('No matching slot found, creating one automatically...');
+          
+          availabilitySlot = await tx.availabilitySlot.create({
+            data: {
+              caregiverId: caregiverExists.caregiver.id,
+              date: bookingDate,
+              startTime: data.startTime,
+              endTime: data.endTime,
+              totalCapacity: Math.max(data.childrenCount, caregiverExists.caregiver.dailyCapacity),
+              currentOccupancy: 0,
+              availableSpots: Math.max(data.childrenCount, caregiverExists.caregiver.dailyCapacity),
+              baseRate: data.hourlyRate,
+              currentRate: data.hourlyRate,
+              status: 'AVAILABLE'
+            },
+            include: { reservations: true }
+          });
+          
+          console.log(`Created new availability slot: ${availabilitySlot.id}`);
+        }
+
+        // Check capacity for auto-found/created slot
+        const activeReservations = availabilitySlot.reservations.filter(
+          r => r.status === 'ACTIVE' && r.expiresAt > new Date()
+        );
+        const reservedSpots = activeReservations.reduce((sum, r) => sum + r.reservedSpots, 0);
+        const realTimeAvailable = availabilitySlot.totalCapacity - availabilitySlot.currentOccupancy - reservedSpots;
+
+        if (realTimeAvailable < data.childrenCount) {
+          throw new Error(`Insufficient capacity: ${realTimeAvailable} spots available, ${data.childrenCount} requested`);
+        }
+      }
+
       // Create the booking
+      const { slotId, reservationId, ...bookingData } = data;
       const booking = await tx.booking.create({
-        data,
+        data: bookingData,
         include: {
           parent: {
             include: {
@@ -344,8 +439,62 @@ export const bookingOperations = {
               },
             },
           },
+          slotBookings: {
+            include: {
+              slot: true
+            }
+          }
         },
       });
+
+      // Handle reservation conversion if provided
+      if (data.reservationId) {
+        const reservation = await tx.bookingReservation.findUnique({
+          where: { id: data.reservationId }
+        });
+
+        if (reservation && reservation.status === 'ACTIVE') {
+          // Update reservation status
+          await tx.bookingReservation.update({
+            where: { id: data.reservationId },
+            data: {
+              status: 'CONVERTED_TO_BOOKING',
+              bookingId: booking.id
+            }
+          });
+          
+          console.log(`Converted reservation ${data.reservationId} to booking`);
+        }
+      }
+
+      // Update slot occupancy and create SlotBooking junction record
+      if (availabilitySlot) {
+        // Update slot occupancy
+        const newOccupancy = availabilitySlot.currentOccupancy + data.childrenCount;
+        const newAvailableSpots = availabilitySlot.totalCapacity - newOccupancy;
+
+        await tx.availabilitySlot.update({
+          where: { id: availabilitySlot.id },
+          data: {
+            currentOccupancy: newOccupancy,
+            availableSpots: newAvailableSpots,
+            status: newAvailableSpots <= 0 ? 'BOOKED' : 'AVAILABLE'
+          }
+        });
+
+        // Create SlotBooking junction record
+        await tx.slotBooking.create({
+          data: {
+            slotId: availabilitySlot.id,
+            bookingId: booking.id,
+            childrenCount: data.childrenCount,
+            spotsUsed: data.childrenCount,
+            rateApplied: data.hourlyRate
+          }
+        });
+
+        console.log(`Updated slot ${availabilitySlot.id}: occupancy ${newOccupancy}/${availabilitySlot.totalCapacity}, available: ${newAvailableSpots}`);
+      }
 
       // Automatically create chat room for the booking
       try {

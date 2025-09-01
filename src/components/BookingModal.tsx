@@ -9,6 +9,7 @@ import BookingForm from './BookingForm';
 import CaregiverProfileImage from './CaregiverProfileImage';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAvailability, useLiveAvailability } from '@/hooks/useAvailability';
+import { useRouter } from 'next/navigation';
 
 interface BookingModalProps {
   caregiver: Caregiver;
@@ -40,6 +41,7 @@ interface ChildProfile {
 export default function BookingModal({ caregiver, isOpen, onClose }: BookingModalProps) {
   const { user, isAuthenticated, isParent } = useAuth();
   const { reserveSpots, cancelReservation } = useAvailability();
+  const router = useRouter();
   const [clientSecret, setClientSecret] = useState<string>('');
   const [bookingDetails, setBookingDetails] = useState({
     isMultiDay: false,
@@ -66,39 +68,19 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
   const [currentReservation, setCurrentReservation] = useState<any>(null);
   const [reservationTimer, setReservationTimer] = useState<number>(0);
   
-  // Enhanced caregiver ID resolution with fallback mapping
-  const caregiverIdMapping = {
-    'cmeed4j7a0006wmcs5u1imodf': 'cmeed4jep000dwmcs6qfpbozm', // Emily Davis
-    'cmeed4jam0008wmcshgfvdvpz': 'cmeed4jez000fwmcsskmnhxll', // Jennifer Chen  
-    'cmeed4je2000awmcs34qzfv0e': 'cmeed4jf8000hwmcsarr1pzqq', // Sarah Johnson
-    'cmeedoisg000cwmq4t3532cvk': 'cmeedx7ca000lwmq4qpr5zqgh', // José García-López
-    'cmegiz8mu0000wm8o9mb8jfln': 'cmegj0i0j0005wm8o9zgpd1cd', // Fazila Noorzad
-    'cmejfj29f003iwmi44maqpkih': 'cmejfjtua003nwmi49tsb7xq7', // Farhad Habib (farhadbills@gmail.com)
-  };
-  
-  const caregiverIdForAvailability = caregiver.caregiverId || caregiverIdMapping[caregiver.id] || caregiver.id;
-  
-  if (!caregiver.caregiverId && caregiverIdMapping[caregiver.id]) {
-    console.log('🔍 Applied fallback caregiver ID mapping for', caregiver.name);
-  }
-  
-  console.log('🔍 BookingModal Debug:', {
-    caregiverName: caregiver.name,
-    caregiverEmail: caregiver.email,
-    caregiverId: caregiver.caregiverId,
-    userId: caregiver.id,
-    usingId: caregiverIdForAvailability,
-    selectedDate: bookingDetails.date || new Date().toISOString().split('T')[0]
-  });
-
-  // Extra debug for Fazila specifically
-  if (caregiver.name?.toLowerCase().includes('fazila')) {
-    console.log('🎯 FAZILA BOOKING DEBUG:', {
-      whichFazila: caregiver.email,
-      expectingSlots: caregiver.email === 'fazilanoorzad@yahoo.co.uk' ? 11 : 0,
-      caregiverIdUsedForAPI: caregiverIdForAvailability
-    });
-  }
+  // Validate that we have the required caregiver record ID
+  const caregiverIdForAvailability = (() => {
+    if (!caregiver.caregiverId) {
+      console.error('❌ CRITICAL ERROR: Missing caregiverId for', caregiver.name, {
+        hasId: !!caregiver.id,
+        hasCaregiverId: !!caregiver.caregiverId,
+        caregiverObject: caregiver
+      });
+      throw new Error(`Missing caregiverId for caregiver ${caregiver.name}. Cannot query availability.`);
+    }
+    console.log('✅ Using correct caregiverId for availability:', caregiver.caregiverId);
+    return caregiver.caregiverId;
+  })();
 
   // Get all available dates for this caregiver (not just selected date)
   const [allAvailability, setAllAvailability] = useState<any[]>([]);
@@ -182,6 +164,13 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
 
   // Fetch all available dates for this caregiver
   const fetchAllAvailability = async () => {
+    if (!caregiverIdForAvailability) {
+      console.error('❌ Cannot fetch availability: missing caregiverId');
+      setAvailabilityError('Missing caregiver ID');
+      setAvailabilityLoading(false);
+      return;
+    }
+
     try {
       console.log('🚀 Starting fetchAllAvailability...');
       setAvailabilityLoading(true);
@@ -564,6 +553,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
             </p>
             <p className="text-gray-500 text-xs mb-6">
               Child profiles help caregivers provide the best possible care by knowing about allergies, medical conditions, and special instructions.
+              Clicking "Add Child Profile" will take you directly to the Children section of your dashboard.
             </p>
             <div className="flex space-x-3">
               <button
@@ -576,7 +566,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                 onClick={() => {
                   onClose();
                   // Navigate to child profile creation in parent dashboard
-                  window.location.href = '/parent-dashboard?tab=children';
+                  router.push('/parent-dashboard?tab=children');
                 }}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
               >

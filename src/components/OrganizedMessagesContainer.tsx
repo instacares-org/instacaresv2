@@ -66,24 +66,36 @@ export default function OrganizedMessagesContainer({
         const result = await response.json();
         // Handle the messages API response format
         setMessages(result.messages || []);
+        setError(null); // Clear any previous errors
       } else {
         const errorData = await response.text();
-        console.error('Failed to fetch messages:', {
+        const errorDetails = {
           status: response.status,
           statusText: response.statusText,
           error: errorData,
           roomId,
           userId
-        });
+        };
+        console.error('Failed to fetch messages:', errorDetails);
+        
+        // If it's a 404, it might be that the chat room doesn't exist yet
+        if (response.status === 404) {
+          setError('This conversation is not available or you do not have access to it.');
+        } else {
+          setError('Failed to load messages. Please try again.');
+        }
         setMessages([]);
       }
     } catch (error) {
-      console.error('Error fetching messages:', {
-        error,
+      const errorDetails = {
+        error: error instanceof Error ? error.message : String(error),
         roomId,
         userId,
-        url: `/api/chat/${roomId}/messages?userId=${userId}`
-      });
+        url: `/api/chat/${roomId}/messages?userId=${userId}`,
+        stack: error instanceof Error ? error.stack : undefined
+      };
+      console.error('Error fetching messages:', errorDetails);
+      setError('Connection error. Please check your internet connection and try again.');
       setMessages([]);
     }
   };
@@ -159,6 +171,39 @@ export default function OrganizedMessagesContainer({
     return (
       <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 dark:border-blue-400 border-t-transparent"></div>
+      </div>
+    );
+  }
+
+  if (error && !rooms.length) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center p-6">
+          <div className="text-red-500 dark:text-red-400 mb-2">⚠️</div>
+          <p className="text-red-600 dark:text-red-400 mb-2">{error}</p>
+          <button 
+            onClick={fetchRooms}
+            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!loading && rooms.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center p-6">
+          <div className="text-gray-400 mb-4 text-4xl">💬</div>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+            No conversations yet
+          </h3>
+          <p className="text-gray-500 dark:text-gray-400">
+            When you book a caregiver or receive a booking request, your conversations will appear here.
+          </p>
+        </div>
       </div>
     );
   }

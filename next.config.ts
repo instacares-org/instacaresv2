@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    unoptimized: true, // Temporarily disable optimization to fix loading errors
+    unoptimized: false, // Enable optimization for production
     remotePatterns: [
       {
         protocol: 'http',

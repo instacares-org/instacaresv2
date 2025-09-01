@@ -190,7 +190,7 @@ const AdminAuthLayout: React.FC<AdminAuthLayoutProps> = ({
 
   // Successful authentication - render children
   return (
-    <div className={`min-h-screen bg-gray-50 ${className}`}>
+    <div className={`min-h-screen bg-gray-50 overflow-x-hidden ${className}`}>
       {/* Security Banner */}
       <AdminSecurityBanner 
         adminUser={adminUser} 

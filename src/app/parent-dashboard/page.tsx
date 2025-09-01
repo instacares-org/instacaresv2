@@ -23,7 +23,7 @@ import {
   MessageCircle
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import Chat from '../../components/Chat';
@@ -146,6 +146,7 @@ interface ParentProfile {
 const ParentDashboard: React.FC = () => {
   const { user, loading: authLoading, isAuthenticated, isParent, logout } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<'overview' | 'profile' | 'bookings' | 'messages' | 'notifications' | 'children'>('overview');
   const [profile, setProfile] = useState<ParentProfile | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -160,6 +161,19 @@ const ParentDashboard: React.FC = () => {
   const [reviewBooking, setReviewBooking] = useState<Booking | null>(null);
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   
+  // Check URL parameter to set initial tab
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['overview', 'profile', 'bookings', 'messages', 'notifications', 'children'].includes(tabParam)) {
+      setActiveTab(tabParam as 'overview' | 'profile' | 'bookings' | 'messages' | 'notifications' | 'children');
+      console.log('🔗 URL tab parameter detected:', tabParam, '- switching to tab');
+      
+      // Clear the URL parameter to keep the URL clean
+      const url = new URL(window.location.href);
+      url.searchParams.delete('tab');
+      window.history.replaceState(null, '', url.toString());
+    }
+  }, [searchParams]);
   
   // Use real notification storage
   const { 
