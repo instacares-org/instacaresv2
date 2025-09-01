@@ -38,7 +38,11 @@
       "Bash(\"C:\\Users\\fhabib\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe\" shell am force-stop com.instacaresmobile)",
       "Bash(\"C:\\Users\\fhabib\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe\" shell am start -n com.instacaresmobile/com.instacaresmobile.MainActivity)",
       "Read(/C:\\Users\\fhabib\\Pictures/**)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(git push:*)",
+      "Bash(git merge:*)"
     ],
     "deny": [],
     "ask": [],
