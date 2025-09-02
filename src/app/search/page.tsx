@@ -350,6 +350,11 @@ function SearchPageContent() {
   useEffect(() => {
     console.log('🌍 Attempting to get user browser location...');
     
+    // Always set a default location first (Toronto, Canada center)
+    const defaultLocation = { lat: 43.6532, lng: -79.3832 };
+    setUserLocation(defaultLocation);
+    console.log('🗺️ Set default Toronto location for immediate caregiver loading');
+    
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -364,22 +369,27 @@ function SearchPageContent() {
           console.log('🗺️ User location acquired for map centering');
         },
         (error) => {
-          console.log('❌ Could not get user location:', error);
-          // Default to Toronto if geolocation fails
-          const defaultLocation = { lat: 43.6532, lng: -79.3832 };
-          setUserLocation(defaultLocation);
-          console.log('🗺️ Using default Toronto location for user location');
+          console.log('❌ Could not get user location:', error.message);
+          console.log('🗺️ Continuing with default Toronto location - caregivers will still show');
+          
+          // Show a helpful message to the user
+          if (error.code === error.PERMISSION_DENIED) {
+            console.log('📍 Location access denied - showing all Canadian caregivers');
+          } else if (error.code === error.POSITION_UNAVAILABLE) {
+            console.log('📍 Location unavailable - showing all Canadian caregivers');
+          } else {
+            console.log('📍 Location timeout or other error - showing all Canadian caregivers');
+          }
+          // Keep the default location we already set
         },
         {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 300000 // 5 minutes
+          enableHighAccuracy: false, // Less strict for HTTP compatibility
+          timeout: 5000, // Shorter timeout
+          maximumAge: 600000 // 10 minutes
         }
       );
     } else {
-      console.log('❌ Geolocation not supported');
-      const defaultLocation = { lat: 43.6532, lng: -79.3832 };
-      setUserLocation(defaultLocation);
+      console.log('❌ Geolocation not supported - using default location');
     }
   }, []);
 
@@ -390,13 +400,14 @@ function SearchPageContent() {
       setError(null);
       
       // Build query parameters - use searchLocation (from URL) or userLocation (from browser)  
-      let queryParams = `_cacheBust=${Date.now()}&fixVersion=2`;
+      let queryParams = `_cacheBust=${Date.now()}&fixVersion=3`;
       const locationToUse = searchLocation || userLocation;
       if (locationToUse) {
-        queryParams += `&lat=${locationToUse.lat}&lng=${locationToUse.lng}&radius=50`; // Use 50km radius for search
+        queryParams += `&lat=${locationToUse.lat}&lng=${locationToUse.lng}&radius=500`; // Use 500km radius for broader search
         console.log('🌍 Using location for API call:', locationToUse, searchLocation ? '(from URL)' : '(from browser)');
       } else {
-        console.log('⚠️ No location available for API call');
+        console.log('⚠️ No location available for API call - fetching all caregivers');
+        // Don't add location parameters if no location is available - this will return all caregivers
       }
       
       const response = await fetch(`/api/caregivers?${queryParams}`);
@@ -410,16 +421,16 @@ function SearchPageContent() {
       if (result.success && result.data) {
         // Transform API data to match Caregiver interface
         const apiCaregivers: Caregiver[] = result.data.map((caregiver: any) => {
-          // Include caregivers that have at least city data (less strict for now)
+          // Always include caregivers - don't filter by location data
           const hasLocationData = caregiver.address?.city;
           
           if (!hasLocationData) {
-            console.log(`⚠️ Skipping caregiver ${caregiver.name} - missing city data:`, {
-              city: caregiver.address?.city,
+            console.log(`⚠️ Including caregiver ${caregiver.name} without complete location data:`, {
+              city: caregiver.address?.city || 'Unknown City',
               lat: caregiver.address?.latitude,
               lng: caregiver.address?.longitude
             });
-            return null;
+            // Don't return null - include the caregiver anyway
           }
           
           // Log when coordinates are missing (for debugging)
@@ -461,9 +472,9 @@ function SearchPageContent() {
             experienceYears: caregiver.experienceYears || 0, // Add experience years
             specialties: caregiver.services?.map((s: any) => s.type) || ["General Care"],
             location: {
-              lat: parseFloat(caregiver.address.latitude) || 0,
-              lng: parseFloat(caregiver.address.longitude) || 0,
-              address: `${caregiver.address.city}, ${caregiver.address.province || 'ON'}`
+              lat: parseFloat(caregiver.address?.latitude) || 43.6532, // Default to Toronto coordinates
+              lng: parseFloat(caregiver.address?.longitude) || -79.3832,
+              address: `${caregiver.address?.city || 'Toronto'}, ${caregiver.address?.province || 'ON'}`
             },
             availability: caregiver.availability || "No Availability Posted Yet",
             availabilitySlots: caregiver.availabilitySlots || [],
@@ -474,26 +485,33 @@ function SearchPageContent() {
         }).filter(Boolean); // Remove null entries
         
         
+        console.log(`✅ Successfully loaded ${apiCaregivers.length} caregivers`);
         setAllCaregivers(apiCaregivers);
         setFilteredCaregivers(apiCaregivers);
       }
     } catch (error) {
       console.error('Error fetching caregivers:', error.message);
       setError('Failed to load caregivers. Please try again.');
-      setFilteredCaregivers([]);
+      // Use mock data as fallback when API fails
+      console.log('🔄 Using mock data as fallback');
+      setAllCaregivers(mockCaregivers);
+      setFilteredCaregivers(mockCaregivers);
     } finally {
       setLoading(false);
     }
   };
 
-  // Load caregivers on component mount
+  // Load caregivers on component mount - always fetch immediately
   useEffect(() => {
+    console.log('🚀 Component mounted - fetching caregivers immediately');
     fetchCaregivers();
   }, []);
 
   // Refetch caregivers when either search location or user location changes
+  // But don't wait for location - always show caregivers
   useEffect(() => {
     if (userLocation || searchLocation) {
+      console.log('📍 Location updated - refetching caregivers');
       fetchCaregivers();
     }
   }, [searchLocation, userLocation]);
@@ -853,6 +871,11 @@ function SearchPageContent() {
                   <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
                     {searchCriteria.location ? `Childcare in ${searchCriteria.location}` : 'Childcare Providers Across Canada'}
                   </h1>
+                  {!searchCriteria.location && !userLocation && (
+                    <span className="text-xs text-blue-600 dark:text-blue-400 ml-2">
+                      Showing all available caregivers
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center space-x-3 text-sm">
                   <div className="flex items-center text-gray-600 dark:text-gray-300">

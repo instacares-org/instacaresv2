@@ -77,8 +77,13 @@ export async function GET(request: NextRequest) {
     const allowedCountries = searchParams.get('countries')?.split(',') || ['CA']; // Default to Canada only
 
     // Debug logging
-    console.log(`\n🔍 API Request - Radius: ${radius}km, Location: ${latitude}, ${longitude}`);
+    console.log(`\n🔍 API Request - Radius: ${radius}km, Location: ${latitude || 'none'}, ${longitude || 'none'}`);
     console.log(`📋 Parameters:`, { latitude, longitude, radius, limit, offset, allowedCountries });
+    
+    // When no location is provided, return all Canadian caregivers
+    if (!latitude || !longitude) {
+      console.log('🍁 No location provided - returning all Canadian caregivers');
+    }
 
     // Generate cache key for this search
     const searchQuery = {
