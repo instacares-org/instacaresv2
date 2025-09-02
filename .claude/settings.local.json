@@ -42,7 +42,15 @@
       "Bash(git commit:*)",
       "Bash(git checkout:*)",
       "Bash(git push:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(git push:*)",
+      "Bash(git checkout:*)",
+      "Bash(copy:*)",
+      "WebFetch(domain:72.60.71.43)",
+      "Bash(git commit:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx eslint:*)",
+      "Bash(set SKIP_ENV_VALIDATION=true)"
     ],
     "deny": [],
     "ask": [],
