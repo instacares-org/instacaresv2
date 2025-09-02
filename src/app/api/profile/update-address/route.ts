@@ -17,7 +17,11 @@ export async function PATCH(request: NextRequest) {
     // Verify the token
     let userId: string;
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as { userId: string };
+      const secret = process.env.JWT_SECRET;
+      if (!secret) {
+        return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+      }
+      const decoded = jwt.verify(token, secret) as { userId: string };
       userId = decoded.userId;
     } catch (error) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });

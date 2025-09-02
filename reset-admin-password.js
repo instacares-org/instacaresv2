@@ -8,7 +8,7 @@ async function resetAdminPassword() {
     console.log('🔧 Resetting admin password...');
     
     // Hash the new password
-    const newPassword = 'admin123';
+    const newPassword = process.env.ADMIN_DEFAULT_PASSWORD || 'defaultpassword';
     const passwordHash = await bcrypt.hash(newPassword, 10);
     
     // Check if admin exists
@@ -32,7 +32,7 @@ async function resetAdminPassword() {
       
       console.log('✅ Admin password updated successfully!');
       console.log('📧 Email: admin@instacares.com');
-      console.log('🔑 Password: admin123');
+      console.log('🔑 Password:', newPassword);
       console.log('👤 User ID:', updatedAdmin.id);
       console.log('🏷️ User Type:', updatedAdmin.userType);
       console.log('✓ Active:', updatedAdmin.isActive);
@@ -69,7 +69,7 @@ async function resetAdminPassword() {
       
       console.log('✅ Admin user created successfully!');
       console.log('📧 Email: admin@instacares.com');
-      console.log('🔑 Password: admin123');
+      console.log('🔑 Password:', newPassword);
       console.log('👤 User ID:', newAdmin.id);
       console.log('🏷️ User Type:', newAdmin.userType);
     }

@@ -13,7 +13,14 @@ export async function verifyAdminAuth(request: NextRequest): Promise<{ isValid: 
     
     // For demo purposes, check for a simple admin key
     // In production, implement proper JWT token validation
-    const validAdminKey = process.env.ADMIN_SECRET_KEY || 'demo-admin-key-2024';
+    const validAdminKey = process.env.ADMIN_SECRET_KEY;
+    
+    if (!validAdminKey) {
+      return { 
+        isValid: false, 
+        error: 'Admin configuration error' 
+      };
+    }
     
     if (!adminKey || adminKey !== validAdminKey) {
       return { 
@@ -41,7 +48,12 @@ export async function verifyAdminAuth(request: NextRequest): Promise<{ isValid: 
 // Verify JWT token and return user data
 export async function verifyToken(token: string): Promise<any | null> {
   try {
-    const secret = process.env.JWT_SECRET || 'demo-jwt-secret-2024';
+    const secret = process.env.JWT_SECRET;
+    
+    if (!secret) {
+      logger.error('JWT_SECRET environment variable not configured');
+      return null;
+    }
     const decoded = jwt.verify(token, secret) as any;
     
     // Get user from database to ensure they still exist and are active

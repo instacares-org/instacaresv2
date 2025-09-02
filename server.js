@@ -6,7 +6,12 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config({ path: '.env.local' });
 
 const PORT = process.env.WEBSOCKET_PORT || 3007;
-const JWT_SECRET = process.env.JWT_SECRET || 'instacares-super-secure-jwt-secret-key-2024-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  console.error('❌ JWT_SECRET environment variable is required');
+  process.exit(1);
+}
 
 // Create HTTP server
 const httpServer = createServer();
