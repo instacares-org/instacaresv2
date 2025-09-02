@@ -167,9 +167,9 @@ const Chat: React.FC<ChatProps> = ({ userId, userType }) => {
                           <UserCircleIcon className="w-8 h-8 text-gray-600" />
                         </div>
                       )}
-                  </div>
+                    </div>
 
-                  <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <p className="font-medium text-gray-900 truncate">
                         {room.otherUser.name}
@@ -191,6 +191,7 @@ const Chat: React.FC<ChatProps> = ({ userId, userType }) => {
                         {room.lastMessage.content}
                       </p>
                     )}
+                    </div>
                   </div>
                 </div>
               );
@@ -308,6 +309,7 @@ const Chat: React.FC<ChatProps> = ({ userId, userType }) => {
                         )}
                       </div>
                     )}
+                  </div>
                   );
                 })
               )}

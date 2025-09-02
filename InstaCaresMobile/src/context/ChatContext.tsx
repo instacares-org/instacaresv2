@@ -211,7 +211,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   };
 
   const value: ChatContextType = {
-    socket,
     conversations,
     activeConversation,
     messages,
