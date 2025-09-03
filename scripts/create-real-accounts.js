@@ -238,8 +238,7 @@ async function createParentAccount(parentData) {
   const location = CANADIAN_LOCATIONS[parentData.location];
   const address = location.addresses[parentData.addressIndex];
   
-  const defaultPassword = process.env.TEST_ACCOUNT_PASSWORD || 'defaultpassword';
-  const passwordHash = await bcrypt.hash(defaultPassword, 10);
+  const passwordHash = await bcrypt.hash('password123', 10);
   
   const user = await prisma.user.create({
     data: {
@@ -283,8 +282,7 @@ async function createCaregiverAccount(caregiverData) {
   const location = CANADIAN_LOCATIONS[caregiverData.location];
   const address = location.addresses[caregiverData.addressIndex];
   
-  const defaultPassword = process.env.TEST_ACCOUNT_PASSWORD || 'defaultpassword';
-  const passwordHash = await bcrypt.hash(defaultPassword, 10);
+  const passwordHash = await bcrypt.hash('password123', 10);
   
   const user = await prisma.user.create({
     data: {
@@ -376,21 +374,19 @@ async function createRealAccounts() {
     console.log('\n📋 ACCOUNT CREDENTIALS:');
     console.log('=======================');
     
-    const testPassword = process.env.TEST_ACCOUNT_PASSWORD || 'defaultpassword';
-    
     console.log('\n👨‍👩‍👧‍👦 PARENT ACCOUNTS:');
     parents.forEach(parent => {
-      console.log(`📧 ${parent.email} | Password: ${testPassword} | ${parent.profile.firstName} ${parent.profile.lastName}`);
+      console.log(`📧 ${parent.email} | Password: password123 | ${parent.profile.firstName} ${parent.profile.lastName}`);
     });
     
     console.log('\n👩‍🍼 CAREGIVER ACCOUNTS:');
     caregivers.forEach(caregiver => {
-      console.log(`📧 ${caregiver.email} | Password: ${testPassword} | ${caregiver.profile.firstName} ${caregiver.profile.lastName}`);
+      console.log(`📧 ${caregiver.email} | Password: password123 | ${caregiver.profile.firstName} ${caregiver.profile.lastName}`);
     });
     
     console.log('\n🔑 TEST CREDENTIALS:');
-    console.log(`Parent Login: emily.thompson@example.com | ${testPassword}`);
-    console.log(`Caregiver Login: isabella.rodriguez@example.com | ${testPassword}`);
+    console.log('Parent Login: emily.thompson@example.com | password123');
+    console.log('Caregiver Login: isabella.rodriguez@example.com | password123');
     
     // Verify counts
     const userCount = await prisma.user.count();
