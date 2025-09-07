@@ -33,20 +33,28 @@ jobs:
           echo "⏹️ Stopping services..."
           ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && pm2 stop all"
           
-          # Step 2: Update code
+          # Step 2: Backup production environment
+          echo "💾 Backing up production environment..."
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && cp .env .env.backup.$(date +%Y%m%d-%H%M%S) 2>/dev/null || true"
+          
+          # Step 3: Update code
           echo "📥 Updating code..."
           ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && git pull origin main"
           
-          # Step 3: Install dependencies
+          # Step 4: Restore production environment
+          echo "🔄 Restoring production environment..."
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && if [ -f .env.production ]; then cp .env.production .env; echo 'Production .env restored'; else echo 'No .env.production found - using default'; fi"
+          
+          # Step 5: Install dependencies
           echo "📦 Installing dependencies..."
           ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && npm install"
           
-          # Step 4: Build
+          # Step 6: Build
           echo "🏗️ Building..."
           ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && npm run build"
           
-          # Step 5: Start services
+          # Step 7: Start services
           echo "▶️ Starting services..."
-          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && pm2 start all"
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && PORT=3005 pm2 start npm --name instacares -- start"
           
           echo "✅ Deployment completed!"
