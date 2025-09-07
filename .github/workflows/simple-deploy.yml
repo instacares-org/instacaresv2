@@ -1,0 +1,52 @@
+name: 🚀 Simple Production Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: 🚀 Deploy to Hostinger
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Setup SSH
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.HOSTINGER_SSH_KEY }}
+
+      - name: 🚀 Deploy to Server
+        run: |
+          echo "🚀 Starting simple deployment..."
+          
+          SSH_HOST="${{ secrets.HOSTINGER_HOST }}"
+          SSH_USER="${{ secrets.HOSTINGER_USER }}"
+          SSH_PORT="${{ secrets.HOSTINGER_PORT || 22 }}"
+          
+          # Simple deployment in separate steps
+          
+          # Step 1: Stop services
+          echo "⏹️ Stopping services..."
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && pm2 stop all"
+          
+          # Step 2: Update code
+          echo "📥 Updating code..."
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && git pull origin main"
+          
+          # Step 3: Install dependencies
+          echo "📦 Installing dependencies..."
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && npm install"
+          
+          # Step 4: Build
+          echo "🏗️ Building..."
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && npm run build"
+          
+          # Step 5: Start services
+          echo "▶️ Starting services..."
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && pm2 start all"
+          
+          echo "✅ Deployment completed!"
