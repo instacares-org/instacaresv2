@@ -191,7 +191,7 @@ jobs:
           # Configure Git with credentials for authentication
           echo "🔑 Configuring Git authentication..."
           git config --global credential.helper store
-          echo "https://${{ secrets.GITHUB_USERNAME }}:${{ secrets.GITHUB_TOKEN_DEPLOY }}@github.com" > ~/.git-credentials
+          echo "https://${{ secrets.GIT_USERNAME }}:${{ secrets.GIT_TOKEN }}@github.com" > ~/.git-credentials
           
           # Pull latest code
           echo "📥 Pulling latest code..."
