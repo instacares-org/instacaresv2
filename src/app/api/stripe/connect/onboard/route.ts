@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { stripe } from '@/lib/stripe';
+import { getStripeInstance } from '@/lib/stripe';
+
+// Prevent pre-rendering during build time
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,6 +45,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Real Stripe Connect mode (when enabled)
+    const stripe = getStripeInstance();
+    
+    if (!stripe) {
+      // Fallback to demo mode if Stripe is not configured
+      console.log('Stripe not configured, falling back to demo mode');
+      const demoAccountId = 'acct_demo_' + Date.now();
+      const host = request.headers.get('host') || 'localhost:3005';
+      const protocol = request.headers.get('x-forwarded-proto') || 'http';
+      const baseUrl = `${protocol}://${host}`;
+      const demoOnboardingUrl = `${baseUrl}/caregiver-dashboard?setup=success&demo=true`;
+
+      return NextResponse.json({
+        accountId: demoAccountId,
+        onboardingUrl: demoOnboardingUrl,
+        demo: true,
+        message: 'Demo mode active. Configure STRIPE_SECRET_KEY to enable real payments.'
+      });
+    }
+    
     const account = await stripe.accounts.create({
       type: 'express',
       country: 'US',

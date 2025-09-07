@@ -61,7 +61,8 @@
       "Bash(npm run type-check:*)",
       "Bash(sqlite3:*)",
       "Bash(/bashes)",
-      "Bash(python test:*)"
+      "Bash(python test:*)",
+      "Bash(gh workflow:*)"
     ],
     "deny": [],
     "ask": [],

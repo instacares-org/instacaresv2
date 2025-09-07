@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { stripe, calculateCommission } from '@/lib/stripe';
+import { getStripeInstance, calculateCommission } from '@/lib/stripe';
 import { processPaymentAmount, isDemoMode, isTestMode, getCurrentConfig } from '@/lib/payment-modes';
 
 interface BookingRequest {
