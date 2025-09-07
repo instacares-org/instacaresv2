@@ -199,19 +199,22 @@ jobs:
           git reset --hard origin/main
           git pull origin main
           
-          # Install dependencies
+          # Install dependencies with progress feedback
           echo "📦 Installing dependencies..."
-          npm ci --production=false
+          npm ci --production=false --verbose
+          echo "✅ Dependencies installed successfully"
           
           # Generate Prisma client
           echo "🔧 Generating Prisma client..."
           npx prisma generate
+          echo "✅ Prisma client generated successfully"
           
-          # Build application
+          # Build application with progress feedback
           echo "🏗️ Building application..."
           export NODE_ENV=production
           export SKIP_ENV_VALIDATION=true
           npm run build
+          echo "✅ Application built successfully"
           
           # Update database if needed
           echo "🗄️ Updating database..."
@@ -244,8 +247,8 @@ jobs:
           # Make script executable
           chmod +x deploy_script.sh
           
-          # Execute deployment on server
-          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} 'bash -s' < deploy_script.sh
+          # Execute deployment on server with improved connection settings
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} 'bash -s' < deploy_script.sh
 
       - name: 🔍 Verify Deployment
         run: |
