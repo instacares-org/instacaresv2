@@ -1,7 +1,14 @@
 import { Resend } from 'resend';
 
-// Initialize Resend client
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize Resend client with fallback
+const getResendClient = () => {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey || apiKey.includes('your_resend_api_key')) {
+    console.warn('Resend API key not configured, using mock client');
+    return null;
+  }
+  return new Resend(apiKey);
+};
 
 export interface EmailOptions {
   to: string | string[];
@@ -24,6 +31,13 @@ export class EmailService {
    */
   async send(options: EmailOptions): Promise<{ success: boolean; error?: string }> {
     try {
+      const resend = getResendClient();
+      
+      if (!resend) {
+        console.warn('Email service not configured, skipping email send');
+        return { success: true, error: 'Email service not configured (development mode)' };
+      }
+
       const { data, error } = await resend.emails.send({
         from: options.from || this.from,
         to: options.to,

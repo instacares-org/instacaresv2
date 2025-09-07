@@ -16,6 +16,15 @@ if (process.env.NODE_ENV !== 'production') {
 // Utility functions for common database operations
 
 // User operations
+export async function getUserById(id: string) {
+  return await db.user.findUnique({
+    where: { id },
+    include: {
+      profile: true,
+      caregiver: true,
+    },
+  });
+}
 export const userOperations = {
   async createUser(data: {
     email: string;

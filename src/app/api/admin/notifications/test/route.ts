@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { unifiedNotificationService } from '@/lib/notifications/unified-notification.service';
 
+// Prevent pre-rendering during build time
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
