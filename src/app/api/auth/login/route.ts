@@ -5,6 +5,10 @@ import { prisma } from '@/lib/database';
 import { generateToken, createAuthCookieConfig, AuthUser } from '@/lib/jwt';
 import { logger, getClientInfo } from '@/lib/logger';
 
+// Prevent pre-rendering during build time
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 // Login validation schema
 const loginSchema = z.object({
   email: z.string().email('Invalid email format').toLowerCase(),
