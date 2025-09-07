@@ -188,6 +188,11 @@ jobs:
           fi
           sudo tar -czf "/var/backups/instacares/backup-$(date +%Y%m%d-%H%M%S).tar.gz" . 2>/dev/null || echo "Backup created"
           
+          # Configure Git with credentials for authentication
+          echo "🔑 Configuring Git authentication..."
+          git config --global credential.helper store
+          echo "https://${{ secrets.GITHUB_USERNAME }}:${{ secrets.GITHUB_TOKEN_DEPLOY }}@github.com" > ~/.git-credentials
+          
           # Pull latest code
           echo "📥 Pulling latest code..."
           git fetch --all
