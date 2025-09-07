@@ -136,15 +136,42 @@ export async function POST(request: NextRequest) {
       if (expectedUserType && user.userType !== expectedUserType) {
         recordFailedAttempt(clientInfo.ip);
         
+        logger.security('Login attempt with wrong user type', {
+          userId: user.id,
+          email: user.email,
+          actualUserType: user.userType,
+          attemptedUserType: userType,
+          ip: clientInfo.ip,
+          userAgent: clientInfo.userAgent
+        });
+        
+        // Generic error message to prevent user type enumeration
         return NextResponse.json(
-          { error: `This email is registered as a ${user.userType.toLowerCase()}, not a ${userType}` },
+          { error: 'Invalid email or password' },
           { status: 401 }
         );
       }
     }
     
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+    // Verify password - ensure we have a valid password hash
+    if (!user.passwordHash || typeof user.passwordHash !== 'string') {
+      logger.error('Invalid password hash for user', {
+        userId: user.id,
+        email: user.email,
+        passwordHashType: typeof user.passwordHash,
+        passwordHashValue: user.passwordHash
+      });
+      
+      recordFailedAttempt(clientInfo.ip);
+      return NextResponse.json(
+        { error: 'Invalid email or password' },
+        { status: 401 }
+      );
+    }
+    
+    // Ensure password is a string
+    const passwordString = String(password);
+    const isValidPassword = await bcrypt.compare(passwordString, user.passwordHash);
     if (!isValidPassword) {
       recordFailedAttempt(clientInfo.ip);
       

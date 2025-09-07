@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import EnhancedMessages from './EnhancedMessages';
 import EnhancedChatInterface from './EnhancedChatInterface';
 import { useAuth } from '@/contexts/AuthContext';
+import { addCSRFHeaders } from '@/components/security/CSRFTokenProvider';
 
 interface OrganizedMessagesContainerProps {
   userId: string;
@@ -106,9 +107,9 @@ export default function OrganizedMessagesContainer({
     try {
       const response = await fetch(`/api/chat/${selectedRoom}/messages`, {
         method: 'POST',
-        headers: {
+        headers: addCSRFHeaders({
           'Content-Type': 'application/json',
-        },
+        }),
         body: JSON.stringify({
           content,
           senderId: userId,

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { XMarkIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../contexts/AuthContext';
+import SocialLogin from './SocialLogin';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -174,22 +175,19 @@ export default function LoginModal({ isOpen, onClose, userType }: LoginModalProp
                 <span className="px-4 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400">or continue with</span>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                className="flex items-center justify-center px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-400 dark:hover:border-gray-500 transition-all duration-200 text-gray-700 dark:text-gray-300 font-medium"
-              >
-                <img src="/google-icon.svg" alt="Google" className="w-5 h-5 mr-2" />
-                Google
-              </button>
-              <button
-                type="button"
-                className="flex items-center justify-center px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-400 dark:hover:border-gray-500 transition-all duration-200 text-gray-700 dark:text-gray-300 font-medium"
-              >
-                <img src="/facebook-icon.svg" alt="Facebook" className="w-5 h-5 mr-2" />
-                Facebook
-              </button>
-            </div>
+            <SocialLogin 
+              userType={userType} 
+              onSocialLogin={(provider, userType) => {
+                console.log(`Social login successful with ${provider} as ${userType}`);
+                onClose();
+                // Redirect to appropriate dashboard
+                if (userType === 'parent') {
+                  window.location.href = '/parent-dashboard';
+                } else {
+                  window.location.href = '/caregiver-dashboard';
+                }
+              }}
+            />
           </div>
 
           {/* Sign Up Link */}

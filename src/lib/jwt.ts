@@ -2,7 +2,11 @@ import jwt from 'jsonwebtoken';
 import { NextRequest } from 'next/server';
 
 // JWT configuration
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secure-jwt-secret-key-change-in-production';
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required but not configured');
+}
+
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 export interface JWTPayload {
@@ -136,6 +140,40 @@ export function createAuthCookieConfig(isProduction: boolean = false, rememberMe
       path: '/',
     }
   };
+}
+
+/**
+ * Check if token is expiring soon (within 1 hour)
+ */
+export function isTokenExpiringSoon(token: string): boolean {
+  try {
+    const decoded = jwt.decode(token) as JWTPayload;
+    if (!decoded || !decoded.exp) {
+      return true; // Treat as expiring if we can't decode
+    }
+    
+    const expiryTime = decoded.exp * 1000; // Convert to milliseconds
+    const currentTime = Date.now();
+    const oneHour = 60 * 60 * 1000; // 1 hour in milliseconds
+    
+    return (expiryTime - currentTime) <= oneHour;
+  } catch (error) {
+    console.error('Token expiry check failed:', error);
+    return true; // Treat as expiring on error
+  }
+}
+
+/**
+ * Get token expiry time
+ */
+export function getTokenExpiry(token: string): number | null {
+  try {
+    const decoded = jwt.decode(token) as JWTPayload;
+    return decoded?.exp ? decoded.exp * 1000 : null;
+  } catch (error) {
+    console.error('Token decode failed:', error);
+    return null;
+  }
 }
 
 /**

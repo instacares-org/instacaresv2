@@ -307,20 +307,12 @@ export const bookingOperations = {
                 profile: true,
               },
             },
-            caregiver: {
+            caregiverUser: {
               include: {
                 profile: true,
               },
             },
-            caregiverData: {
-              include: {
-                user: {
-                  include: {
-                    profile: true,
-                  },
-                },
-              },
-            },
+            caregiverProfile: true,
             slotBookings: {
               include: {
                 slot: true
@@ -425,20 +417,12 @@ export const bookingOperations = {
               profile: true,
             },
           },
-          caregiver: {
+          caregiverUser: {
             include: {
               profile: true,
             },
           },
-          caregiverData: {
-            include: {
-              user: {
-                include: {
-                  profile: true,
-                },
-              },
-            },
-          },
+          caregiverProfile: true,
           slotBookings: {
             include: {
               slot: true
@@ -527,12 +511,12 @@ export const bookingOperations = {
             profile: true,
           },
         },
-        caregiver: {
+        caregiverUser: {
           include: {
             profile: true,
           },
         },
-        caregiverData: true,
+        caregiverProfile: true,
         payments: true,
         reviews: true,
       },
@@ -548,12 +532,12 @@ export const bookingOperations = {
             profile: true,
           },
         },
-        caregiver: {
+        caregiverUser: {
           include: {
             profile: true,
           },
         },
-        caregiverData: true,
+        caregiverProfile: true,
         payments: true,
         reviews: true,
         invoices: true,
@@ -573,12 +557,12 @@ export const bookingOperations = {
             profile: true,
           },
         },
-        caregiver: {
+        caregiverUser: {
           include: {
             profile: true,
           },
         },
-        caregiverData: {
+        caregiverProfile: {
           include: {
             user: {
               include: {
@@ -621,7 +605,7 @@ export const bookingOperations = {
             profile: true,
           },
         },
-        caregiver: {
+        caregiverUser: {
           include: {
             profile: true,
           },

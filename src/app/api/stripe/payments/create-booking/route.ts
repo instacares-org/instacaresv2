@@ -51,6 +51,26 @@ export async function POST(request: NextRequest) {
       commission: commissionAmount / 100
     });
 
+    // Handle demo mode with simulated payment
+    if (isDemoMode()) {
+      console.log('Demo mode: Simulating payment without Stripe API call');
+      
+      // Generate a fake payment intent ID for demo
+      const fakePaymentIntentId = `pi_demo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const fakeClientSecret = `${fakePaymentIntentId}_secret_demo`;
+      
+      return NextResponse.json({
+        clientSecret: fakeClientSecret,
+        paymentIntentId: fakePaymentIntentId,
+        amount: processedAmount,
+        originalAmount: amount,
+        commission: commissionAmount,
+        caregiverPayout: processedAmount - commissionAmount,
+        mode: paymentConfig.name,
+        demo: true,
+      });
+    }
+
     // Check if this is a demo account
     if (caregiverStripeAccountId.startsWith('acct_demo_') || caregiverStripeAccountId === 'acct_test_demo') {
       // Create a regular payment intent for demo (without Connect features)

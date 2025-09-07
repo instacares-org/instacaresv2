@@ -43,6 +43,7 @@ import TaxReports from "../../components/analytics/TaxReports";
 import IntuitiveScheduleManager from "../../components/IntuitiveScheduleManager";
 import SimpleScheduleBuilder from "../../components/SimpleScheduleBuilder";
 import { useCaregiverProfile } from "../../hooks/useCaregiverProfile";
+import { addCSRFHeader } from '@/lib/csrf';
 
 interface TimeSlot {
   id: string;
@@ -550,9 +551,9 @@ function CaregiverDashboardContent() {
     try {
       const response = await fetch('/api/profile/update-address', {
         method: 'PATCH',
-        headers: {
+        headers: addCSRFHeader({
           'Content-Type': 'application/json',
-        },
+        }),
         body: JSON.stringify(addressData),
         credentials: 'include',
       });

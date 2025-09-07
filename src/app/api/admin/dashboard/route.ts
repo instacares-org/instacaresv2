@@ -31,7 +31,8 @@ export async function GET(request: NextRequest) {
     const bookings = await db.booking.findMany({
       include: {
         parent: { include: { profile: true } },
-        caregiver: { include: { profile: true } },
+        caregiverUser: { include: { profile: true } },
+        caregiverProfile: true,
         payments: true,
         reviews: true
       },
@@ -89,8 +90,8 @@ export async function GET(request: NextRequest) {
       id: booking.id,
       parentName: booking.parent.profile ? 
         `${booking.parent.profile.firstName} ${booking.parent.profile.lastName}` : 'Unknown Parent',
-      caregiverName: booking.caregiver.profile ? 
-        `${booking.caregiver.profile.firstName} ${booking.caregiver.profile.lastName}` : 'Unknown Caregiver',
+      caregiverName: booking.caregiverUser.profile ? 
+        `${booking.caregiverUser.profile.firstName} ${booking.caregiverUser.profile.lastName}` : 'Unknown Caregiver',
       date: booking.startTime.toISOString().split('T')[0],
       startTime: booking.startTime.toTimeString().substring(0, 5),
       endTime: booking.endTime.toTimeString().substring(0, 5),
@@ -102,7 +103,7 @@ export async function GET(request: NextRequest) {
       status: booking.status.toLowerCase(),
       paymentStatus: booking.payments.length > 0 ? booking.payments[0].status.toLowerCase() : 'pending',
       createdDate: booking.createdAt.toISOString(),
-      hasReview: booking.reviews.length > 0
+      hasReview: booking.reviews?.length > 0 || false
     }));
 
     const dashboardData = {

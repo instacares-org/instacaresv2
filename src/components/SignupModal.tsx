@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import dynamic from 'next/dynamic';
+import SocialLogin from './SocialLogin';
 
 // Dynamic import to avoid SSR issues with Mapbox
 const MapboxAddressAutocomplete = dynamic(
@@ -451,6 +452,31 @@ export default function SignupModal({ isOpen, onClose }: SignupModalProps) {
           >
             {isSubmitting ? 'Creating Account...' : emailValidation.exists ? 'Email Already Exists' : 'Sign Up'}
           </button>
+
+          {/* Social Login Options */}
+          <div className="mt-6 space-y-4">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300 dark:border-gray-700"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400">or sign up with</span>
+              </div>
+            </div>
+            <SocialLogin 
+              userType={userType} 
+              onSocialLogin={(provider, userType) => {
+                console.log(`Social signup successful with ${provider} as ${userType}`);
+                onClose();
+                // Redirect to appropriate dashboard
+                if (userType === 'parent') {
+                  window.location.href = '/parent-dashboard';
+                } else {
+                  window.location.href = '/caregiver-dashboard';
+                }
+              }}
+            />
+          </div>
         </form>
         </div>
       </div>

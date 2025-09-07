@@ -3,7 +3,11 @@ import './globals.css';
 import { AuthProvider } from '../contexts/AuthContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
+import { CSRFTokenProvider } from '../components/security/CSRFTokenProvider';
+import SessionProvider from '../components/providers/SessionProvider';
+import ErrorBoundary from '../components/ErrorBoundary';
 import '../lib/imagePreloader'; // Auto-preload critical images
+import TokenManager from '../components/providers/TokenManager';
 
 export const metadata = {
   title: 'Instacares',
@@ -22,13 +26,20 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${font.className} bg-white dark:bg-gray-900 transition-colors duration-200`} suppressHydrationWarning>
-        <ThemeProvider>
-          <AuthProvider>
-            <NotificationProvider>
-              {children}
-            </NotificationProvider>
-          </AuthProvider>
-        </ThemeProvider>
+        <ErrorBoundary>
+          <SessionProvider>
+            <ThemeProvider>
+              <CSRFTokenProvider>
+                <AuthProvider>
+                  <NotificationProvider>
+                    <TokenManager />
+                    {children}
+                  </NotificationProvider>
+                </AuthProvider>
+              </CSRFTokenProvider>
+            </ThemeProvider>
+          </SessionProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

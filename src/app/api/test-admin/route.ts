@@ -3,7 +3,14 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const adminKey = request.headers.get('x-admin-key');
-    const expectedKey = process.env.ADMIN_SECRET_KEY || 'demo-admin-key-2024';
+    const expectedKey = process.env.ADMIN_SECRET_KEY;
+    
+    if (!expectedKey) {
+      return NextResponse.json(
+        { error: 'Server configuration error: ADMIN_SECRET_KEY not configured' },
+        { status: 500 }
+      );
+    }
     
     if (adminKey !== expectedKey) {
       return NextResponse.json(

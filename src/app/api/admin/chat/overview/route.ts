@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
           },
           {
             booking: {
-              caregiver: {
+              caregiverUser: {
                 profile: {
                   OR: [
                     { firstName: { contains: searchTerm } },
@@ -156,7 +156,8 @@ export async function GET(request: NextRequest) {
           booking: {
             include: {
               parent: { include: { profile: true } },
-              caregiver: { include: { profile: true } }
+              caregiverUser: { include: { profile: true } },
+              caregiverProfile: true
             }
           },
           _count: {
@@ -204,7 +205,7 @@ export async function GET(request: NextRequest) {
         id: room.id,
         bookingId: room.bookingId,
         parentName: `${room.booking.parent.profile?.firstName} ${room.booking.parent.profile?.lastName}`,
-        caregiverName: `${room.booking.caregiver.profile?.firstName} ${room.booking.caregiver.profile?.lastName}`,
+        caregiverName: `${room.booking.caregiverUser.profile?.firstName} ${room.booking.caregiverUser.profile?.lastName}`,
         messageCount: room._count.messages,
         lastActivity: room.lastMessageAt,
         isActive: room.isActive,

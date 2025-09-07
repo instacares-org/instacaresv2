@@ -99,7 +99,7 @@ const mockCaregivers: Caregiver[] = [
   {
     id: "1",
     name: "Mackenzie MacDonald",
-    image: "/caregivers/1.jpg",
+    image: null,
     rating: 4.9,
     reviewCount: 34,
     hourlyRate: 28,
@@ -118,7 +118,7 @@ const mockCaregivers: Caregiver[] = [
   {
     id: "2",
     name: "Amélie Tremblay",
-    image: "/caregivers/2.jpg",
+    image: null,
     rating: 4.8,
     reviewCount: 29,
     hourlyRate: 26,
@@ -137,7 +137,7 @@ const mockCaregivers: Caregiver[] = [
   {
     id: "3",
     name: "Connor O'Sullivan",
-    image: "/caregivers/3.jpg",
+    image: null,
     rating: 4.7,
     reviewCount: 22,
     hourlyRate: 30,
@@ -156,7 +156,7 @@ const mockCaregivers: Caregiver[] = [
   {
     id: "4",
     name: "Priya Patel",
-    image: "/caregivers/4.jpg",
+    image: null,
     rating: 4.9,
     reviewCount: 41,
     hourlyRate: 32,
@@ -175,7 +175,7 @@ const mockCaregivers: Caregiver[] = [
   {
     id: "5",
     name: "Tyler Sinclair",
-    image: "/caregivers/5.jpg",
+    image: null,
     rating: 4.6,
     reviewCount: 18,
     hourlyRate: 25,
@@ -194,7 +194,7 @@ const mockCaregivers: Caregiver[] = [
   {
     id: "6",
     name: "Sarah Whitehorse",
-    image: "/caregivers/6.jpg",
+    image: null,
     rating: 4.8,
     reviewCount: 15,
     hourlyRate: 35,
@@ -213,7 +213,7 @@ const mockCaregivers: Caregiver[] = [
   {
     id: "7",
     name: "Jean-Luc Bouchard",
-    image: "/caregivers/7.jpg",
+    image: null,
     rating: 4.7,
     reviewCount: 26,
     distance: "1.5 km",
@@ -231,7 +231,7 @@ const mockCaregivers: Caregiver[] = [
   {
     id: "8",
     name: "Kayla Running Bear",
-    image: "/caregivers/8.jpg",
+    image: null,
     rating: 4.9,
     reviewCount: 33,
     hourlyRate: 27,
@@ -250,7 +250,7 @@ const mockCaregivers: Caregiver[] = [
   {
     id: "9",
     name: "Marcus Thompson",
-    image: "/caregivers/9.jpg",
+    image: null,
     rating: 4.5,
     reviewCount: 20,
     hourlyRate: 24,
@@ -269,7 +269,7 @@ const mockCaregivers: Caregiver[] = [
   {
     id: "10",
     name: "Emma MacLeod",
-    image: "/caregivers/10.jpg",
+    image: null,
     rating: 4.8,
     reviewCount: 37,
     hourlyRate: 29,

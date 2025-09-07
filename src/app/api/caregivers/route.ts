@@ -107,52 +107,120 @@ export async function GET(request: NextRequest) {
       console.log(`💾 Cache miss for key: ${cacheKey}`);
       
       // Fetch from real database
-      caregivers = await db.caregiver.findMany({
-        where: {
-          isVerified: true,
-          // Filter out caregivers with deleted/deactivated user accounts
-          user: {
-            isActive: true,
-            approvalStatus: 'APPROVED',
-            profile: {
-              country: { in: allowedCountries }
+      // Use raw query to avoid emailVerified field issues
+      const rawCaregivers = await db.$queryRaw`
+        SELECT 
+          c.*,
+          u.id as user_id,
+          u.email as user_email,
+          up.firstName,
+          up.lastName,
+          up.phone,
+          up.avatar,
+          up.streetAddress,
+          up.city,
+          up.state,
+          up.zipCode,
+          up.country,
+          up.latitude,
+          up.longitude
+        FROM caregivers c
+        JOIN users u ON c.userId = u.id
+        JOIN user_profiles up ON u.id = up.userId
+        WHERE c.isVerified = 1
+          AND u.isActive = 1
+          AND u.approvalStatus = 'APPROVED'
+          AND up.country = 'CA'
+        ORDER BY c.averageRating DESC
+        LIMIT ${limit}
+        OFFSET ${offset}
+      `;
+      
+      // Transform raw results to match expected format
+      caregivers = (rawCaregivers as any[]).map((raw) => ({
+        id: raw.id,
+        userId: raw.userId,
+        hourlyRate: raw.hourlyRate,
+        experienceYears: raw.experienceYears,
+        bio: raw.bio,
+        languages: (() => {
+          if (!raw.languages) return [];
+          const lang = raw.languages;
+          try {
+            // Try parsing as JSON first
+            return JSON.parse(lang);
+          } catch {
+            // If it's already an array, return it
+            if (Array.isArray(lang)) return lang;
+            // If it's a string, try to split by comma
+            if (typeof lang === 'string') {
+              return lang.split(',').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
             }
-          },
-          ...(minRate || maxRate ? {
-            hourlyRate: {
-              ...(minRate ? { gte: minRate } : {}),
-              ...(maxRate ? { lte: maxRate } : {}),
-            }
-          } : {}),
-          ...(minRating ? {
-            averageRating: { gte: minRating }
-          } : {}),
-        },
-        include: {
-          user: {
-            include: {
-              profile: true
-            }
-          },
-          services: true,
-          photos: true,
-          availabilitySlots: {
-            where: {
-              status: 'AVAILABLE',
-              availableSpots: { gt: 0 },
-              date: { gte: new Date() } // Only future/current availability
-            },
-            orderBy: {
-              startTime: 'asc'
-            }
+            // Fallback
+            return [];
+          }
+        })(),
+        maxChildren: raw.maxChildren,
+        minAge: raw.minAge,
+        maxAge: raw.maxAge,
+        isVerified: raw.isVerified,
+        backgroundCheck: raw.backgroundCheck,
+        totalBookings: raw.totalBookings,
+        averageRating: raw.averageRating,
+        user: {
+          id: raw.user_id,
+          email: raw.user_email,
+          profile: {
+            firstName: raw.firstName,
+            lastName: raw.lastName,
+            phone: raw.phone,
+            avatar: raw.avatar,
+            streetAddress: raw.streetAddress,
+            city: raw.city,
+            state: raw.state,
+            zipCode: raw.zipCode,
+            country: raw.country,
+            latitude: raw.latitude,
+            longitude: raw.longitude,
           }
         },
-        take: limit,
-        skip: offset,
-        orderBy: {
-          averageRating: 'desc'
-        }
-      });
+        services: [], // We'll fetch these separately if needed
+        photos: [], // We'll fetch these separately if needed
+        availabilitySlots: [], // We'll fetch these separately if needed
+      }));
+      
+      // If we need services and other relations, fetch them separately
+      if (caregivers.length > 0) {
+        const caregiverIds = caregivers.map(c => c.id);
+        
+        // Fetch services
+        const services = await db.caregiverService.findMany({
+          where: { caregiverId: { in: caregiverIds } }
+        });
+        
+        // Fetch photos
+        const photos = await db.caregiverPhoto.findMany({
+          where: { caregiverId: { in: caregiverIds } }
+        });
+        
+        // Fetch availability slots
+        const slots = await db.availabilitySlot.findMany({
+          where: {
+            caregiverId: { in: caregiverIds },
+            status: 'AVAILABLE',
+            availableSpots: { gt: 0 },
+            date: { gte: new Date() }
+          },
+          orderBy: { startTime: 'asc' }
+        });
+        
+        // Attach relations to caregivers
+        caregivers.forEach(caregiver => {
+          caregiver.services = services.filter(s => s.caregiverId === caregiver.id);
+          caregiver.photos = photos.filter(p => p.caregiverId === caregiver.id);
+          caregiver.availabilitySlots = slots.filter(s => s.caregiverId === caregiver.id);
+        });
+      }
       
       console.log(`🗄️ Database returned ${caregivers?.length || 0} caregivers`);
       
@@ -202,7 +270,7 @@ export async function GET(request: NextRequest) {
           backgroundCheck: caregiver.backgroundCheck,
           totalBookings: caregiver.totalBookings,
           averageRating: Math.round(caregiver.averageRating * 100) / 100, // Round to 2 decimal places
-          image: `/caregivers/${caregiver.userId}.jpg`, // Use userId for image filename
+          image: caregiver.user.profile?.avatar || caregiver.photos?.find(photo => photo.isProfile)?.url || null,
           profilePhoto: caregiver.user.profile?.avatar || caregiver.photos?.find(photo => photo.isProfile)?.url,
           address: {
             street: caregiver.user.profile?.streetAddress,

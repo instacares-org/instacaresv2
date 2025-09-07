@@ -1,12 +1,33 @@
 import { z } from 'zod';
 
-// Password validation schema with reasonable requirements
+// Strong password validation schema with comprehensive security requirements
 export const passwordSchema = z
   .string()
   .min(8, 'Password must be at least 8 characters')
   .max(128, 'Password must not exceed 128 characters')
-  .regex(/^(?=.*[a-zA-Z])/, 'Password must contain at least one letter')
-  .regex(/^(?=.*\d)/, 'Password must contain at least one number');
+  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+  .regex(/\d/, 'Password must contain at least one number')
+  .regex(/[@$!%*?&]/, 'Password must contain at least one special character (@$!%*?&)')
+  .refine((password) => {
+    // Check against common weak passwords
+    const commonPasswords = [
+      'password', '123456', '123456789', 'qwerty', 'abc123', 
+      'password123', 'admin', 'letmein', 'welcome', 'monkey',
+      '1234567890', 'login', 'pass', 'master', 'hello',
+      'princess', 'dragon', 'shadow', 'joshua', 'michael'
+    ];
+    return !commonPasswords.includes(password.toLowerCase());
+  }, 'Password is too common and easily guessable')
+  .refine((password) => {
+    // Check for keyboard patterns
+    const patterns = ['123456', 'qwerty', 'asdfgh', 'zxcvbn'];
+    return !patterns.some(pattern => password.toLowerCase().includes(pattern));
+  }, 'Password contains common keyboard patterns')
+  .refine((password) => {
+    // Check for repeated characters (more than 3 consecutive)
+    return !/(.)\1{3,}/.test(password);
+  }, 'Password contains too many repeated characters');
 
 // Phone number validation (flexible format)
 export const phoneSchema = z

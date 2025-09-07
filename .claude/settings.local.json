@@ -51,7 +51,17 @@
       "Bash(npx tsc:*)",
       "Bash(npx eslint:*)",
       "Bash(set SKIP_ENV_VALIDATION=true)",
-      "Bash(git revert:*)"
+      "Bash(git revert:*)",
+      "Read(C:\\Users\\fhabib\\Pictures/**)",
+      "Read(/C:\\Users\\fhabib\\Pictures/**)",
+      "Bash(dir:*)",
+      "Bash(if exist .next rmdir /s /q .next)",
+      "Bash(npm audit:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(sqlite3:*)",
+      "Bash(/bashes)",
+      "Bash(python test:*)"
     ],
     "deny": [],
     "ask": [],

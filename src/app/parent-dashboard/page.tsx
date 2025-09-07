@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import AddressAutocomplete from '@/components/AddressAutocomplete';
 import { 
   User, 
@@ -28,7 +28,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 import Chat from '../../components/Chat';
 import ChatWebSocket from '../../components/ChatWebSocket';
+import { formatCAD } from '@/lib/currency';
+import { addCSRFHeader } from '@/lib/csrf';
 import OrganizedMessagesContainer from '../../components/OrganizedMessagesContainer';
+import { CSRFTokenProvider } from '../../components/security/CSRFTokenProvider';
 import NotificationSettings from '../../components/NotificationSettings';
 import NotificationInitializer from '../../components/NotificationInitializer';
 import { useUnreadMessageCount } from '../../hooks/useUnreadMessageCount';
@@ -143,7 +146,7 @@ interface ParentProfile {
   children: Child[];
 }
 
-const ParentDashboard: React.FC = () => {
+const ParentDashboardContent: React.FC = () => {
   const { user, loading: authLoading, isAuthenticated, isParent, logout } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -430,9 +433,9 @@ const ParentDashboard: React.FC = () => {
       // Send to API to save in database
       const response = await fetch('/api/children', {
         method: 'POST',
-        headers: {
+        headers: addCSRFHeader({
           'Content-Type': 'application/json',
-        },
+        }),
         body: JSON.stringify({
           firstName: childData.firstName,
           lastName: childData.lastName,
@@ -791,12 +794,14 @@ const ParentDashboard: React.FC = () => {
             )}
             {activeTab === 'messages' && user && (
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow min-h-[600px] h-[calc(100vh-12rem)]">
-                <OrganizedMessagesContainer 
-                  userId={user.id} 
-                  userType="parent"
-                  onMessageRead={(count) => decrementMessageCount(count)}
-                  onRefreshCount={refreshMessageCount}
-                />
+                <CSRFTokenProvider>
+                  <OrganizedMessagesContainer 
+                    userId={user.id} 
+                    userType="parent"
+                    onMessageRead={(count) => decrementMessageCount(count)}
+                    onRefreshCount={refreshMessageCount}
+                  />
+                </CSRFTokenProvider>
               </div>
             )}
             {activeTab === 'children' && (
@@ -911,7 +916,7 @@ const OverviewTab: React.FC<{
             <CreditCard className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Total Spent</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">${totalSpent.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCAD(Math.round(totalSpent * 100))}</p>
             </div>
           </div>
         </div>
@@ -947,7 +952,7 @@ const OverviewTab: React.FC<{
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      ${booking.totalAmount.toFixed(2)}
+                      {formatCAD(Math.round(booking.totalAmount * 100))}
                     </p>
                     <div className="flex items-center">
                       <Star className="h-4 w-4 text-yellow-400 fill-current" />
@@ -1631,7 +1636,7 @@ const BookingsTab: React.FC<{
                   {/* Booking Actions & Price */}
                   <div className="text-right">
                     <div className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                      ${booking.totalAmount.toFixed(2)}
+                      {formatCAD(Math.round(booking.totalAmount * 100))}
                     </div>
                     
                     <div className="space-y-2">
@@ -2521,6 +2526,19 @@ const NotificationsTab: React.FC<{
         </div>
       )}
     </div>
+  );
+};
+
+const ParentDashboard: React.FC = () => {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600">Loading dashboard...</p>
+      </div>
+    </div>}>
+      <ParentDashboardContent />
+    </Suspense>
   );
 };
 

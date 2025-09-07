@@ -822,38 +822,74 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
 
       {/* User Menu Dropdown */}
       {showUserMenu && (
-        <div className="absolute top-2 right-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl border dark:border-gray-700 py-2 z-40 w-64 transition-colors duration-200">
+        <div className="absolute top-2 right-4 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border dark:border-gray-700 py-3 z-40 w-80 transition-colors duration-200 backdrop-blur-sm">
           {!isAuthenticated ? (
             <>
-              <div className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border-b dark:border-gray-700">
-                Choose your login type
+              <div className="px-5 py-3 border-b dark:border-gray-700">
+                <div className="text-center">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">Welcome to InstaCares</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Choose how you'd like to get started</p>
+                </div>
               </div>
               
-              <button
-                onClick={() => handleLoginClick('parent')}
-                className="w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition flex items-center space-x-3"
-              >
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                  <UserCircleIcon className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <div className="font-medium text-gray-900 dark:text-gray-100">Parent Login</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Looking for childcare</div>
-                </div>
-              </button>
-              
-              <button
-                onClick={() => handleLoginClick('caregiver')}
-                className="w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition flex items-center space-x-3"
-              >
-                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                  <UserCircleIcon className="h-5 w-5 text-green-600" />
-                </div>
-                <div>
-                  <div className="font-medium text-gray-900 dark:text-gray-100">Caregiver Login</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">Offering childcare services</div>
-                </div>
-              </button>
+              <div className="p-4 space-y-3">
+                <button
+                  onClick={() => handleLoginClick('parent')}
+                  className="w-full p-4 text-left hover:bg-gradient-to-r hover:from-teal-50 hover:to-cyan-50 dark:hover:from-teal-900/20 dark:hover:to-cyan-900/20 transition-all duration-200 rounded-xl border-2 border-transparent hover:border-teal-200 dark:hover:border-teal-700 group"
+                >
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-teal-100 to-cyan-100 dark:from-teal-900/40 dark:to-cyan-900/40 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <span className="text-2xl">👨‍👩‍👧‍👦</span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-semibold text-gray-900 dark:text-gray-100 text-base">I'm a Parent</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Looking for trusted childcare providers</div>
+                      <div className="text-xs text-teal-600 dark:text-teal-400 font-medium mt-1">Find, book & manage care</div>
+                    </div>
+                    <div className="text-teal-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => handleLoginClick('caregiver')}
+                  className="w-full p-4 text-left hover:bg-gradient-to-r hover:from-amber-50 hover:to-orange-50 dark:hover:from-amber-900/20 dark:hover:to-orange-900/20 transition-all duration-200 rounded-xl border-2 border-transparent hover:border-amber-200 dark:hover:border-amber-700 group"
+                >
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/40 dark:to-orange-900/40 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <span className="text-2xl">👩‍🏫</span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-semibold text-gray-900 dark:text-gray-100 text-base">I'm a Caregiver</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Offering professional childcare services</div>
+                      <div className="text-xs text-amber-600 dark:text-amber-400 font-medium mt-1">Earn money helping families</div>
+                    </div>
+                    <div className="text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              <div className="px-5 py-3 border-t dark:border-gray-700">
+                <p className="text-xs text-center text-gray-500 dark:text-gray-400">
+                  New to InstaCares? 
+                  <button 
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      setShowSignupModal(true);
+                    }}
+                    className="ml-1 text-rose-600 dark:text-rose-400 font-medium hover:underline"
+                  >
+                    Create an account
+                  </button>
+                </p>
+              </div>
             </>
           ) : (
             <>

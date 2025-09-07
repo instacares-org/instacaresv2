@@ -229,7 +229,7 @@ export default function Home() {
     return sorted;
   };
 
-  const fetchCaregivers = async (location?: {lat: number, lng: number}, radiusOverride?: number) => {
+  const fetchCaregivers = async (location?: {lat: number, lng: number}, radiusOverride?: number, retryCount: number = 0) => {
     try {
       setLoading(true);
       setError(null);
@@ -237,19 +237,50 @@ export default function Home() {
       // Use explicit radius if provided, otherwise use state
       const radiusToUse = radiusOverride !== undefined ? radiusOverride : selectedRadius;
       
-      // Build query parameters
-      let queryParams = `limit=12&_cacheBust=${Date.now()}&_forceRefresh=true`;
+      // Build query parameters - Remove _forceRefresh to reduce server load
+      let queryParams = `limit=12&_cacheBust=${Date.now()}`;
       if (location) {
         queryParams += `&lat=${location.lat}&lng=${location.lng}&radius=${radiusToUse}`;
       }
       
-      const response = await fetch(`/api/caregivers?${queryParams}`);
+      const response = await fetch(`/api/caregivers?${queryParams}`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        // Add timeout to prevent hanging requests
+        signal: AbortSignal.timeout(10000), // 10 second timeout
+      });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch caregivers');
+        console.error('❌ API Response not OK:', response.status, response.statusText);
+        throw new Error(`Failed to fetch caregivers: ${response.status} ${response.statusText}`);
       }
       
-      const result = await response.json();
+      let result;
+      try {
+        const responseText = await response.text();
+        console.log('📝 Raw API Response length:', responseText.length);
+        
+        if (!responseText.trim()) {
+          throw new Error('Empty response received');
+        }
+        
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('❌ JSON Parse Error:', parseError);
+        console.error('📄 Response headers:', Object.fromEntries(response.headers.entries()));
+        
+        // Retry logic for JSON parse errors (up to 2 retries)
+        if (retryCount < 2) {
+          console.log(`🔄 Retrying request (attempt ${retryCount + 1}/2)...`);
+          // Wait a moment before retrying
+          await new Promise(resolve => setTimeout(resolve, 1000 + retryCount * 1000));
+          return fetchCaregivers(location, radiusOverride, retryCount + 1);
+        }
+        
+        throw new Error(`Failed to parse API response: ${parseError}`);
+      }
       
       console.log(`📊 API Response for ${radiusToUse}km radius:`, {
         success: result.success,
@@ -322,7 +353,12 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error fetching caregivers:', error);
-      setError(error instanceof Error ? error.message : 'Failed to load caregivers');
+      
+      // Only set error state if this is not a retry (to avoid showing error during retries)
+      if (retryCount === 0) {
+        setError(error instanceof Error ? error.message : 'Failed to load caregivers');
+      }
+      
       setCaregivers([]);
       setAllCaregivers([]);
     } finally {

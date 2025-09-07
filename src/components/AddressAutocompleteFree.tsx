@@ -78,23 +78,17 @@ export default function AddressAutocompleteFree({
     try {
       console.log('🔍 Searching for:', query);
       
-      // Use OpenStreetMap Nominatim API (free, no API key required)
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?` +
-        new URLSearchParams({
-          q: query,
-          format: 'json',
-          addressdetails: '1',
-          limit: '5',
-          countrycodes: 'ca', // Canada only
-          dedupe: '1'
-        }),
-        {
-          headers: {
-            'User-Agent': 'InstaCares-AddressSearch/1.0' // Required by Nominatim
-          }
-        }
-      );
+      // Use our proxy API to avoid CORS issues
+      const response = await fetch('/api/geocode/nominatim', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          query: query,
+          country: 'CA'
+        })
+      });
 
       if (!response.ok) {
         throw new Error(`Search failed: ${response.status}`);
@@ -285,7 +279,7 @@ export default function AddressAutocompleteFree({
       )}
       
       <p className="text-xs text-gray-500 dark:text-gray-400">
-        🆓 Free address autocomplete powered by OpenStreetMap
+        🌍 Free address autocomplete powered by OpenStreetMap
       </p>
     </div>
   );

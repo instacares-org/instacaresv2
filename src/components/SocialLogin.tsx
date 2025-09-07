@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { signIn } from "next-auth/react";
 
 interface SocialLoginProps {
   userType: 'parent' | 'caregiver';
@@ -9,15 +10,47 @@ interface SocialLoginProps {
 
 export default function SocialLogin({ userType, onSocialLogin }: SocialLoginProps) {
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+
+  // Check if we're in development mode with test credentials
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const hasTestCredentials = 
+    process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.includes('1234567890') ||
+    process.env.NEXT_PUBLIC_FACEBOOK_CLIENT_ID?.includes('1234567890');
 
   const handleSocialLogin = async (provider: string) => {
     setLoadingProvider(provider);
+    setErrorMessage('');
     
-    // Simulate API call for social login
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // In development with test credentials, show a helpful message
+    if (isDevelopment && hasTestCredentials) {
+      setTimeout(() => {
+        setLoadingProvider(null);
+        setErrorMessage(`${provider.charAt(0).toUpperCase() + provider.slice(1)} OAuth is not configured with real credentials. Please set up actual OAuth credentials in your .env file to test social login.`);
+      }, 1000);
+      return;
+    }
     
-    setLoadingProvider(null);
-    onSocialLogin?.(provider, userType);
+    try {
+      // Use NextAuth.js signIn with OAuth provider
+      const result = await signIn(provider, {
+        redirect: false, // Don't redirect automatically
+        callbackUrl: userType === 'parent' ? '/parent-dashboard' : '/caregiver-dashboard'
+      });
+      
+      if (result?.error) {
+        console.error('OAuth sign in error:', result.error);
+        setErrorMessage(`${provider.charAt(0).toUpperCase() + provider.slice(1)} sign-in failed. Please try again.`);
+      } else if (result?.ok) {
+        // Success - call the callback if provided
+        onSocialLogin?.(provider, userType);
+      }
+    } catch (error) {
+      console.error('OAuth sign in failed:', error);
+      setErrorMessage(`${provider.charAt(0).toUpperCase() + provider.slice(1)} sign-in encountered an error. Please try again.`);
+    } finally {
+      setLoadingProvider(null);
+    }
   };
 
   const GoogleIcon = () => (
@@ -49,6 +82,27 @@ export default function SocialLogin({ userType, onSocialLogin }: SocialLoginProp
 
   return (
     <div className="space-y-3">
+      {/* Error Message Display */}
+      {errorMessage && (
+        <div className="bg-orange-50 border border-orange-200 text-orange-800 px-4 py-3 rounded-lg text-sm">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-orange-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p>{errorMessage}</p>
+              {isDevelopment && (
+                <p className="mt-1 text-orange-600">
+                  <strong>Development Note:</strong> Set up real OAuth credentials to enable social login functionality.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Google Login */}
       <button
         onClick={() => handleSocialLogin('google')}

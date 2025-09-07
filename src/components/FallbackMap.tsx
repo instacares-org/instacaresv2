@@ -237,10 +237,29 @@ export default function FallbackMap({ caregivers, selectedCaregiver, onCaregiver
       </div>
 
 
-      {/* Mapbox Alternative Notice */}
-      <div className="absolute bottom-4 right-4 bg-blue-50 border border-blue-200 rounded-lg p-2 max-w-xs">
-        <div className="text-xs text-blue-600">
-          <strong>Demo Map:</strong> Add your Mapbox token in <code>.env.local</code> for full interactive maps
+      {/* Development Notice */}
+      <div className="absolute bottom-4 right-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-lg p-3 max-w-sm shadow-lg">
+        <div className="text-xs text-green-700 dark:text-green-300">
+          <div className="font-semibold mb-1 flex items-center">
+            <span className="text-green-500 mr-1">✓</span>
+            Development Mode - OpenStreetMap Fallback
+          </div>
+          <p className="text-green-600 dark:text-green-400 mb-2">
+            Using fallback map to avoid Mapbox conflicts with production (instacares.net)
+          </p>
+          <details className="cursor-pointer">
+            <summary className="text-green-500 hover:underline">
+              Want full Mapbox maps?
+            </summary>
+            <div className="mt-2 space-y-1 text-[10px] text-gray-600 dark:text-gray-400">
+              <p>1. Create development token at <a href="https://mapbox.com" target="_blank" className="text-blue-500 underline">mapbox.com</a></p>
+              <p>2. Add to .env.local:</p>
+              <code className="block bg-gray-100 dark:bg-gray-700 p-1 rounded text-[9px]">
+                NEXT_PUBLIC_MAPBOX_TOKEN="your_dev_token"
+              </code>
+              <p>3. Restart dev server</p>
+            </div>
+          </details>
         </div>
       </div>
     </div>

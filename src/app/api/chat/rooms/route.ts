@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
                 profile: true,
               },
             },
-            caregiver: {
+            caregiverUser: {
               include: {
                 profile: true,
               },
@@ -104,13 +104,13 @@ export async function GET(request: NextRequest) {
           },
         },
         caregiver: {
-          id: room.booking.caregiver.id,
-          email: room.booking.caregiver.email,
+          id: room.booking.caregiverUser.id,
+          email: room.booking.caregiverUser.email,
           profile: {
-            firstName: room.booking.caregiver.profile?.firstName || '',
-            lastName: room.booking.caregiver.profile?.lastName || '',
-            phone: room.booking.caregiver.profile?.phone,
-            avatar: room.booking.caregiver.profile?.avatar,
+            firstName: room.booking.caregiverUser.profile?.firstName || '',
+            lastName: room.booking.caregiverUser.profile?.lastName || '',
+            phone: room.booking.caregiverUser.profile?.phone,
+            avatar: room.booking.caregiverUser.profile?.avatar,
           },
         },
       },

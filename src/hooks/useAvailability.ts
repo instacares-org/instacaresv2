@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { csrfFetch } from '@/components/security/CSRFTokenProvider';
 
 export interface AvailabilitySlot {
   id: string;
@@ -120,11 +121,8 @@ export function useAvailability() {
     setError(null);
 
     try {
-      const response = await fetch('/api/availability/reserve', {
+      const response = await csrfFetch('/api/availability/reserve', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(params),
       });
 
@@ -150,7 +148,7 @@ export function useAvailability() {
     setError(null);
 
     try {
-      const response = await fetch(
+      const response = await csrfFetch(
         `/api/availability/reserve?reservationId=${reservationId}`,
         { method: 'DELETE' }
       );
@@ -189,11 +187,8 @@ export function useAvailability() {
     console.log('createSlot called with params:', params);
 
     try {
-      const response = await fetch('/api/availability/slots', {
+      const response = await csrfFetch('/api/availability/slots', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(params),
       });
 
@@ -232,11 +227,8 @@ export function useAvailability() {
     setError(null);
 
     try {
-      const response = await fetch('/api/availability/slots', {
+      const response = await csrfFetch('/api/availability/slots', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           slotId,
           ...params
@@ -265,7 +257,7 @@ export function useAvailability() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/availability/slots?slotId=${slotId}`, {
+      const response = await csrfFetch(`/api/availability/slots?slotId=${slotId}`, {
         method: 'DELETE'
       });
 

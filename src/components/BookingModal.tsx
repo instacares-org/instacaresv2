@@ -10,6 +10,8 @@ import CaregiverProfileImage from './CaregiverProfileImage';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAvailability, useLiveAvailability } from '@/hooks/useAvailability';
 import { useRouter } from 'next/navigation';
+import { addCSRFHeaders, useCSRFToken } from './security/CSRFTokenProvider';
+import { formatCAD } from '@/lib/currency';
 
 interface BookingModalProps {
   caregiver: Caregiver;
@@ -17,7 +19,10 @@ interface BookingModalProps {
   onClose: () => void;
 }
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+// Only initialize Stripe if we have valid keys (not demo mode)
+const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.startsWith('pk_') 
+  ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!) 
+  : Promise.resolve(null);
 
 interface ChildProfile {
   id: string;
@@ -41,6 +46,7 @@ interface ChildProfile {
 export default function BookingModal({ caregiver, isOpen, onClose }: BookingModalProps) {
   const { user, isAuthenticated, isParent } = useAuth();
   const { reserveSpots, cancelReservation } = useAvailability();
+  const { token: csrfToken, loading: csrfLoading } = useCSRFToken();
   const router = useRouter();
   const [clientSecret, setClientSecret] = useState<string>('');
   const [bookingDetails, setBookingDetails] = useState({
@@ -385,15 +391,21 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
       return;
     }
     
+    // Check if CSRF token is available
+    if (csrfLoading || !csrfToken) {
+      setError('Security token not ready. Please wait a moment and try again.');
+      return;
+    }
+    
     setIsCreatingPayment(true);
     setError(null);
     
     try {
       const response = await fetch('/api/stripe/payments/create-booking', {
         method: 'POST',
-        headers: {
+        headers: addCSRFHeaders({
           'Content-Type': 'application/json',
-        },
+        }),
         body: JSON.stringify({
           caregiverStripeAccountId: caregiver.stripeAccountId || 'acct_test_demo', // Demo account for testing
           amount: totalAmount,
@@ -1223,11 +1235,11 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                 </div>
                                 <div className="flex justify-between">
                                   <span>Rate:</span>
-                                  <span className="font-medium">${matchingSlot.baseRate}/hour</span>
+                                  <span className="font-medium">{formatCAD(matchingSlot.baseRate * 100)}/hour</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span>Total cost:</span>
-                                  <span className="font-medium text-green-700">${(duration / 60 * matchingSlot.baseRate).toFixed(2)}</span>
+                                  <span className="font-medium text-green-700">{formatCAD(Math.round(duration / 60 * matchingSlot.baseRate * 100))}</span>
                                 </div>
                                 {matchingSlot.notes && (
                                   <div className="pt-2 border-t border-green-200">
@@ -1515,7 +1527,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                       {bookingDetails.splitParties.map((party, index) => (
                         <div key={index} className="flex justify-between text-xs">
                           <span>{party.name || `Party ${index + 1}`}:</span>
-                          <span>${((totalAmount * party.percentage) / 10000).toFixed(2)} ({party.percentage}%)</span>
+                          <span>{formatCAD((totalAmount * party.percentage) / 100)} ({party.percentage}%)</span>
                         </div>
                       ))}
                     </div>
@@ -1523,7 +1535,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                   <div className="border-t border-rose-200 pt-1 mt-2">
                     <div className="flex justify-between font-medium">
                       <span>Total:</span>
-                      <span>${(totalAmount / 100).toFixed(2)}</span>
+                      <span>{formatCAD(totalAmount)}</span>
                     </div>
                   </div>
                 </div>
@@ -1724,7 +1736,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                 </div>
                 <div className="flex justify-between border-t pt-2">
                   <span className="text-gray-900 font-medium">Total:</span>
-                  <span className="font-bold text-lg">${(totalAmount / 100).toFixed(2)}</span>
+                  <span className="font-bold text-lg">{formatCAD(totalAmount)}</span>
                 </div>
               </div>
             </div>
@@ -1756,7 +1768,22 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
         )}
 
         {step === 'payment' && clientSecret && (
-          <Elements options={stripeOptions} stripe={stripePromise}>
+          // Always wrap BookingForm with Elements provider, even in demo mode
+          // This ensures useStripe() and useElements() hooks work without context errors
+          <Elements 
+            options={clientSecret.includes('_secret_demo') ? {
+              // Demo mode - use minimal options to avoid Stripe API calls
+              appearance: {
+                theme: 'stripe',
+                variables: {
+                  colorPrimary: '#ef4444',
+                  colorBackground: '#ffffff',
+                  colorText: '#1f2937',
+                },
+              },
+            } : stripeOptions} 
+            stripe={clientSecret.includes('_secret_demo') ? Promise.resolve(null) : stripePromise}
+          >
             <BookingForm
               clientSecret={clientSecret}
               bookingDetails={bookingDetails}

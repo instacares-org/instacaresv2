@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 
 interface AddressData {
   streetAddress: string;
+  apartment?: string;
   city: string;
   state: string;
   zipCode: string;
@@ -23,8 +24,25 @@ interface AddressAutocompleteProps {
   disabled?: boolean;
 }
 
-// Component that uses Mapbox Search JS (client-side only)
-function MapboxAddressAutocomplete({
+interface NominatimResult {
+  place_id: number;
+  lat: string;
+  lon: string;
+  display_name: string;
+  address?: {
+    house_number?: string;
+    road?: string;
+    city?: string;
+    town?: string;
+    village?: string;
+    state?: string;
+    postcode?: string;
+    country?: string;
+  };
+}
+
+// Component that uses Mapbox as primary and OpenStreetMap as fallback
+function UnifiedAddressAutocomplete({
   onAddressSelect,
   defaultValue = '',
   placeholder = 'Start typing your address...',
@@ -34,10 +52,14 @@ function MapboxAddressAutocomplete({
   disabled = false
 }: AddressAutocompleteProps) {
   const [inputValue, setInputValue] = useState(defaultValue);
-  const [showFallback, setShowFallback] = useState(false);
+  const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [useMapbox, setUseMapbox] = useState(true);
   const [AddressAutofill, setAddressAutofill] = useState<any>(null);
-  const [config, setConfig] = useState<any>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<NodeJS.Timeout>();
 
   // Get Mapbox token from environment
   const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
@@ -47,154 +69,315 @@ function MapboxAddressAutocomplete({
       hasToken: !!MAPBOX_TOKEN,
       tokenLength: MAPBOX_TOKEN.length,
       tokenStart: MAPBOX_TOKEN.substring(0, 15),
-      tokenEnd: MAPBOX_TOKEN.substring(MAPBOX_TOKEN.length - 10),
-      isExample: MAPBOX_TOKEN.includes('example'),
-      envVar: process.env.NEXT_PUBLIC_MAPBOX_TOKEN?.substring(0, 15) + '...'
+      isValidToken: MAPBOX_TOKEN.startsWith('pk.'),
+      isExample: MAPBOX_TOKEN.includes('example') || MAPBOX_TOKEN.includes('your_mapbox')
     });
 
     // Only load Mapbox components if we have a valid token
-    if (!MAPBOX_TOKEN || MAPBOX_TOKEN.includes('example') || MAPBOX_TOKEN.length < 50) {
-      console.warn('⚠️ Mapbox token not configured or invalid. Using fallback address input.');
-      setShowFallback(true);
+    if (!MAPBOX_TOKEN || MAPBOX_TOKEN.includes('example') || MAPBOX_TOKEN.includes('your_mapbox') || MAPBOX_TOKEN.length < 50 || !MAPBOX_TOKEN.startsWith('pk.')) {
+      console.warn('⚠️ Mapbox token not configured or invalid. Using OpenStreetMap fallback.');
+      setUseMapbox(false);
     } else {
       // Dynamically import Mapbox components (client-side only)
       import('@mapbox/search-js-react').then((mapboxModule) => {
-        console.log('🔧 Setting Mapbox token:', MAPBOX_TOKEN.substring(0, 15) + '...');
+        console.log('🔧 Loading Mapbox components with token:', MAPBOX_TOKEN.substring(0, 15) + '...');
         
-        // Set the token immediately on the config object
         try {
-          mapboxModule.config.accessToken = MAPBOX_TOKEN;
-          console.log('🔑 Token set on config:', !!mapboxModule.config.accessToken);
-          
-          // Verify the token was set
-          if (!mapboxModule.config.accessToken || mapboxModule.config.accessToken !== MAPBOX_TOKEN) {
-            throw new Error('Token not set properly on config');
+          // Set the global access token
+          if (mapboxModule.config) {
+            mapboxModule.config.accessToken = MAPBOX_TOKEN;
           }
           
           setAddressAutofill(() => mapboxModule.AddressAutofill);
-          setConfig(mapboxModule.config);
-          console.log('✅ Mapbox components loaded successfully with token length:', MAPBOX_TOKEN.length);
+          setUseMapbox(true);
+          console.log('✅ Mapbox components loaded successfully');
         } catch (configError) {
-          console.error('❌ Failed to configure Mapbox token:', configError);
-          setShowFallback(true);
+          console.error('❌ Failed to configure Mapbox:', configError);
+          setUseMapbox(false);
         }
       }).catch((error) => {
         console.error('❌ Failed to load Mapbox components:', error);
-        setShowFallback(true);
+        setUseMapbox(false);
       });
     }
   }, [MAPBOX_TOKEN]);
 
-  // Fallback to regular input if Mapbox is not configured or failed to load
-  if (showFallback || !AddressAutofill) {
+  // OpenStreetMap search function
+  const searchWithOSM = async (query: string) => {
+    if (query.length < 3) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log('🌍 Searching with OpenStreetMap for:', query);
+      
+      // Create proxy endpoint to avoid CORS issues
+      const response = await fetch('/api/geocode/nominatim', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          query: query,
+          country: 'CA'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Search failed: ${response.status}`);
+      }
+
+      const results: NominatimResult[] = await response.json();
+      console.log('📍 OSM results:', results);
+
+      const filteredResults = results
+        .filter(result => {
+          return result.address && (
+            result.address.house_number || 
+            result.address.road ||
+            result.display_name.includes('Canada')
+          );
+        })
+        .slice(0, 5);
+
+      setSuggestions(filteredResults);
+      setShowSuggestions(filteredResults.length > 0);
+    } catch (error) {
+      console.error('❌ OSM address search error:', error);
+      setError('Address search failed. Please try typing manually.');
+      setSuggestions([]);
+      setShowSuggestions(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle input change for OSM fallback
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInputValue(value);
+    setError(null);
+
+    if (!useMapbox || !AddressAutofill) {
+      // Debounce the search to avoid too many API calls
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+
+      debounceRef.current = setTimeout(() => {
+        searchWithOSM(value);
+      }, 300);
+    }
+  };
+
+  // Handle OSM suggestion selection
+  const selectOSMSuggestion = (suggestion: NominatimResult) => {
+    console.log('📍 Selected OSM suggestion:', suggestion);
+
+    const addr = suggestion.address || {};
+    
+    let streetAddress = '';
+    if (addr.house_number && addr.road) {
+      streetAddress = `${addr.house_number} ${addr.road}`;
+    } else if (addr.road) {
+      streetAddress = addr.road;
+    } else {
+      streetAddress = suggestion.display_name.split(',')[0].trim();
+    }
+
+    let city = addr.city || addr.town || addr.village || '';
+    
+    let state = 'Ontario';
+    if (addr.state) {
+      const provinceMap: { [key: string]: string } = {
+        'Ontario': 'ON', 'Quebec': 'QC', 'British Columbia': 'BC',
+        'Alberta': 'AB', 'Manitoba': 'MB', 'Saskatchewan': 'SK',
+        'Nova Scotia': 'NS', 'New Brunswick': 'NB',
+        'Newfoundland and Labrador': 'NL', 'Prince Edward Island': 'PE',
+        'Northwest Territories': 'NT', 'Nunavut': 'NU', 'Yukon': 'YT'
+      };
+      state = provinceMap[addr.state] || addr.state;
+    }
+
+    const addressData: AddressData = {
+      streetAddress: streetAddress,
+      apartment: '',
+      city: city,
+      state: state,
+      zipCode: addr.postcode || '',
+      country: 'Canada',
+      latitude: parseFloat(suggestion.lat),
+      longitude: parseFloat(suggestion.lon)
+    };
+
+    const fullAddress = `${streetAddress}${city ? `, ${city}` : ''}${state ? `, ${state}` : ''}${addr.postcode ? ` ${addr.postcode}` : ''}`;
+    setInputValue(fullAddress);
+    setShowSuggestions(false);
+    setSuggestions([]);
+    onAddressSelect(addressData);
+  };
+
+  // Handle Mapbox address selection
+  const handleMapboxRetrieve = (result: any) => {
+    console.log('📍 Mapbox result:', result);
+    
+    if (result && result.features && result.features.length > 0) {
+      const feature = result.features[0];
+      const props = feature.properties || {};
+      
+      const addressData: AddressData = {
+        streetAddress: props.address_line1 || props.name || '',
+        apartment: '',
+        city: props.address_level2 || props.place || '',
+        state: props.address_level1 || props.region || 'Ontario',
+        zipCode: props.postcode || '',
+        country: props.country || 'Canada',
+        latitude: feature.geometry?.coordinates?.[1],
+        longitude: feature.geometry?.coordinates?.[0]
+      };
+
+      if (addressData.city === 'Toronto' && props.address_level3) {
+        const neighborhoods = ['Etobicoke', 'Scarborough', 'North York', 'York', 'East York'];
+        if (neighborhoods.some(n => props.address_level3.includes(n))) {
+          addressData.city = props.address_level3;
+        }
+      }
+
+      console.log('📍 Parsed Mapbox address:', addressData);
+      
+      const fullAddress = `${addressData.streetAddress}, ${addressData.city}, ${addressData.state} ${addressData.zipCode}`.trim().replace(/,\s*,/g, ',');
+      setInputValue(fullAddress);
+      onAddressSelect(addressData);
+    }
+  };
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (inputRef.current && !inputRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, []);
+
+  // Use Mapbox if available, otherwise use OSM fallback
+  if (useMapbox && AddressAutofill) {
     return (
-      <div className="space-y-2">
+      <div className="space-y-2" ref={inputRef}>
         {label && (
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             {label} {required && <span className="text-red-500">*</span>}
           </label>
         )}
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputValue}
-          onChange={(e) => {
-            setInputValue(e.target.value);
-            // For fallback, just pass the raw address
-            onAddressSelect({
-              streetAddress: e.target.value,
-              city: '',
-              state: '',
-              zipCode: '',
-              country: 'Canada'
-            });
+        
+        <AddressAutofill
+          accessToken={MAPBOX_TOKEN}
+          options={{
+            country: 'CA',
+            language: 'en',
+            limit: 6,
+            proximity: 'ip',
           }}
-          placeholder={placeholder}
-          required={required}
-          disabled={disabled}
-          className={`w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 dark:bg-gray-700 dark:text-white ${className}`}
-        />
-        <p className="text-xs text-amber-600 dark:text-amber-400">
-          {!AddressAutofill && !showFallback ? '🔄 Loading address autocomplete...' : 'ℹ️ Address autocomplete requires Mapbox configuration'}
+          onRetrieve={handleMapboxRetrieve}
+        >
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder={placeholder}
+            required={required}
+            disabled={disabled}
+            autoComplete="address-line1"
+            className={`w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 dark:bg-gray-700 dark:text-white ${className}`}
+          />
+        </AddressAutofill>
+        
+        <p className="text-xs text-green-600 dark:text-green-400">
+          🗺️ Powered by Mapbox - Start typing to see suggestions
         </p>
       </div>
     );
   }
 
+  // Fallback to OpenStreetMap
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 relative" ref={inputRef}>
       {label && (
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
           {label} {required && <span className="text-red-500">*</span>}
         </label>
       )}
       
-      <AddressAutofill
-        accessToken={MAPBOX_TOKEN}
-        options={{
-          country: 'CA', // Canada only
-          language: 'en',
-          limit: 6,
-          proximity: 'ip', // Use user's IP location for better suggestions
-        }}
-        onRetrieve={(features: any) => {
-          if (features && features.features && features.features.length > 0) {
-            const feature = features.features[0];
-            const props = feature.properties || {};
-            
-            // Extract address components
-            const addressData: AddressData = {
-              streetAddress: props.address_line1 || props.name || '',
-              city: props.address_level2 || props.place || '',
-              state: props.address_level1 || props.region || 'Ontario',
-              zipCode: props.postcode || '',
-              country: props.country || 'Canada',
-              latitude: feature.geometry?.coordinates?.[1],
-              longitude: feature.geometry?.coordinates?.[0]
-            };
-
-            // Handle Toronto neighborhoods specially
-            if (addressData.city === 'Toronto' && props.address_level3) {
-              // Use neighborhood as city for Toronto areas
-              const neighborhoods = ['Etobicoke', 'Scarborough', 'North York', 'York', 'East York'];
-              if (neighborhoods.some(n => props.address_level3.includes(n))) {
-                addressData.city = props.address_level3;
-              }
-            }
-
-            console.log('📍 Address selected:', addressData);
-            
-            // Update input value
-            const fullAddress = `${addressData.streetAddress}, ${addressData.city}, ${addressData.state} ${addressData.zipCode}`.trim().replace(/,\s*,/g, ',');
-            setInputValue(fullAddress);
-            
-            // Call parent handler
-            onAddressSelect(addressData);
-          }
-        }}
-      >
+      <div className="relative">
         <input
-          ref={inputRef}
           type="text"
           value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
+          onChange={handleInputChange}
           placeholder={placeholder}
           required={required}
           disabled={disabled}
           autoComplete="address-line1"
           className={`w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 dark:bg-gray-700 dark:text-white ${className}`}
         />
-      </AddressAutofill>
+        
+        {loading && (
+          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-rose-600"></div>
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div className="text-xs text-red-600 dark:text-red-400">
+          {error}
+        </div>
+      )}
+
+      {showSuggestions && suggestions.length > 0 && (
+        <div className="absolute z-50 w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+          {suggestions.map((suggestion) => (
+            <button
+              key={suggestion.place_id}
+              type="button"
+              onClick={() => selectOSMSuggestion(suggestion)}
+              className="w-full text-left px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 focus:bg-gray-100 dark:focus:bg-gray-700 focus:outline-none border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+            >
+              <div className="text-sm text-gray-900 dark:text-gray-100 font-medium">
+                {suggestion.address?.house_number && suggestion.address?.road 
+                  ? `${suggestion.address.house_number} ${suggestion.address.road}`
+                  : suggestion.display_name.split(',')[0]
+                }
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {suggestion.display_name}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
       
-      <p className="text-xs text-gray-500 dark:text-gray-400">
-        📍 Start typing to see address suggestions
+      <p className="text-xs text-blue-600 dark:text-blue-400">
+        🌍 Fallback: OpenStreetMap - Start typing to see suggestions
       </p>
     </div>
   );
 }
 
 // Dynamically imported component that only renders on client side
-const DynamicAddressAutocomplete = dynamic(() => Promise.resolve(MapboxAddressAutocomplete), {
+const DynamicAddressAutocomplete = dynamic(() => Promise.resolve(UnifiedAddressAutocomplete), {
   ssr: false,
   loading: () => (
     <div className="space-y-2">

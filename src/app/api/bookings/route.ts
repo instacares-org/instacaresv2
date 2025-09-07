@@ -3,6 +3,7 @@ import { bookingOperations } from '@/lib/db';
 import { verifyTokenFromRequest } from '@/lib/jwt';
 import { logger, getClientInfo } from '@/lib/logger';
 import { apiCache, cacheKeys, cacheTTL } from '@/lib/cache';
+import { createErrorResponse, ErrorCodes } from '@/lib/error-messages';
 
 // GET /api/bookings - Get user's bookings
 export async function GET(request: NextRequest) {
@@ -18,10 +19,7 @@ export async function GET(request: NextRequest) {
         error: tokenResult.error
       });
       
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+      return createErrorResponse(ErrorCodes.AUTHENTICATION_REQUIRED, 401);
     }
 
     const { searchParams } = new URL(request.url);
@@ -33,14 +31,24 @@ export async function GET(request: NextRequest) {
     const offset = searchParams.get('offset') ? parseInt(searchParams.get('offset')!) : 0;
 
     if (!userId || !userType) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Missing required parameters',
-          required: ['userId', 'userType'],
-        },
-        { status: 400 }
-      );
+      return createErrorResponse(ErrorCodes.MISSING_REQUIRED_FIELDS, 400, {
+        required: ['userId', 'userType']
+      });
+    }
+
+    // SECURITY: Verify the authenticated user can only access their own data
+    // Only admins can access other users' bookings
+    if (tokenResult.user.userId !== userId && tokenResult.user.userType !== 'ADMIN') {
+      logger.security('Unauthorized booking access attempt - IDOR attack', {
+        requestedUserId: userId,
+        authenticatedUserId: tokenResult.user.userId,
+        authenticatedUserType: tokenResult.user.userType,
+        ip: clientInfo.ip,
+        userAgent: clientInfo.userAgent,
+        url: request.url
+      });
+      
+      return createErrorResponse(ErrorCodes.INSUFFICIENT_PERMISSIONS, 403);
     }
 
     // Generate cache key for user bookings
@@ -70,17 +78,17 @@ export async function GET(request: NextRequest) {
         parentId: booking.parentId,
         caregiverId: booking.caregiverId,
         parentName: `${booking.parent.profile?.firstName} ${booking.parent.profile?.lastName}`,
-        caregiverName: `${booking.caregiver.profile?.firstName} ${booking.caregiver.profile?.lastName}`,
-        caregiverRate: booking.caregiverData.hourlyRate,
+        caregiverName: `${booking.caregiverUser.profile?.firstName} ${booking.caregiverUser.profile?.lastName}`,
+        caregiverRate: booking.caregiverProfile.hourlyRate,
         parent: {
           id: booking.parent.id,
           email: booking.parent.email,
           profile: booking.parent.profile
         },
         caregiver: {
-          id: booking.caregiver.id,
-          email: booking.caregiver.email,
-          profile: booking.caregiver.profile
+          id: booking.caregiverUser.id,
+          email: booking.caregiverUser.email,
+          profile: booking.caregiverUser.profile
         },
         startTime: booking.startTime,
         endTime: booking.endTime,
@@ -105,15 +113,15 @@ export async function GET(request: NextRequest) {
           status: payment.status,
           paidAt: payment.paidAt,
         })),
-        reviews: booking.reviews.map(review => ({
-          id: review.id,
-          rating: review.rating,
-          comment: review.comment,
+        reviews: booking.reviews ? [{
+          id: booking.reviews.id,
+          rating: booking.reviews.rating,
+          comment: booking.reviews.comment,
           reviewerName: userType === 'parent' 
-            ? `${booking.caregiver.profile?.firstName} ${booking.caregiver.profile?.lastName}`
+            ? `${booking.caregiverUser.profile?.firstName} ${booking.caregiverUser.profile?.lastName}`
             : `${booking.parent.profile?.firstName} ${booking.parent.profile?.lastName}`,
-          createdAt: review.createdAt,
-        })),
+          createdAt: booking.reviews.createdAt,
+        }] : [],
         createdAt: booking.createdAt,
         updatedAt: booking.updatedAt,
       }));
@@ -131,15 +139,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Error fetching bookings:', error);
-    
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to fetch bookings',
-        message: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error',
-      },
-      { status: 500 }
-    );
+    return createErrorResponse(error instanceof Error ? error : ErrorCodes.DATABASE_ERROR, 500);
   }
 }
 
@@ -157,10 +157,7 @@ export async function POST(request: NextRequest) {
         error: tokenResult.error
       });
       
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+      return createErrorResponse(ErrorCodes.AUTHENTICATION_REQUIRED, 401);
     }
 
     // Verify user is a parent
@@ -172,10 +169,7 @@ export async function POST(request: NextRequest) {
         userAgent: clientInfo.userAgent
       });
       
-      return NextResponse.json(
-        { error: 'Only parents can create bookings' },
-        { status: 403 }
-      );
+      return createErrorResponse(ErrorCodes.INSUFFICIENT_PERMISSIONS, 403);
     }
 
     const body = await request.json();
@@ -279,14 +273,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Error creating booking:', error);
-    
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to create booking',
-        message: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error',
-      },
-      { status: 500 }
-    );
+    return createErrorResponse(error instanceof Error ? error : ErrorCodes.DATABASE_ERROR, 500);
   }
 }

@@ -32,18 +32,32 @@ export default function BookingForm({
   const elements = useElements();
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
+  
+  // Check if this is a demo mode payment
+  const isDemoMode = clientSecret.includes('_secret_demo');
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-
-    if (!stripe || !elements) {
-      return;
-    }
 
     setIsProcessing(true);
     setErrorMessage('');
 
     try {
+      if (isDemoMode) {
+        // Simulate processing time for demo
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Simulate success in demo mode
+        console.log('Demo payment completed successfully');
+        onSuccess();
+        return;
+      }
+
+      if (!stripe || !elements) {
+        setErrorMessage('Payment system not loaded. Please refresh the page.');
+        return;
+      }
+
       const { error } = await stripe.confirmPayment({
         elements,
         confirmParams: {
@@ -144,13 +158,36 @@ export default function BookingForm({
             <h3 className="text-lg font-medium text-gray-900">Payment Information</h3>
           </div>
           
-          <div className="p-4 border border-gray-200 rounded-lg">
-            <PaymentElement
-              options={{
-                layout: 'tabs',
-              }}
-            />
-          </div>
+          {isDemoMode ? (
+            <div className="p-6 border-2 border-dashed border-yellow-300 rounded-lg bg-yellow-50">
+              <div className="text-center">
+                <div className="text-3xl mb-2">🎭</div>
+                <h4 className="text-lg font-medium text-yellow-800 mb-2">Demo Mode</h4>
+                <p className="text-yellow-700 text-sm mb-4">
+                  This is a demonstration payment. No real money will be charged and no actual payment is processed.
+                </p>
+                <div className="bg-white p-3 rounded-lg border border-yellow-200">
+                  <p className="text-xs text-gray-600 mb-1">Demo Payment Details:</p>
+                  <div className="flex justify-between text-sm">
+                    <span>Amount:</span>
+                    <span className="font-mono">${(totalAmount / 100).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Status:</span>
+                    <span className="text-green-600">✓ Simulated</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 border border-gray-200 rounded-lg">
+              <PaymentElement
+                options={{
+                  layout: 'tabs',
+                }}
+              />
+            </div>
+          )}
         </div>
 
         {errorMessage && (
@@ -191,16 +228,16 @@ export default function BookingForm({
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={!stripe || !elements || isProcessing}
+          disabled={(!stripe || !elements || isProcessing) && !isDemoMode}
           className="w-full bg-rose-500 hover:bg-rose-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition duration-150 flex items-center justify-center"
         >
           {isProcessing ? (
             <>
               <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-2"></div>
-              Processing Payment...
+              {isDemoMode ? 'Simulating Payment...' : 'Processing Payment...'}
             </>
           ) : (
-            `Pay $${(totalAmount / 100).toFixed(2)}`
+            isDemoMode ? `Simulate Payment ($${(totalAmount / 100).toFixed(2)})` : `Pay $${(totalAmount / 100).toFixed(2)}`
           )}
         </button>
       </form>

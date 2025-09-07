@@ -238,7 +238,7 @@ PLATFORM_COMMISSION_RATE="0.15"
 PAYMENT_MODE="demo"
 
 # Mapbox Configuration (Update with real token)
-NEXT_PUBLIC_MAPBOX_TOKEN="your_mapbox_token_here"
+NEXT_PUBLIC_MAPBOX_TOKEN="pk.eyJ1IjoiZmFyYWR5MDAxIiwiYSI6ImNtZWVpd3MycjBqMTYybXByNTAweTBsenUifQ.7GvBthq5x1TY3O_di67zJQ"
 
 # Base URL
 NEXT_PUBLIC_BASE_URL="https://$DOMAIN"

@@ -11,9 +11,12 @@ export async function verifyAdminAuth(request: NextRequest): Promise<{ isValid: 
     const authHeader = request.headers.get('authorization');
     const adminKey = request.headers.get('x-admin-key');
     
-    // For demo purposes, check for a simple admin key
-    // In production, implement proper JWT token validation
-    const validAdminKey = process.env.ADMIN_SECRET_KEY || 'demo-admin-key-2024';
+    // Check for admin secret key from environment variables
+    const validAdminKey = process.env.ADMIN_SECRET_KEY;
+    
+    if (!validAdminKey) {
+      throw new Error('ADMIN_SECRET_KEY environment variable is not configured');
+    }
     
     if (!adminKey || adminKey !== validAdminKey) {
       return { 
@@ -41,7 +44,11 @@ export async function verifyAdminAuth(request: NextRequest): Promise<{ isValid: 
 // Verify JWT token and return user data
 export async function verifyToken(token: string): Promise<any | null> {
   try {
-    const secret = process.env.JWT_SECRET || 'demo-jwt-secret-2024';
+    const secret = process.env.JWT_SECRET;
+    
+    if (!secret) {
+      throw new Error('JWT_SECRET environment variable is not configured');
+    }
     const decoded = jwt.verify(token, secret) as any;
     
     // Get user from database to ensure they still exist and are active
@@ -103,13 +110,29 @@ export async function verifyUserStatus(userId: string): Promise<{ isValid: boole
   }
 }
 
-// Generate secure random tokens
+// Generate cryptographically secure random tokens
 export function generateSecureToken(length: number = 32): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
   
+  // Use crypto.getRandomValues for cryptographically secure random numbers
+  const randomBytes = new Uint8Array(length);
+  
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    // Web Crypto API (browser/edge runtime)
+    crypto.getRandomValues(randomBytes);
+  } else {
+    // Node.js crypto module fallback
+    try {
+      const nodeCrypto = require('crypto');
+      nodeCrypto.randomFillSync(randomBytes);
+    } catch (error) {
+      throw new Error('No secure random number generator available');
+    }
+  }
+  
   for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    result += chars.charAt(randomBytes[i] % chars.length);
   }
   
   return result;
