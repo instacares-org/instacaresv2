@@ -4,6 +4,10 @@ import { logger, getClientInfo } from '@/lib/logger';
 import { prisma, withTransaction } from '@/lib/database';
 import { verifyTokenFromRequest } from '@/lib/jwt';
 
+// Prevent pre-rendering during build time
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }

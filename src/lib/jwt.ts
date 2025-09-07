@@ -1,13 +1,26 @@
 import jwt from 'jsonwebtoken';
 import { NextRequest } from 'next/server';
 
-// JWT configuration
-if (!process.env.JWT_SECRET) {
-  throw new Error('JWT_SECRET environment variable is required but not configured');
-}
+// JWT configuration with build-time fallback
+const getJWTConfig = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.includes('your-jwt-secret') || secret === 'test') {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('JWT_SECRET environment variable is required but not configured in production');
+    }
+    console.warn('JWT_SECRET not configured, using fallback for development/build');
+    return {
+      secret: 'instacares-development-fallback-secret-key-not-for-production',
+      expiresIn: '7d'
+    };
+  }
+  return {
+    secret,
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+  };
+};
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const jwtConfig = getJWTConfig();
 
 export interface JWTPayload {
   userId: string;
@@ -36,9 +49,9 @@ export interface AuthUser {
  */
 export function generateToken(payload: Omit<JWTPayload, 'iat' | 'exp'>, rememberMe: boolean = false): string {
   // If remember me is true, token expires in 30 days, otherwise 7 days
-  const expiresIn = rememberMe ? '30d' : JWT_EXPIRES_IN;
+  const expiresIn = rememberMe ? '30d' : jwtConfig.expiresIn;
   
-  return jwt.sign(payload, JWT_SECRET, {
+  return jwt.sign(payload, jwtConfig.secret, {
     expiresIn,
     issuer: 'instacares',
     audience: 'instacares-users'
@@ -50,7 +63,7 @@ export function generateToken(payload: Omit<JWTPayload, 'iat' | 'exp'>, remember
  */
 export function verifyToken(token: string): JWTPayload | null {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET, {
+    const decoded = jwt.verify(token, jwtConfig.secret, {
       issuer: 'instacares',
       audience: 'instacares-users'
     }) as JWTPayload;
@@ -118,7 +131,7 @@ export async function verifyAuthFromRequest(request: NextRequest): Promise<{
 export function generateRefreshToken(): string {
   return jwt.sign(
     { type: 'refresh', timestamp: Date.now() },
-    JWT_SECRET + '-refresh',
+    jwtConfig.secret + '-refresh',
     { expiresIn: '30d' }
   );
 }
