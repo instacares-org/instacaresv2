@@ -156,7 +156,7 @@ jobs:
           SSH_HOST="${{ secrets.HOSTINGER_HOST }}"
           SSH_USER="${{ secrets.HOSTINGER_USER }}"
           SSH_PORT="${{ secrets.HOSTINGER_PORT || 22 }}"
-          APP_DIR="/var/www/instacares"
+          APP_DIR="/var/www/instacaresv2"
           
           # Create deployment script
           cat > deploy_script.sh << 'DEPLOY_SCRIPT_EOF'
@@ -166,7 +166,7 @@ jobs:
           echo "🔄 Deployment started on $(date)"
           
           # Navigate to application directory
-          cd /var/www/instacares
+          cd /var/www/instacaresv2
           
           # Create deployment log
           echo "📝 Creating deployment log..."
@@ -259,7 +259,7 @@ jobs:
           pm2 logs instacares --lines 10 || echo "No recent logs"
           
           echo "Checking disk space..."
-          df -h /var/www/instacares
+          df -h /var/www/instacaresv2
           
           echo "✅ Verification completed"
           VERIFY_EOF
@@ -303,7 +303,7 @@ jobs:
           SSH_PORT="${{ secrets.HOSTINGER_PORT || 22 }}"
           
           ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} << 'ROLLBACK_EOF'
-          cd /var/www/instacares
+          cd /var/www/instacaresv2
           
           # Stop current services
           pm2 stop all
@@ -315,7 +315,7 @@ jobs:
             echo "Rolling back to: $LATEST_BACKUP"
             
             # Extract backup
-            sudo tar -xzf "$LATEST_BACKUP" -C /var/www/instacares/
+            sudo tar -xzf "$LATEST_BACKUP" -C /var/www/instacaresv2/
             
             # Restart services
             pm2 start ecosystem.config.js
