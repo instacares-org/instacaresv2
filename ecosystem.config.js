@@ -4,7 +4,8 @@
 module.exports = {
   apps: [{
     name: 'instacares',
-    script: 'server.js',  // Use our custom server with WebSocket support
+    script: 'npm',
+    args: 'start',
     instances: 1,  // Single instance for Hostinger shared hosting
     autorestart: true,
     watch: false,
