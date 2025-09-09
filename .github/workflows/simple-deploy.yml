@@ -29,9 +29,9 @@ jobs:
           
           # Simple deployment in separate steps
           
-          # Step 1: Stop and delete services
-          echo "⏹️ Stopping services..."
-          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && pm2 stop instacares || true && pm2 delete instacares || true"
+          # Step 1: Stop all services and free ports
+          echo "⏹️ Stopping all services and freeing ports..."
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && pm2 stop all || true && pm2 delete all || true && pm2 kill || true && sleep 2 && pkill -f 'node.*3000' || true && pkill -f 'node.*3005' || true"
           
           # Step 2: Backup production environment
           echo "💾 Backing up production environment..."
@@ -53,8 +53,8 @@ jobs:
           echo "🏗️ Building..."
           ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && npm run build"
           
-          # Step 7: Start services
+          # Step 7: Start services using ecosystem config
           echo "▶️ Starting services..."
-          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && PORT=3005 pm2 start npm --name instacares -- start && pm2 save"
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && pm2 start ecosystem.config.js --env production && pm2 save"
           
           echo "✅ Deployment completed!"
