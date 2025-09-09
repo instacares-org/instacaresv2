@@ -53,8 +53,16 @@ jobs:
           echo "🏗️ Building..."
           ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && npm run build"
           
-          # Step 7: Start services using ecosystem config
+          # Step 7: Configure nginx for port 3005
+          echo "🔧 Configuring nginx..."
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && chmod +x scripts/fix-nginx-config.sh && ./scripts/fix-nginx-config.sh"
+          
+          # Step 8: Start services using ecosystem config
           echo "▶️ Starting services..."
           ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && pm2 start ecosystem.config.js --env production && pm2 save"
+          
+          # Step 9: Verify deployment
+          echo "🔍 Verifying deployment..."
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "pm2 status && curl -I http://localhost:3005 && curl -I https://instacares.net || echo 'Website verification failed'"
           
           echo "✅ Deployment completed!"
