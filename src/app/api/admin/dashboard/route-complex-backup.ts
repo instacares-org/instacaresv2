@@ -38,7 +38,8 @@ export async function GET(request: NextRequest) {
       prisma.booking.findMany({
         include: {
           parent: { include: { profile: true } },
-          caregiver: { include: { profile: true } },
+          caregiverUser: { include: { profile: true } },
+          caregiverProfile: true,
           payments: true,
           reviews: true
         },
@@ -52,7 +53,8 @@ export async function GET(request: NextRequest) {
           booking: {
             include: {
               parent: { include: { profile: true } },
-              caregiver: { include: { profile: true } }
+              caregiverUser: { include: { profile: true } },
+              caregiverProfile: true
             }
           }
         },

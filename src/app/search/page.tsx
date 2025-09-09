@@ -461,7 +461,7 @@ function SearchPageContent() {
             email: caregiver.email, // Add email for unique identification
             phone: caregiver.phone, // Add phone for additional identification
             city: caregiver.address.city, // Add city for location distinction
-            image: caregiver.profilePhoto || caregiver.image || "/caregivers/default.jpg",
+            image: caregiver.profilePhoto || caregiver.image || "/caregivers/default.svg",
             profilePhoto: caregiver.profilePhoto, // Preserve the profilePhoto field separately
             rating: caregiver.averageRating || 0,
             reviewCount: caregiver.totalBookings || 0,

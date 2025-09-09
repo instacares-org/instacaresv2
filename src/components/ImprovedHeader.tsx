@@ -53,7 +53,7 @@ const ImprovedHeader: React.FC<ImprovedHeaderProps> = ({ className }) => {
       },
       caregiver: {
         name: "Sarah Johnson", 
-        image: "/caregivers/1.jpg"
+        image: "/caregivers/default.svg"
       }
     };
     

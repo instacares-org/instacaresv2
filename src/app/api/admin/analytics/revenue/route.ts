@@ -115,7 +115,8 @@ export async function GET(request: NextRequest) {
         },
         include: {
           parent: { include: { profile: true } },
-          caregiver: { include: { profile: true } }
+          caregiverUser: { include: { profile: true } },
+          caregiverProfile: true
         }
       }),
 

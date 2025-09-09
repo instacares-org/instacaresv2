@@ -176,7 +176,8 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: 'desc' },
         include: {
           parent: { include: { profile: true } },
-          caregiver: { include: { profile: true } }
+          caregiverUser: { include: { profile: true } },
+          caregiverProfile: true
         }
       }),
       

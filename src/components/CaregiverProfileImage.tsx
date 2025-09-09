@@ -61,8 +61,8 @@ export default function CaregiverProfileImage({
   const [imageError, setImageError] = useState(false);
   const avatar = generateAvatar(name, id);
   
-  // Use provided image URL or fallback to caregiver ID, with final fallback to default image
-  const imageUrl = providedImageUrl || `/caregivers/${id}.jpg`;
+  // Use provided image URL or fallback to default image
+  const imageUrl = providedImageUrl || `/caregivers/default.svg`;
   
   // Show avatar if image loading failed, no id, or no image URL available
   const shouldShowAvatar = imageError || !id;

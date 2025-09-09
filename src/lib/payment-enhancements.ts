@@ -573,7 +573,8 @@ export async function processRefund(
           booking: {
             include: {
               parent: { include: { profile: true } },
-              caregiver: { include: { user: { include: { profile: true } } } },
+              caregiverUser: { include: { profile: true } },
+              caregiverProfile: { include: { user: { include: { profile: true } } } },
             },
           },
           user: { include: { profile: true } },
