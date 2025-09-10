@@ -62,7 +62,10 @@
       "Bash(sqlite3:*)",
       "Bash(/bashes)",
       "Bash(python test:*)",
-      "Bash(gh workflow:*)"
+      "Bash(gh workflow:*)",
+      "Bash(move .githubworkflowsproduction-deploy.yml .githubworkflowsproduction-deploy.yml.disabled)",
+      "Bash(ssh:*)",
+      "Read(//c/Users/fhabib/Pictures/**)"
     ],
     "deny": [],
     "ask": [],
