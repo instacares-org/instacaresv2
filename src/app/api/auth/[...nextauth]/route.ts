@@ -7,8 +7,8 @@ const handler = NextAuth({
   adapter: PrismaAdapter(prisma),
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID\!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET\!,
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
   ],
   pages: {
@@ -18,7 +18,7 @@ const handler = NextAuth({
   },
   callbacks: {
     async signIn({ user, account, profile }) {
-      if (\!user.email) return false;
+      if (!user.email) return false;
       
       try {
         // Check if user already exists
@@ -26,7 +26,7 @@ const handler = NextAuth({
           where: { email: user.email },
         });
 
-        if (\!dbUser) {
+        if (!dbUser) {
           // Create new user
           dbUser = await prisma.user.create({
             data: {
