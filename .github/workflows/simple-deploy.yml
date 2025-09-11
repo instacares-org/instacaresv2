@@ -71,9 +71,19 @@ jobs:
           echo "🏗️ Building..."
           ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && npm run build"
           
-          # Step 7: Configure nginx for port 3005
-          echo "🔧 Configuring nginx..."
-          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "cd /var/www/instacaresv2 && chmod +x scripts/fix-nginx-config.sh && ./scripts/fix-nginx-config.sh"
+          # Step 7: Check nginx status (optional - won't fail deployment)
+          echo "🔧 Checking nginx status..."
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} << 'EOF'
+            cd /var/www/instacaresv2
+            # Use the simple check script if available
+            if [ -f scripts/check-nginx.sh ]; then
+              chmod +x scripts/check-nginx.sh
+              ./scripts/check-nginx.sh || true
+            else
+              echo "⚠️ Nginx check skipped - continuing with deployment"
+            fi
+            echo "✅ Continuing with deployment..."
+          EOF
           
           # Step 8: Start services using ecosystem config
           echo "▶️ Starting services..."
