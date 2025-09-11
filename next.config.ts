@@ -16,13 +16,28 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    unoptimized: false, // Re-enable optimization with simplified config
-    formats: ['image/webp'], // Simpler format - just WebP
+    // Keep optimization disabled for production reliability
+    // The nginx + Next.js setup makes optimization complex
+    unoptimized: process.env.NODE_ENV === 'production',
+    domains: ['instacares.net', 'localhost'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'instacares.net',
+        pathname: '/**',
+      },
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '3005',
+        pathname: '/**',
+      },
+    ],
+    formats: ['image/webp'],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
-    minimumCacheTTL: 60, // Shorter cache for testing
-    dangerouslyAllowSVG: true, // Allow SVG processing
-    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;", // CSP for SVGs
+    minimumCacheTTL: 3600, // 1 hour cache
+    dangerouslyAllowSVG: true,
   },
   // Add optimized caching headers
   async headers() {
