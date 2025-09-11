@@ -1,12 +1,15 @@
 name: CI/CD Pipeline
 
 on:
-  push:
-    branches:
-      - main
+  # Only trigger on pull requests, not on push to main
+  # push:
+  #   branches:
+  #     - main
   pull_request:
     branches:
       - main
+  # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
   build:

@@ -1,9 +1,9 @@
 name: 🚀 Production Deployment
 
 on:
-  # Trigger on push to main branch
-  push:
-    branches: [ main ]
+  # DISABLED: Auto-trigger on push to main (using simple-deploy.yml instead)
+  # push:
+  #   branches: [ main ]
   
   # Manual trigger with version selection
   workflow_dispatch:
