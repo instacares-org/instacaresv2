@@ -63,6 +63,8 @@ jobs:
           
           # Step 9: Verify deployment
           echo "🔍 Verifying deployment..."
-          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "pm2 status && curl -I http://localhost:3005 && curl -I https://instacares.net || echo 'Website verification failed'"
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "pm2 status"
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "curl -I http://localhost:3005 || echo 'Local verification failed but continuing'"
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} "curl -I https://instacares.net || echo 'External verification failed but continuing'"
           
           echo "✅ Deployment completed!"
