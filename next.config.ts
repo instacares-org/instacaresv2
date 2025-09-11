@@ -16,43 +16,13 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    unoptimized: true, // Temporarily disable optimization to fix image loading
-    domains: ['instacares.net', 'localhost'], // Add allowed domains
-    remotePatterns: [
-      {
-        protocol: 'http',
-        hostname: 'localhost',
-        port: '3008',
-        pathname: '/uploads/**',
-      },
-      {
-        protocol: 'http',
-        hostname: 'localhost',
-        port: '3005',
-        pathname: '/uploads/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'instacares.net',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: '**',
-        pathname: '**',
-      },
-    ],
-    // Define formats - AVIF first for best compression, WebP as fallback
-    formats: ['image/avif', 'image/webp'],
-    // Optimized device sizes for responsive images
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    unoptimized: false, // Re-enable optimization with simplified config
+    formats: ['image/webp'], // Simpler format - just WebP
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
-    // Enable lazy loading by default
-    loader: 'default',
-    // Minimize layout shift
-    minimumCacheTTL: 31536000, // 1 year
-    // Allow dangerous SVG optimization (if needed)
-    dangerouslyAllowSVG: false,
+    minimumCacheTTL: 60, // Shorter cache for testing
+    dangerouslyAllowSVG: true, // Allow SVG processing
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;", // CSP for SVGs
   },
   // Add optimized caching headers
   async headers() {
