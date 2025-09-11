@@ -16,7 +16,8 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    unoptimized: false, // Enable optimization for production
+    unoptimized: true, // Temporarily disable optimization to fix image loading
+    domains: ['instacares.net', 'localhost'], // Add allowed domains
     remotePatterns: [
       {
         protocol: 'http',
@@ -29,6 +30,11 @@ const nextConfig: NextConfig = {
         hostname: 'localhost',
         port: '3005',
         pathname: '/uploads/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'instacares.net',
+        pathname: '/**',
       },
       {
         protocol: 'https',
