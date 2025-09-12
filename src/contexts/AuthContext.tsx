@@ -83,7 +83,25 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   // Fetch current user data
   const fetchUser = async (): Promise<void> => {
     try {
-      // Try to get token from multiple sources
+      // First try NextAuth session endpoint
+      const sessionResponse = await fetch('/api/auth/session', {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      console.log('Session response:', sessionResponse.status);
+
+      if (sessionResponse.ok) {
+        const sessionData = await sessionResponse.json();
+        console.log('Session data:', sessionData);
+        if (sessionData.success && sessionData.user) {
+          setUser(sessionData.user);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Fallback to JWT token authentication
       const localToken = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null;
       const cookieToken = Cookies.get('auth-token');
       const token = localToken || cookieToken;
@@ -98,7 +116,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       
       const response = await fetch('/api/auth/me', {
         method: 'GET',
-        credentials: 'include', // Include cookies
+        credentials: 'include',
         headers,
       });
 
