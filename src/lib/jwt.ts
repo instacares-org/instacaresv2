@@ -165,12 +165,12 @@ export function createAuthCookieConfig(isProduction: boolean = false, rememberMe
   return {
     name: 'auth-token',
     options: {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: 'lax' as const, // Changed from 'strict' to 'lax' for better compatibility
+      httpOnly: false, // Temporarily disabled for debugging
+      secure: false, // Temporarily disabled for debugging
+      sameSite: 'lax' as const,
       maxAge, // in seconds
       path: '/',
-      domain: isProduction ? '.instacares.net' : undefined, // Set domain for production
+      // domain: isProduction ? '.instacares.net' : undefined, // Commented out for debugging
     }
   };
 }

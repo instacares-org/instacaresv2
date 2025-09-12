@@ -83,12 +83,17 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   // Fetch current user data
   const fetchUser = async (): Promise<void> => {
     try {
-      // Try to get token from localStorage as fallback
+      // Try to get token from multiple sources
       const localToken = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null;
+      const cookieToken = Cookies.get('auth-token');
+      const token = localToken || cookieToken;
+      
+      console.log('fetchUser token sources:', { localToken: !!localToken, cookieToken: !!cookieToken, hasToken: !!token });
       
       const headers: HeadersInit = {};
-      if (localToken) {
-        headers['x-auth-token'] = localToken;
+      if (token) {
+        headers['x-auth-token'] = token;
+        headers['authorization'] = `Bearer ${token}`;
       }
       
       const response = await fetch('/api/auth/me', {
@@ -109,11 +114,17 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         // Clear invalid session
         setUser(null);
         Cookies.remove('auth-token');
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('auth-token');
+        }
       }
     } catch (error) {
       console.error('Failed to fetch user data:', error);
       setUser(null);
       Cookies.remove('auth-token');
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth-token');
+      }
     } finally {
       setLoading(false);
     }
@@ -144,9 +155,16 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       if (response.ok) {
         setUser(data.user);
         
-        // Also store token in localStorage as fallback
+        // Store token in multiple places for reliability
         if (data.token) {
+          // localStorage fallback
           localStorage.setItem('auth-token', data.token);
+          // js-cookie fallback (non-httpOnly)
+          Cookies.set('auth-token', data.token, { 
+            expires: rememberMe ? 30 : 7,
+            path: '/',
+            sameSite: 'lax'
+          });
         }
         
         setLoading(false);
