@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
+import { useSession, signOut } from 'next-auth/react';
 
 export interface UserProfile {
   firstName: string;
@@ -77,6 +78,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const { data: session, status: sessionStatus } = useSession();
 
   // Fetch current user data
   const fetchUser = async (): Promise<void> => {
@@ -155,29 +157,35 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       setUser(null);
       Cookies.remove('auth-token');
       
-      // Make API call with timeout to clear server-side session
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+      // Check if user is logged in via NextAuth (Google OAuth)
+      if (session) {
+        // Sign out from NextAuth
+        await signOut({ redirect: false });
+      } else {
+        // Make API call to clear JWT session
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        
+        const logoutPromise = fetch('/api/auth/logout', {
+          method: 'POST',
+          credentials: 'include',
+          signal: controller.signal,
+        }).finally(() => {
+          clearTimeout(timeoutId);
+        });
+        
+        // Handle API call in background
+        logoutPromise.catch(error => {
+          if (error.name === 'AbortError') {
+            console.log('Logout API call timed out (non-critical)');
+          } else {
+            console.error('Logout API call failed (non-critical):', error);
+          }
+        });
+      }
       
-      const logoutPromise = fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-        signal: controller.signal,
-      }).finally(() => {
-        clearTimeout(timeoutId);
-      });
-      
-      // Don't wait for API call to complete - redirect immediately
+      // Redirect to home
       router.push('/');
-      
-      // Handle API call in background
-      logoutPromise.catch(error => {
-        if (error.name === 'AbortError') {
-          console.log('Logout API call timed out (non-critical)');
-        } else {
-          console.error('Logout API call failed (non-critical):', error);
-        }
-      });
       
     } catch (error) {
       console.error('Logout error:', error);
@@ -201,6 +209,20 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   useEffect(() => {
     fetchUser();
   }, []);
+  
+  // Sync with NextAuth session changes
+  useEffect(() => {
+    if (sessionStatus === 'loading') return; // Still loading
+    
+    if (sessionStatus === 'authenticated' && session?.user && !user) {
+      // NextAuth session exists but our user state doesn't, fetch user data
+      fetchUser();
+    } else if (sessionStatus === 'unauthenticated' && user) {
+      // NextAuth session is gone but we still have user state, clear it
+      setUser(null);
+      setLoading(false);
+    }
+  }, [session, sessionStatus, user]);
 
   // Helper computed values
   const isAuthenticated = !!user;

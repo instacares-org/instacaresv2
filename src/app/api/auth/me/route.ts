@@ -2,12 +2,88 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthFromRequest } from '@/lib/jwt';
 import { prisma } from '@/lib/database';
 import { logger, getClientInfo } from '@/lib/logger';
+import { getServerSession } from 'next-auth';
+import NextAuth from 'next-auth';
+import GoogleProvider from 'next-auth/providers/google';
+import { PrismaAdapter } from '@auth/prisma-adapter';
+
+// Inline authOptions to avoid circular imports
+const authOptions = {
+  adapter: PrismaAdapter(prisma) as any,
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID || "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+    }),
+  ],
+  session: {
+    strategy: "jwt" as const,
+  },
+  secret: process.env.NEXTAUTH_SECRET,
+};
 
 export async function GET(request: NextRequest) {
   const clientInfo = getClientInfo(request);
   
   try {
-    // Verify authentication
+    // First, try to get NextAuth session (for Google OAuth users)
+    const session = await getServerSession(authOptions);
+    
+    if (session?.user?.email) {
+      // User is authenticated via NextAuth (Google OAuth)
+      const currentUser = await prisma.user.findUnique({
+        where: { email: session.user.email },
+        include: {
+          profile: true,
+          caregiver: {
+            select: {
+              id: true,
+              hourlyRate: true,
+              averageRating: true,
+              isAvailable: true,
+              bio: true,
+              experienceYears: true,
+              stripeAccountId: true,
+            }
+          },
+        }
+      });
+      
+      if (currentUser) {
+        // Return user data for OAuth users
+        return NextResponse.json({
+          success: true,
+          user: {
+            id: currentUser.id,
+            email: currentUser.email,
+            userType: currentUser.userType,
+            approvalStatus: currentUser.approvalStatus,
+            isActive: currentUser.isActive,
+            emailVerified: currentUser.emailVerified,
+            lastLogin: currentUser.lastLogin,
+            createdAt: currentUser.createdAt,
+            profile: currentUser.profile ? {
+              firstName: currentUser.profile.firstName,
+              lastName: currentUser.profile.lastName,
+              phone: currentUser.profile.phone,
+              avatar: currentUser.profile.avatar,
+              dateOfBirth: currentUser.profile.dateOfBirth,
+              streetAddress: currentUser.profile.streetAddress,
+              city: currentUser.profile.city,
+              province: currentUser.profile.state,
+              postalCode: currentUser.profile.zipCode,
+              country: currentUser.profile.country,
+              emergencyName: currentUser.profile.emergencyName,
+              emergencyPhone: currentUser.profile.emergencyPhone,
+              emergencyRelation: currentUser.profile.emergencyRelation,
+            } : null,
+            caregiver: currentUser.caregiver || null,
+          }
+        });
+      }
+    }
+    
+    // If no NextAuth session, try JWT authentication
     const authResult = await verifyAuthFromRequest(request);
     
     if (!authResult.isAuthenticated) {
