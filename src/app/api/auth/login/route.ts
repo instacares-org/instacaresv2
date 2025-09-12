@@ -213,14 +213,20 @@ export async function POST(request: NextRequest) {
     
     if (user.approvalStatus === 'REJECTED') {
       return NextResponse.json(
-        { error: 'Account has been rejected. Please contact support for more information.' },
+        { 
+          error: 'Account has been rejected. Please contact support for more information.',
+          status: 'REJECTED'
+        },
         { status: 403 }
       );
     }
     
     if (user.approvalStatus === 'SUSPENDED') {
       return NextResponse.json(
-        { error: 'Account is suspended. Please contact support for assistance.' },
+        { 
+          error: 'Account is suspended. Please contact support for assistance.',
+          status: 'SUSPENDED'
+        },
         { status: 403 }
       );
     }

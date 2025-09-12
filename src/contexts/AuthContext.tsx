@@ -88,10 +88,15 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         credentials: 'include', // Include cookies
       });
 
+      console.log('fetchUser response:', response.status, response.statusText);
+
       if (response.ok) {
         const data = await response.json();
+        console.log('fetchUser success:', data);
         setUser(data.user);
       } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.log('fetchUser error:', response.status, errorData);
         // Clear invalid session
         setUser(null);
         Cookies.remove('auth-token');
