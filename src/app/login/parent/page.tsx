@@ -77,18 +77,16 @@ export default function ParentLoginPage() {
         // Don't redirect manually - let the useEffect handle it after state updates
         // The useEffect will automatically redirect when isAuthenticated becomes true
       } else {
-        if (result.status === 'PENDING_APPROVAL') {
-          setErrors({ 
-            general: 'Your account is pending approval. Please wait for admin approval.' 
-          });
+        if (result.status === 'pending_approval') {
+          // Redirect to account status page
+          router.push('/account-status');
+          return;
         } else if (result.status === 'REJECTED') {
-          setErrors({ 
-            general: 'Your account has been rejected. Please contact support.' 
-          });
+          router.push('/account-status');
+          return;
         } else if (result.status === 'SUSPENDED') {
-          setErrors({ 
-            general: 'Your account has been suspended. Please contact support.' 
-          });
+          router.push('/account-status');
+          return;
         } else {
           setErrors({ 
             general: result.error || 'Login failed. Please check your credentials.' 

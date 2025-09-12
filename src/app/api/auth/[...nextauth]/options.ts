@@ -47,7 +47,7 @@ export const authOptions: NextAuthOptions = {
               emailVerified: new Date(),
               image: user.image || profile?.picture || profile?.image,
               userType: "PARENT", // Default to parent
-              approvalStatus: "APPROVED", // Auto-approve OAuth users
+              approvalStatus: "PENDING", // Require admin approval for OAuth users too
               isActive: true,
               profile: {
                 create: {
