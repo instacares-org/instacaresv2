@@ -83,9 +83,18 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   // Fetch current user data
   const fetchUser = async (): Promise<void> => {
     try {
+      // Try to get token from localStorage as fallback
+      const localToken = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null;
+      
+      const headers: HeadersInit = {};
+      if (localToken) {
+        headers['x-auth-token'] = localToken;
+      }
+      
       const response = await fetch('/api/auth/me', {
         method: 'GET',
         credentials: 'include', // Include cookies
+        headers,
       });
 
       console.log('fetchUser response:', response.status, response.statusText);
@@ -130,9 +139,16 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       });
 
       const data = await response.json();
+      console.log('Login response:', { status: response.status, data });
 
       if (response.ok) {
         setUser(data.user);
+        
+        // Also store token in localStorage as fallback
+        if (data.token) {
+          localStorage.setItem('auth-token', data.token);
+        }
+        
         setLoading(false);
         return { success: true };
       } else {
@@ -161,6 +177,11 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       // Clear local state immediately for faster UX
       setUser(null);
       Cookies.remove('auth-token');
+      
+      // Also clear localStorage fallback
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth-token');
+      }
       
       // Check if user is logged in via NextAuth (Google OAuth)
       if (session) {

@@ -104,6 +104,12 @@ export function extractTokenFromRequest(request: NextRequest): string | null {
     return cookieToken;
   }
 
+  // For debugging: also try custom header
+  const customToken = request.headers.get('x-auth-token');
+  if (customToken) {
+    return customToken;
+  }
+
   return null;
 }
 
@@ -161,9 +167,10 @@ export function createAuthCookieConfig(isProduction: boolean = false, rememberMe
     options: {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'strict' as const,
+      sameSite: 'lax' as const, // Changed from 'strict' to 'lax' for better compatibility
       maxAge, // in seconds
       path: '/',
+      domain: isProduction ? '.instacares.net' : undefined, // Set domain for production
     }
   };
 }
