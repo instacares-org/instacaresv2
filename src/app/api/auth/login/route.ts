@@ -77,9 +77,10 @@ export async function POST(request: NextRequest) {
     let requestBody;
     try {
       requestBody = await request.json();
-    } catch {
+    } catch (jsonError) {
+      console.error('JSON parsing error in login:', jsonError);
       return NextResponse.json(
-        { error: 'Invalid request format' },
+        { error: 'Invalid request format', details: jsonError.message },
         { status: 400 }
       );
     }
