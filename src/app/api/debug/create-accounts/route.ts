@@ -4,6 +4,9 @@ import bcrypt from 'bcryptjs';
 
 export async function POST(request: NextRequest) {
   try {
+    // Parse request body to check for admin creation request
+    const requestBody = await request.json().catch(() => ({}));
+    
     const testAccounts = [
       {
         email: 'sarah.johnson@testmail.ca',
@@ -34,6 +37,24 @@ export async function POST(request: NextRequest) {
         }
       }
     ];
+    
+    // Add admin account if requested
+    if (requestBody.createAdmin) {
+      testAccounts.push({
+        email: 'admin@instacares.net',
+        password: 'AdminInstaCares2024!',
+        userType: 'ADMIN' as const,
+        profile: {
+          firstName: 'Admin',
+          lastName: 'User',
+          phone: '+1-416-555-0000',
+          streetAddress: '789 Admin Street',
+          city: 'Toronto',
+          state: 'ON',
+          zipCode: 'M5H 2M9'
+        }
+      });
+    }
     
     const results = {
       timestamp: new Date().toISOString(),
