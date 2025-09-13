@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateCSRFToken, setCSRFToken } from '@/lib/csrf';
-import { verifyTokenFromRequest } from '@/lib/jwt';
+// import { // verifyTokenFromRequest } from '@/lib/jwt';
 
 export async function GET(request: NextRequest) {
   try {
     // Extract user ID if authenticated (for session-specific tokens)
-    const authResult = verifyTokenFromRequest(request);
+    const authResult = // verifyTokenFromRequest(request);
     const sessionId = authResult.user?.userId || undefined;
     
     // Generate a new CSRF token

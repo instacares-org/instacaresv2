@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { prisma } from '@/lib/database';
-
-// Simple NextAuth session options for this endpoint
-const authOptions = {
-  providers: [], // We don't need providers here, just session reading
-  secret: process.env.NEXTAUTH_SECRET,
-};
+import { authOptions } from '../[...nextauth]/options';
 
 export async function GET(request: NextRequest) {
   try {

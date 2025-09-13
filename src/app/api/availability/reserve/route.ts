@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyTokenFromRequest } from '@/lib/jwt';
+// import { // verifyTokenFromRequest } from '@/lib/jwt';
 import { AvailabilityService } from '@/lib/availabilityService';
 
 // POST /api/availability/reserve - Reserve spots temporarily
 export async function POST(request: NextRequest) {
   try {
-    const tokenResult = verifyTokenFromRequest(request);
+    const tokenResult = // verifyTokenFromRequest(request);
     if (!tokenResult.isValid || !tokenResult.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
 // DELETE /api/availability/reserve - Cancel reservation
 export async function DELETE(request: NextRequest) {
   try {
-    const tokenResult = verifyTokenFromRequest(request);
+    const tokenResult = // verifyTokenFromRequest(request);
     if (!tokenResult.isValid || !tokenResult.user) {
       return NextResponse.json(
         { error: 'Authentication required' },

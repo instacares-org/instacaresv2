@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
     // Keep optimization disabled for production reliability
     // The nginx + Next.js setup makes optimization complex
     unoptimized: process.env.NODE_ENV === 'production',
-    domains: ['instacares.net', 'localhost'],
+    // Removed deprecated domains configuration - using remotePatterns only
     remotePatterns: [
       {
         protocol: 'https',
@@ -30,6 +30,11 @@ const nextConfig: NextConfig = {
         protocol: 'http',
         hostname: 'localhost',
         port: '3005',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
         pathname: '/**',
       },
     ],

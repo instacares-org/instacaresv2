@@ -1,28 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyTokenFromRequest } from '@/lib/jwt';
+import { withAuth } from '@/lib/auth-middleware';
 import { db } from '@/lib/db';
 
 // GET /api/children - Fetch children for authenticated parent
 export async function GET(request: NextRequest) {
   try {
-    const tokenResult = verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    // Verify user is a parent
-    if (tokenResult.user.userType !== 'PARENT') {
-      return NextResponse.json(
-        { error: 'Only parents can access child profiles' },
-        { status: 403 }
-      );
+    const authResult = await withAuth(request, 'PARENT');
+    if (!authResult.isAuthorized) {
+      return authResult.response;
     }
 
     const children = await db.child.findMany({
-      where: { parentId: tokenResult.user.userId },
+      where: { parentId: authResult.user.id },
       orderBy: { createdAt: 'desc' }
     });
 
@@ -46,20 +35,9 @@ export async function GET(request: NextRequest) {
 // POST /api/children - Create new child profile
 export async function POST(request: NextRequest) {
   try {
-    const tokenResult = verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    // Verify user is a parent
-    if (tokenResult.user.userType !== 'PARENT') {
-      return NextResponse.json(
-        { error: 'Only parents can create child profiles' },
-        { status: 403 }
-      );
+    const authResult = await withAuth(request, 'PARENT');
+    if (!authResult.isAuthorized) {
+      return authResult.response;
     }
 
     const body = await request.json();
@@ -93,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     const child = await db.child.create({
       data: {
-        parentId: tokenResult.user.userId,
+        parentId: authResult.user.id,
         firstName,
         lastName,
         dateOfBirth: new Date(dateOfBirth),

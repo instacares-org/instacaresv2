@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { bookingOperations } from '@/lib/db';
 import { AvailabilityService } from '@/lib/availabilityService';
-import { verifyTokenFromRequest } from '@/lib/jwt';
+// import { // verifyTokenFromRequest } from '@/lib/jwt';
 import { logger, getClientInfo } from '@/lib/logger';
 
 // POST /api/bookings/slot-based - Create slot-based booking
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   
   try {
     // Verify authentication
-    const tokenResult = verifyTokenFromRequest(request);
+    const tokenResult = // verifyTokenFromRequest(request);
     if (!tokenResult.isValid || !tokenResult.user) {
       logger.security('Unauthorized slot-based booking creation attempt', {
         ip: clientInfo.ip,
@@ -181,7 +181,7 @@ export async function GET(request: NextRequest) {
   
   try {
     // Verify authentication
-    const tokenResult = verifyTokenFromRequest(request);
+    const tokenResult = // verifyTokenFromRequest(request);
     if (!tokenResult.isValid || !tokenResult.user) {
       return NextResponse.json(
         { error: 'Authentication required' },

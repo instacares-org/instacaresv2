@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { verifyTokenFromRequest } from '@/lib/jwt';
+import { withAuth } from '@/lib/auth-middleware';
 
 // Prevent pre-rendering during build time
 export const runtime = 'nodejs';
@@ -12,12 +12,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   try {
     // Verify admin authentication
-    const tokenResult = verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user || tokenResult.user.userType !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Admin access required' },
-        { status: 401 }
-      );
+    const authResult = await withAuth(request, 'ADMIN');
+    if (!authResult.isAuthorized) {
+      return authResult.response;
     }
 
     // Check if database is available during build time

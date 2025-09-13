@@ -2,8 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import Cookies from 'js-cookie';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession, signOut, signIn } from 'next-auth/react';
 
 export interface UserProfile {
   firstName: string;
@@ -38,6 +37,7 @@ export interface CaregiverData {
 export interface AuthUser {
   id: string;
   email: string;
+  name?: string;
   userType: 'PARENT' | 'CAREGIVER' | 'ADMIN';
   approvalStatus: string;
   isActive: boolean;
@@ -76,88 +76,49 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
 
-  // Fetch current user data
-  const fetchUser = async (): Promise<void> => {
-    try {
-      // First check if we have a NextAuth session (for Google OAuth)
-      if (session?.user) {
-        console.log('fetchUser: Using NextAuth session', session.user);
-        setUser({
-          id: session.user.id || session.user.email || '', 
-          email: session.user.email || '',
-          userType: (session.user as any).userType || 'PARENT',
-          approvalStatus: (session.user as any).approvalStatus || 'APPROVED',
-          profile: {
-            firstName: session.user.name?.split(' ')[0] || 'User',
-            lastName: session.user.name?.split(' ').slice(1).join(' ') || '',
-            avatar: session.user.image || undefined
-          }
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Fallback to JWT token authentication (for email/password)
-      console.log('fetchUser: Starting JWT-based user fetch');
-      const localToken = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null;
-      const cookieToken = Cookies.get('auth-token');
-      const token = localToken || cookieToken;
-      
-      console.log('fetchUser token sources:', { localToken: !!localToken, cookieToken: !!cookieToken, hasToken: !!token });
-      
-      const headers: HeadersInit = {};
-      if (token) {
-        headers['x-auth-token'] = token;
-        headers['authorization'] = `Bearer ${token}`;
-      }
-      
-      const response = await fetch('/api/auth/me', {
-        method: 'GET',
-        credentials: 'include',
-        headers,
-      });
-
-      console.log('fetchUser response:', response.status, response.statusText);
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('fetchUser success:', data);
-        setUser(data.user);
-      } else {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.log('fetchUser error:', response.status, errorData);
-        console.log('Current tokens when fetch failed:', {
-          localStorage: typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null,
-          cookies: Cookies.get('auth-token')
-        });
-        // Don't clear session immediately on error - could be temporary
-        // Only clear if it's clearly an auth error (401/403)
-        if (response.status === 401 || response.status === 403) {
-          console.log('Clearing invalid session due to 401/403');
-          setUser(null);
-          Cookies.remove('auth-token');
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('auth-token');
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch user data:', error);
-      setUser(null);
-      Cookies.remove('auth-token');
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('auth-token');
-      }
-    } finally {
-      setLoading(false);
-    }
+  // Convert NextAuth session to our AuthUser format
+  const convertSessionToUser = (session: any): AuthUser | null => {
+    if (!session?.user) return null;
+    
+    return {
+      id: session.user.id || '',
+      email: session.user.email || '',
+      name: session.user.name || 'User',
+      userType: session.user.userType || 'PARENT',
+      approvalStatus: session.user.approvalStatus || 'APPROVED',
+      isActive: session.user.isActive !== false,
+      emailVerified: session.user.emailVerified !== false,
+      lastLogin: session.user.lastLogin || new Date().toISOString(),
+      createdAt: session.user.createdAt || new Date().toISOString(),
+      profile: session.user.profile ? {
+        firstName: session.user.profile.firstName || session.user.name?.split(' ')[0] || 'User',
+        lastName: session.user.profile.lastName || session.user.name?.split(' ').slice(1).join(' ') || '',
+        phone: session.user.profile.phone,
+        avatar: session.user.profile.avatar || session.user.image,
+        dateOfBirth: session.user.profile.dateOfBirth,
+        streetAddress: session.user.profile.streetAddress,
+        city: session.user.profile.city,
+        state: session.user.profile.state,
+        province: session.user.profile.province,
+        zipCode: session.user.profile.zipCode,
+        postalCode: session.user.profile.postalCode,
+        country: session.user.profile.country,
+        emergencyName: session.user.profile.emergencyName,
+        emergencyPhone: session.user.profile.emergencyPhone,
+        emergencyRelation: session.user.profile.emergencyRelation,
+      } : {
+        firstName: session.user.name?.split(' ')[0] || 'User',
+        lastName: session.user.name?.split(' ').slice(1).join(' ') || '',
+        avatar: session.user.image
+      },
+      caregiver: session.user.caregiver || null
+    };
   };
 
-  // Login function
+  // Login function using NextAuth credentials provider
   const login = async (
     email: string, 
     password: string, 
@@ -165,56 +126,32 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     rememberMe: boolean = false
   ): Promise<{ success: boolean; error?: string; status?: string }> => {
     try {
-      setLoading(true);
-      
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ email, password, userType, rememberMe }),
+      const result = await signIn('credentials', {
+        email,
+        password,
+        userType,
+        redirect: false,
       });
 
-      const data = await response.json();
-      console.log('Login response:', { status: response.status, data });
-
-      if (response.ok) {
-        console.log('Login successful, setting user:', data.user);
-        setUser(data.user);
-        
-        // Store token in multiple places for reliability
-        if (data.token) {
-          console.log('Storing auth token');
-          // localStorage fallback
-          localStorage.setItem('auth-token', data.token);
-          // js-cookie fallback (non-httpOnly)
-          Cookies.set('auth-token', data.token, { 
-            expires: rememberMe ? 30 : 7,
-            path: '/',
-            sameSite: 'lax'
-          });
-        }
-        
-        // Force a user fetch to ensure session is properly established
-        setTimeout(() => {
-          console.log('Fetching user after login to ensure session');
-          fetchUser();
-        }, 100);
-        
-        setLoading(false);
-        return { success: true };
-      } else {
-        setLoading(false);
+      if (result?.error) {
+        // Handle specific error messages from NextAuth
         return { 
           success: false, 
-          error: data.error || 'Login failed',
-          status: data.status
+          error: result.error,
+          status: result.error.includes('pending approval') ? 'pending_approval' : undefined
         };
       }
+
+      if (result?.ok) {
+        return { success: true };
+      }
+
+      return { 
+        success: false, 
+        error: 'Login failed. Please try again.' 
+      };
     } catch (error) {
       console.error('Login error:', error);
-      setLoading(false);
       return { 
         success: false, 
         error: 'Network error during login' 
@@ -222,46 +159,14 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     }
   };
 
-  // Logout function
+  // Logout function using NextAuth
   const logout = async (): Promise<void> => {
     try {
-      setLoading(true);
-      
-      // Clear local state immediately for faster UX
+      // Clear user state immediately for better UX
       setUser(null);
-      Cookies.remove('auth-token');
       
-      // Also clear localStorage fallback
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('auth-token');
-      }
-      
-      // Check if user is logged in via NextAuth (Google OAuth)
-      if (session) {
-        // Sign out from NextAuth
-        await signOut({ redirect: false });
-      } else {
-        // Make API call to clear JWT session
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        
-        const logoutPromise = fetch('/api/auth/logout', {
-          method: 'POST',
-          credentials: 'include',
-          signal: controller.signal,
-        }).finally(() => {
-          clearTimeout(timeoutId);
-        });
-        
-        // Handle API call in background
-        logoutPromise.catch(error => {
-          if (error.name === 'AbortError') {
-            console.log('Logout API call timed out (non-critical)');
-          } else {
-            console.error('Logout API call failed (non-critical):', error);
-          }
-        });
-      }
+      // Sign out from NextAuth
+      await signOut({ redirect: false });
       
       // Redirect to home
       router.push('/');
@@ -270,43 +175,32 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       console.error('Logout error:', error);
       // Ensure logout happens even if there's an error
       setUser(null);
-      Cookies.remove('auth-token');
       router.push('/');
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Refresh user data
+  // Refresh user data by refetching session
   const refreshUser = async (): Promise<void> => {
-    if (user) {
-      await fetchUser();
-    }
+    // NextAuth automatically handles session refresh
+    // The useEffect below will update the user state
+    window.location.reload();
   };
 
-  // Initialize auth state on mount
-  useEffect(() => {
-    fetchUser();
-  }, []);
-  
-  // Sync with NextAuth session changes (for Google OAuth)
+  // Sync user state with NextAuth session
   useEffect(() => {
     if (sessionStatus === 'loading') return;
     
-    if (sessionStatus === 'authenticated' && session?.user && !user) {
-      // NextAuth session exists, use it
-      console.log('NextAuth session detected, fetching user');
-      fetchUser();
-    } else if (sessionStatus === 'unauthenticated' && user && !localStorage.getItem('auth-token') && !Cookies.get('auth-token')) {
-      // NextAuth session is gone AND no JWT tokens, clear user
-      console.log('No NextAuth session and no JWT tokens, clearing user');
+    if (sessionStatus === 'authenticated' && session) {
+      const authUser = convertSessionToUser(session);
+      setUser(authUser);
+    } else if (sessionStatus === 'unauthenticated') {
       setUser(null);
-      setLoading(false);
     }
-  }, [session, sessionStatus, user]);
+  }, [session, sessionStatus]);
 
   // Helper computed values
-  const isAuthenticated = !!user;
+  const loading = sessionStatus === 'loading';
+  const isAuthenticated = !!user && sessionStatus === 'authenticated';
   const isParent = user?.userType === 'PARENT';
   const isCaregiver = user?.userType === 'CAREGIVER';
   const isAdmin = user?.userType === 'ADMIN';

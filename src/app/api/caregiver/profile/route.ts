@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyTokenFromRequest } from '@/lib/jwt';
+// import { // verifyTokenFromRequest } from '@/lib/jwt';
 import { prisma } from '@/lib/database';
 
 export async function GET(request: NextRequest) {
   try {
-    const tokenResult = verifyTokenFromRequest(request);
+    const tokenResult = // verifyTokenFromRequest(request);
     if (!tokenResult.isValid || !tokenResult.user) {
       return NextResponse.json(
         { error: 'Authentication required' },

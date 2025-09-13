@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { bookingOperations } from '@/lib/db';
-import { verifyTokenFromRequest } from '@/lib/jwt';
+import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
 import { apiCache, cacheKeys, cacheTTL } from '@/lib/cache';
 import { createErrorResponse, ErrorCodes } from '@/lib/error-messages';
@@ -11,15 +11,14 @@ export async function GET(request: NextRequest) {
   
   try {
     // Verify authentication
-    const tokenResult = verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    const authResult = await withAuth(request, 'ANY');
+    if (!authResult.isAuthorized) {
       logger.security('Unauthorized booking access attempt', {
         ip: clientInfo.ip,
-        userAgent: clientInfo.userAgent,
-        error: tokenResult.error
+        userAgent: clientInfo.userAgent
       });
       
-      return createErrorResponse(ErrorCodes.AUTHENTICATION_REQUIRED, 401);
+      return authResult.response;
     }
 
     const { searchParams } = new URL(request.url);
@@ -38,11 +37,11 @@ export async function GET(request: NextRequest) {
 
     // SECURITY: Verify the authenticated user can only access their own data
     // Only admins can access other users' bookings
-    if (tokenResult.user.userId !== userId && tokenResult.user.userType !== 'ADMIN') {
+    if (authResult.user.id !== userId && authResult.user.userType !== 'ADMIN') {
       logger.security('Unauthorized booking access attempt - IDOR attack', {
         requestedUserId: userId,
-        authenticatedUserId: tokenResult.user.userId,
-        authenticatedUserType: tokenResult.user.userType,
+        authenticatedUserId: authResult.user.id,
+        authenticatedUserType: authResult.user.userType,
         ip: clientInfo.ip,
         userAgent: clientInfo.userAgent,
         url: request.url
@@ -148,29 +147,19 @@ export async function POST(request: NextRequest) {
   const clientInfo = getClientInfo(request);
   
   try {
-    // Verify authentication
-    const tokenResult = verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    // Verify authentication using NextAuth
+    const authResult = await withAuth(request, 'PARENT');
+    if (!authResult.isAuthorized) {
       logger.security('Unauthorized booking creation attempt', {
-        ip: clientInfo.ip,
-        userAgent: clientInfo.userAgent,
-        error: tokenResult.error
-      });
-      
-      return createErrorResponse(ErrorCodes.AUTHENTICATION_REQUIRED, 401);
-    }
-
-    // Verify user is a parent
-    if (tokenResult.user.userType !== 'PARENT') {
-      logger.security('Non-parent user attempted to create booking', {
-        userId: tokenResult.user.userId,
-        userType: tokenResult.user.userType,
         ip: clientInfo.ip,
         userAgent: clientInfo.userAgent
       });
       
-      return createErrorResponse(ErrorCodes.INSUFFICIENT_PERMISSIONS, 403);
+      return authResult.response;
     }
+
+    // User type verification is already handled by withAuth('PARENT')
+    // No additional user type check needed since withAuth ensures PARENT role
 
     const body = await request.json();
     
@@ -199,9 +188,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Ensure the parentId matches the authenticated user
-    if (parentId !== tokenResult.user.userId) {
+    if (parentId !== authResult.user.id) {
       logger.security('User attempted to create booking for another parent', {
-        userId: tokenResult.user.userId,
+        userId: authResult.user.id,
         requestedParentId: parentId,
         ip: clientInfo.ip,
         userAgent: clientInfo.userAgent

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyTokenFromRequest } from '@/lib/jwt';
+// import { // verifyTokenFromRequest } from '@/lib/jwt';
 import { db } from '@/lib/db';
 
 // DELETE /api/children/[childId] - Delete a specific child profile
@@ -8,7 +8,7 @@ export async function DELETE(
   { params }: { params: Promise<{ childId: string }> }
 ) {
   try {
-    const tokenResult = verifyTokenFromRequest(request);
+    const tokenResult = // verifyTokenFromRequest(request);
     if (!tokenResult.isValid || !tokenResult.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -101,7 +101,7 @@ export async function PUT(
   { params }: { params: Promise<{ childId: string }> }
 ) {
   try {
-    const tokenResult = verifyTokenFromRequest(request);
+    const tokenResult = // verifyTokenFromRequest(request);
     if (!tokenResult.isValid || !tokenResult.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -200,7 +200,7 @@ export async function GET(
   { params }: { params: Promise<{ childId: string }> }
 ) {
   try {
-    const tokenResult = verifyTokenFromRequest(request);
+    const tokenResult = // verifyTokenFromRequest(request);
     if (!tokenResult.isValid || !tokenResult.user) {
       return NextResponse.json(
         { error: 'Authentication required' },

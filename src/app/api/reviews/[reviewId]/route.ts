@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { verifyTokenFromRequest } from '@/lib/jwt';
+// import { // verifyTokenFromRequest } from '@/lib/jwt';
 
 // PATCH /api/reviews/[reviewId] - Update review (admin only for moderation)
 export async function PATCH(
@@ -13,7 +13,7 @@ export async function PATCH(
     const { isApproved, moderatorNotes } = body;
     
     // Verify admin authentication
-    const tokenResult = verifyTokenFromRequest(request);
+    const tokenResult = // verifyTokenFromRequest(request);
     if (!tokenResult.isValid || !tokenResult.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -102,7 +102,7 @@ export async function DELETE(
     const { reviewId } = params;
     
     // Verify admin authentication
-    const tokenResult = verifyTokenFromRequest(request);
+    const tokenResult = // verifyTokenFromRequest(request);
     if (!tokenResult.isValid || !tokenResult.user) {
       return NextResponse.json(
         { error: 'Authentication required' },

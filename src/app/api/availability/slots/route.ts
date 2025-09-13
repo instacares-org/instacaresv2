@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyTokenFromRequest } from '@/lib/jwt';
+// import { // verifyTokenFromRequest } from '@/lib/jwt';
 import { AvailabilityService } from '@/lib/availabilityService';
 import { SlotStatus } from '@prisma/client';
 
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
 // POST /api/availability/slots - Create new availability slot (caregivers only)
 export async function POST(request: NextRequest) {
   try {
-    const tokenResult = verifyTokenFromRequest(request);
+    const tokenResult = // verifyTokenFromRequest(request);
     if (!tokenResult.isValid || !tokenResult.user) {
       return NextResponse.json(
         { error: 'Authentication required. Please log in again.' },
@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
 // PUT /api/availability/slots - Update existing availability slot
 export async function PUT(request: NextRequest) {
   try {
-    const tokenResult = verifyTokenFromRequest(request);
+    const tokenResult = // verifyTokenFromRequest(request);
     if (!tokenResult.isValid || !tokenResult.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
@@ -274,7 +274,7 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/availability/slots - Delete availability slot
 export async function DELETE(request: NextRequest) {
   try {
-    const tokenResult = verifyTokenFromRequest(request);
+    const tokenResult = // verifyTokenFromRequest(request);
     if (!tokenResult.isValid || !tokenResult.user) {
       return NextResponse.json(
         { error: 'Authentication required' },

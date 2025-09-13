@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { bookingOperations } from '@/lib/db';
-import { verifyTokenFromRequest } from '@/lib/jwt';
+// import { // verifyTokenFromRequest } from '@/lib/jwt';
 import { logger, getClientInfo } from '@/lib/logger';
 import { apiCache, cacheKeys } from '@/lib/cache';
 
@@ -14,7 +14,7 @@ export async function PATCH(
   
   try {
     // Verify authentication
-    const tokenResult = verifyTokenFromRequest(request);
+    const tokenResult = // verifyTokenFromRequest(request);
     if (!tokenResult.isValid || !tokenResult.user) {
       logger.security('Unauthorized booking status update attempt', {
         bookingId: bookingId,

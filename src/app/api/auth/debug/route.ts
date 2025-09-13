@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyTokenFromRequest, extractTokenFromRequest } from '@/lib/jwt';
+// import { // verifyTokenFromRequest, extractTokenFromRequest } from '@/lib/jwt';
 import { cookies } from 'next/headers';
 
 export async function GET(request: NextRequest) {
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     // Get all cookies for debugging
     const allCookies = cookieStore.getAll();
     
-    const authResult = verifyTokenFromRequest(request);
+    const authResult = // verifyTokenFromRequest(request);
     
     // Check request headers
     const authHeader = request.headers.get('authorization');
