@@ -68,17 +68,7 @@ export const authOptions: NextAuthOptions = {
             where: { email },
             include: {
               profile: true,
-              caregiver: credentials.userType === 'caregiver' ? {
-                select: {
-                  id: true,
-                  hourlyRate: true,
-                  averageRating: true,
-                  isAvailable: true,
-                  bio: true,
-                  experienceYears: true,
-                  stripeAccountId: true,
-                }
-              } : false
+              caregiver: true
             }
           });
 
@@ -153,7 +143,9 @@ export const authOptions: NextAuthOptions = {
           };
         } catch (error) {
           console.error('Credentials authorization error:', error);
-          throw error;
+          // Return null instead of throwing to prevent NextAuth from crashing
+          recordFailedAttempt(email);
+          return null;
         }
       }
     }),
