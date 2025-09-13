@@ -150,10 +150,40 @@ export default function AdminDashboard() {
     setPendingApprovals(prev => prev.filter(item => item.id !== id));
   };
 
-  const updateUserStatus = (userId: string, newStatus: 'active' | 'suspended') => {
-    setUsers(prev => prev.map(user => 
-      user.id === userId ? { ...user, status: newStatus } : user
-    ));
+  const updateUserStatus = async (userId: string, newStatus: 'active' | 'suspended') => {
+    try {
+      const response = await fetch(`/api/admin/users/${userId}/status`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          status: newStatus.toUpperCase(),
+          reason: `Status changed to ${newStatus} by admin`
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Update local state to reflect the change
+        setUsers(prev => prev.map(user => 
+          user.id === userId ? { ...user, status: newStatus } : user
+        ));
+        console.log(`User status updated to ${newStatus} successfully`);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to update user status:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData.error || 'Unknown error'
+        });
+        alert(`Failed to update user status: ${errorData.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error updating user status:', error);
+      alert('Failed to update user status. Please try again.');
+    }
   };
 
   // Fetch pending users
