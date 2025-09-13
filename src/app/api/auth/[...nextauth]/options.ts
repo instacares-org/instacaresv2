@@ -30,9 +30,39 @@ export const authOptions: NextAuthOptions = {
         return false;
       }
       
-      // Temporarily bypass database operations to test OAuth flow
-      console.log("OAuth signIn successful for:", user.email, "- bypassing database for now");
-      return true;
+      try {
+        // Check if user already exists
+        let dbUser = await prisma.user.findUnique({
+          where: { email: user.email },
+        });
+
+        if (!dbUser) {
+          // Create new user - simplified version
+          console.log("Creating new OAuth user:", user.email);
+          dbUser = await prisma.user.create({
+            data: {
+              email: user.email,
+              name: user.name || "OAuth User",
+              emailVerified: new Date(),
+              image: user.image,
+              userType: "PARENT",
+              approvalStatus: "PENDING",
+              isActive: true,
+            },
+          });
+          console.log("Created user with ID:", dbUser.id);
+        } else {
+          console.log("Found existing user:", dbUser.id);
+        }
+
+        console.log("OAuth signIn successful for:", user.email);
+        return true;
+      } catch (error) {
+        console.error("Error during OAuth sign in:", error);
+        // Allow sign-in to continue even if database fails
+        console.log("Allowing OAuth signIn despite database error");
+        return true;
+      }
     },
     async session({ session, user, token }) {
       console.log("OAuth session callback:", { email: session?.user?.email });
