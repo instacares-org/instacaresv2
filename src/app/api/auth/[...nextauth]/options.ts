@@ -50,12 +50,20 @@ export const authOptions: NextAuthOptions = {
         userType: { label: "User Type", type: "text" }
       },
       async authorize(credentials) {
+        console.log('NextAuth authorize called with:', {
+          email: credentials?.email,
+          userType: credentials?.userType,
+          hasPassword: !!credentials?.password
+        });
+
         if (!credentials?.email || !credentials?.password) {
+          console.log('Missing credentials, returning null');
           return null;
         }
 
         try {
           const email = credentials.email.toLowerCase();
+          console.log('Processing login for:', email);
           
           // Rate limiting check
           const rateLimitResult = checkRateLimit(email);
@@ -120,6 +128,7 @@ export const authOptions: NextAuthOptions = {
 
           // Reset failed attempts on successful login
           resetFailedAttempts(email);
+          console.log('Login successful for:', email);
 
           // Update last login timestamp
           await prisma.user.update({
@@ -127,6 +136,7 @@ export const authOptions: NextAuthOptions = {
             data: { lastLogin: new Date() }
           });
 
+          console.log('Returning user object to NextAuth');
           // Return user object for NextAuth
           return {
             id: user.id,
@@ -143,8 +153,17 @@ export const authOptions: NextAuthOptions = {
           };
         } catch (error) {
           console.error('Credentials authorization error:', error);
+          console.error('Error details:', {
+            message: error.message,
+            stack: error.stack,
+            email: credentials?.email,
+            userType: credentials?.userType
+          });
           // Return null instead of throwing to prevent NextAuth from crashing
-          recordFailedAttempt(email);
+          const email = credentials?.email?.toLowerCase();
+          if (email) {
+            recordFailedAttempt(email);
+          }
           return null;
         }
       }
