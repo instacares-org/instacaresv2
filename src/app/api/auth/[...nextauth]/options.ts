@@ -47,7 +47,7 @@ export const authOptions: NextAuthOptions = {
               lastLogin: new Date(),
             },
           });
-          console.log("Created new OAuth user:", dbUser.email);
+          // User created successfully - don't log PII
         } else {
           // Update existing user
           await prisma.user.update({
@@ -59,7 +59,7 @@ export const authOptions: NextAuthOptions = {
               lastLogin: new Date(),
             },
           });
-          console.log("Updated existing user:", dbUser.email);
+          // User updated successfully - don't log PII
         }
 
         return true;
@@ -94,6 +94,16 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
+    async jwt({ token, user, account }) {
+      // Add user info to token on first sign in
+      if (user && account) {
+        token.userType = user.userType;
+        token.approvalStatus = user.approvalStatus;
+        token.isActive = user.isActive;
+        token.lastLogin = new Date().toISOString();
+      }
+      return token;
+    },
     async redirect({ url, baseUrl }) {
       // Allows relative callback URLs
       if (url.startsWith("/")) return `${baseUrl}${url}`;
@@ -103,10 +113,12 @@ export const authOptions: NextAuthOptions = {
     },
   },
   session: {
-    strategy: "jwt", // Use JWT instead of database sessions for better performance
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    strategy: "jwt",
+    maxAge: 7 * 24 * 60 * 60, // 7 days (more secure)
+    updateAge: 24 * 60 * 60, // Extend session if user is active within 24 hours
   },
-  secret: process.env.NEXTAUTH_SECRET || "fallback-secret-key-for-production",
+  secret: process.env.NEXTAUTH_SECRET, // Remove fallback for security
   debug: process.env.NODE_ENV === "development",
+  useSecureCookies: process.env.NODE_ENV === "production",
   url: "https://instacares.net",
 };
