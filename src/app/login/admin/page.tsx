@@ -151,7 +151,7 @@ export default function AdminLogin() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (isLocked) {
       setError(`Account is locked. Please wait ${formatLockoutTime()}`);
       return;
@@ -162,25 +162,22 @@ export default function AdminLogin() {
     setSuccessMessage('');
 
     try {
-      // First, try basic authentication
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...formData,
-          userType: 'admin',
-        }),
+      // Import signIn from next-auth/react dynamically
+      const { signIn } = await import('next-auth/react');
+
+      // Use NextAuth signIn with credentials provider
+      const result = await signIn('credentials', {
+        redirect: false,
+        email: formData.email,
+        password: formData.password,
+        userType: 'admin',
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (result?.ok) {
         // Login successful
         saveLoginAttempt(true);
         setSuccessMessage('Authentication successful! Redirecting to admin dashboard...');
-        
+
         // Simulate TOTP check if enabled (for demo purposes)
         if (TOTP_ENABLED && !requiresTOTP && !formData.totpCode) {
           setRequiresTOTP(true);
@@ -188,16 +185,16 @@ export default function AdminLogin() {
           setTimeout(() => totpRef.current?.focus(), 100);
           return;
         }
-        
+
         // Redirect after short delay to show success message
         setTimeout(() => {
           router.push('/admin');
         }, 1500);
-        
+
       } else {
         // Login failed
         saveLoginAttempt(false);
-        setError(data.error || 'Authentication failed');
+        setError(result?.error || 'Authentication failed');
         checkLockoutStatus();
       }
     } catch (error) {
