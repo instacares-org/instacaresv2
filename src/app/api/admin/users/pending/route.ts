@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { withAuth } from '@/lib/auth-middleware';
 
 export async function GET(request: NextRequest) {
   try {
+    // CRITICAL: Require admin authentication
+    const authResult = await withAuth(request, 'ADMIN', true);
+    if (!authResult.isAuthorized) {
+      return authResult.response;
+    }
+
     const pendingUsers = await db.user.findMany({
       where: {
         approvalStatus: 'PENDING'
