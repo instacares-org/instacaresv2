@@ -271,19 +271,16 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     fetchUser();
   }, []);
   
-  // Sync with NextAuth session changes
-  useEffect(() => {
-    if (sessionStatus === 'loading') return; // Still loading
-    
-    if (sessionStatus === 'authenticated' && session?.user && !user) {
-      // NextAuth session exists but our user state doesn't, fetch user data
-      fetchUser();
-    } else if (sessionStatus === 'unauthenticated' && user) {
-      // NextAuth session is gone but we still have user state, clear it
-      setUser(null);
-      setLoading(false);
-    }
-  }, [session, sessionStatus, user]);
+  // Skip NextAuth session sync since we're using JWT authentication
+  // useEffect(() => {
+  //   if (sessionStatus === 'loading') return;
+  //   if (sessionStatus === 'authenticated' && session?.user && !user) {
+  //     fetchUser();
+  //   } else if (sessionStatus === 'unauthenticated' && user) {
+  //     setUser(null);
+  //     setLoading(false);
+  //   }
+  // }, [session, sessionStatus, user]);
 
   // Helper computed values
   const isAuthenticated = !!user;
