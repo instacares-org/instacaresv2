@@ -67,8 +67,41 @@ To enable Google/Facebook login:
 
 ## 🔄 Next Steps
 
-1. Apply environment variable changes to production
-2. Restart production server
-3. Test caregiver authentication
-4. Monitor for remaining 401 errors
-5. Create additional test accounts if needed
+1. **Apply environment variable changes to production**
+2. **Restart production server**
+3. **Run diagnostic script**: `node production-auth-debug.js`
+4. **Create test account**: `node create-production-caregiver.js`
+5. **Test caregiver authentication**
+6. **Monitor for remaining 401 errors**
+
+## 🛠️ Diagnostic Tools
+
+### Debug Authentication Issues
+```bash
+node production-auth-debug.js
+```
+This script will:
+- Check if environment variables are set correctly
+- Test database connection
+- Verify test caregiver account exists
+- Provide specific fix recommendations
+
+### Create Production Test Account
+```bash
+node create-production-caregiver.js
+```
+This script will:
+- Create the test caregiver account in production database
+- Set up proper profile and caregiver records
+- Provide login credentials for testing
+
+## 🚨 Current 401 Error Analysis
+
+The error `POST https://instacares.net/api/auth/callback/credentials 401` indicates:
+
+1. **Missing NEXTAUTH_SECRET** - Most likely cause
+2. **Database connection issues** - Check if production DB is accessible
+3. **Missing test account** - Account may not exist in production database
+4. **Environment variables not loaded** - Server restart required after env changes
+
+Run the diagnostic script first to identify the exact issue!
