@@ -143,6 +143,17 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       }
 
       if (result?.ok) {
+        // Success - trigger redirect based on user type
+        setTimeout(() => {
+          if (userType === 'caregiver') {
+            router.push('/caregiver-dashboard');
+          } else if (userType === 'parent') {
+            router.push('/parent-dashboard');
+          } else {
+            router.push('/dashboard');
+          }
+        }, 100);
+        
         return { success: true };
       }
 

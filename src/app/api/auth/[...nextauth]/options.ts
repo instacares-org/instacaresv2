@@ -168,7 +168,6 @@ export const authOptions: NextAuthOptions = {
   ],
   pages: {
     signIn: "/login",
-    signOut: "/logout", 
     error: "/auth/error",
   },
   callbacks: {
@@ -276,6 +275,17 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async redirect({ url, baseUrl }) {
+      // Handle custom redirects based on user type from token
+      if (url.includes('/login/caregiver')) {
+        return `${baseUrl}/caregiver-dashboard`;
+      }
+      if (url.includes('/login/parent')) {
+        return `${baseUrl}/parent-dashboard`;
+      }
+      if (url.includes('/login/admin')) {
+        return `${baseUrl}/admin-dashboard`;
+      }
+      
       // Allows relative callback URLs
       if (url.startsWith("/")) return `${baseUrl}${url}`;
       // Allows callback URLs on the same origin
@@ -291,8 +301,4 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
   useSecureCookies: process.env.NODE_ENV === "production",
-  // Use environment-specific URLs - let NextAuth auto-detect in development
-  url: process.env.NODE_ENV === "production" 
-    ? "https://instacares.net" 
-    : undefined, // Let NextAuth auto-detect the URL in development
 };
