@@ -22,11 +22,8 @@ export const authOptions: NextAuthOptions = {
     error: "/auth/error",
   },
   callbacks: {
-    async signIn({ user, account, profile }) {
-      console.log("OAuth signIn callback:", { user, account: account?.provider, profile: !!profile });
-      
+    async signIn({ user, account, profile }) {      
       if (!user.email) {
-        console.error("OAuth signIn failed: No user email");
         return false;
       }
       
@@ -38,7 +35,6 @@ export const authOptions: NextAuthOptions = {
 
         if (!dbUser) {
           // Create new user - simplified version
-          console.log("Creating new OAuth user:", user.email);
           dbUser = await prisma.user.create({
             data: {
               email: user.email,
@@ -50,24 +46,15 @@ export const authOptions: NextAuthOptions = {
               isActive: true,
             },
           });
-          console.log("Created user with ID:", dbUser.id);
-        } else {
-          console.log("Found existing user:", dbUser.id);
         }
 
-        console.log("OAuth signIn successful for:", user.email);
         return true;
       } catch (error) {
-        console.error("Error during OAuth sign in:", error);
         // Allow sign-in to continue even if database fails
-        console.log("Allowing OAuth signIn despite database error");
         return true;
       }
     },
     async session({ session, user, token }) {
-      console.log("OAuth session callback:", { email: session?.user?.email });
-      
-      // Temporarily bypass database operations to test OAuth flow
       return session;
     },
     async redirect({ url, baseUrl }) {
@@ -83,6 +70,6 @@ export const authOptions: NextAuthOptions = {
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   secret: process.env.NEXTAUTH_SECRET || "fallback-secret-key-for-production",
-  debug: true, // Enable debug temporarily
+  debug: process.env.NODE_ENV === "development",
   url: "https://instacares.net",
 };

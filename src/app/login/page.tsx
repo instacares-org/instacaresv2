@@ -21,9 +21,7 @@ function LoginContent() {
 
   // Redirect if already authenticated
   useEffect(() => {
-    console.log("Login page session check:", { session, status });
     if (status === "authenticated" && session) {
-      console.log("User is authenticated, redirecting to:", callbackUrl);
       router.push(callbackUrl);
     }
   }, [session, status, callbackUrl, router]);
@@ -57,12 +55,6 @@ function LoginContent() {
           <p className="mt-2 text-center text-sm text-gray-600">
             Continue with your preferred method
           </p>
-          {/* Debug info */}
-          <div className="mt-4 p-3 bg-gray-100 rounded text-xs">
-            <p><strong>Status:</strong> {status}</p>
-            <p><strong>Session:</strong> {session ? `${session.user?.email}` : 'null'}</p>
-            <p><strong>Callback URL:</strong> {callbackUrl}</p>
-          </div>
         </div>
 
         <div className="mt-8 space-y-6">
