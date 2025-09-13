@@ -5,7 +5,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/database";
 
 export const authOptions: NextAuthOptions = {
-  // adapter: PrismaAdapter(prisma) as any, // Temporarily disabled
+  adapter: PrismaAdapter(prisma) as any,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || "",
@@ -27,14 +27,15 @@ export const authOptions: NextAuthOptions = {
         return false;
       }
       
+      // With Prisma adapter enabled, it will handle user creation and account linking
+      // We just need to ensure the user exists and allow the linking
       try {
-        // Check if user already exists
         let dbUser = await prisma.user.findUnique({
           where: { email: user.email },
         });
 
         if (!dbUser) {
-          // Create new user - simplified version
+          // Create new user if doesn't exist
           dbUser = await prisma.user.create({
             data: {
               email: user.email,
@@ -46,15 +47,48 @@ export const authOptions: NextAuthOptions = {
               isActive: true,
             },
           });
+        } else {
+          // User exists - update their info from OAuth if needed
+          await prisma.user.update({
+            where: { id: dbUser.id },
+            data: {
+              name: user.name || dbUser.name,
+              image: user.image || dbUser.image,
+              emailVerified: new Date(),
+              lastLogin: new Date(),
+            },
+          });
         }
 
         return true;
       } catch (error) {
-        // Allow sign-in to continue even if database fails
-        return true;
+        console.error("Error in signIn callback:", error);
+        return true; // Allow OAuth to continue
       }
     },
     async session({ session, user, token }) {
+      if (session?.user?.email) {
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { email: session.user.email },
+            select: {
+              id: true,
+              userType: true,
+              approvalStatus: true,
+              isActive: true,
+            },
+          });
+
+          if (dbUser) {
+            session.user.id = dbUser.id;
+            session.user.userType = dbUser.userType;
+            session.user.approvalStatus = dbUser.approvalStatus;
+            session.user.isActive = dbUser.isActive;
+          }
+        } catch (error) {
+          console.error("Error fetching user session:", error);
+        }
+      }
       return session;
     },
     async redirect({ url, baseUrl }) {
