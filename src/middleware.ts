@@ -117,7 +117,7 @@ export function middleware(request: NextRequest) {
   // CSRF protection for state-changing requests
   if (pathname.startsWith('/api/') && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
     // Skip CSRF for authentication endpoints and public APIs (they handle their own security)
-    const skipCSRFPaths = ['/api/auth/', '/api/login', '/api/signup', '/api/webhook', '/api/csrf-token', '/api/geocode'];
+    const skipCSRFPaths = ['/api/auth/', '/api/login', '/api/signup', '/api/webhook', '/api/csrf-token', '/api/geocode', '/api/admin/'];
     const shouldSkipCSRF = skipCSRFPaths.some(path => pathname.startsWith(path));
     
     if (!shouldSkipCSRF) {

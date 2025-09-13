@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { approvalSchema } from '@/lib/validation';
 import { logger, getClientInfo } from '@/lib/logger';
 import { prisma, withTransaction } from '@/lib/database';
-import { verifyTokenFromRequest } from '@/lib/jwt';
+import { withAuth } from '@/lib/auth-middleware';
 
 // Prevent pre-rendering during build time
 export const runtime = 'nodejs';
@@ -14,30 +14,25 @@ export async function POST(
 ) {
   const clientInfo = getClientInfo(request);
   const startTime = Date.now();
-  let authResult: any = null;
   let userId: string = '';
+  let authResult: any = null;
 
   try {
     const paramsData = await params;
     userId = paramsData.userId;
 
-    // Validate admin authentication using session token
-    const tokenResult = verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user || tokenResult.user.userType !== 'ADMIN') {
+    // Validate admin authentication using NextAuth
+    authResult = await withAuth(request, 'ADMIN', true);
+    if (!authResult.isAuthorized) {
       logger.security('Unauthorized admin approval attempt', {
         ip: clientInfo.ip,
         userAgent: clientInfo.userAgent,
         targetUserId: userId,
         error: 'Invalid admin session'
       });
-
-      return NextResponse.json(
-        { error: 'Admin access required' },
-        { status: 401 }
-      );
+      
+      return authResult.response;
     }
-    
-    authResult = { isValid: true, adminId: tokenResult.user.id };
 
     // Validate user ID format (basic CUID validation)
     if (!userId || typeof userId !== 'string' || userId.length < 10) {
@@ -54,7 +49,7 @@ export async function POST(
     } catch (error) {
       logger.warn('Invalid JSON in approval request', { 
         ip: clientInfo.ip,
-        adminId: authResult.adminId 
+        adminId: authResult.user?.id 
       });
       return NextResponse.json(
         { error: 'Invalid request format' },
@@ -103,7 +98,7 @@ export async function POST(
           logger.warn('Re-approving caregiver with missing caregiver record', {
             userId: userId,
             email: existingUser.email,
-            adminId: authResult.adminId
+            adminId: authResult.user?.id
           });
         } else {
           // User is already approved and has caregiver record - this is truly redundant
@@ -171,14 +166,14 @@ export async function POST(
         logger.info('Auto-created caregiver record for approved user', {
           userId: userId,
           email: updatedUser.email,
-          adminId: authResult.adminId
+          adminId: authResult.user?.id
         });
       } catch (caregiverCreateError) {
         // Log but don't fail the approval if caregiver creation fails
         logger.error('Failed to auto-create caregiver record', caregiverCreateError, {
           userId: userId,
           email: updatedUser.email,
-          adminId: authResult.adminId
+          adminId: authResult.user?.id
         });
       }
     }
@@ -190,7 +185,7 @@ export async function POST(
 
     // Audit log for admin action
     logger.audit(isRedundantChange ? 'User re-approval for missing caregiver record' : 'User approval status changed', {
-      adminId: authResult.adminId,
+      adminId: authResult.user?.id,
       targetUserId: userId,
       targetEmail: result.updatedUser.email,
       action: action,
@@ -219,7 +214,7 @@ export async function POST(
     // Handle specific known errors
     if (error.message === 'USER_NOT_FOUND') {
       logger.warn('Approval attempt for non-existent user', {
-        adminId: authResult?.adminId,
+        adminId: authResult?.user?.id,
         targetUserId: userId,
         ip: clientInfo.ip
       });
@@ -239,7 +234,7 @@ export async function POST(
 
     // Log unexpected errors
     logger.error('User approval failed', error, {
-      adminId: authResult?.adminId,
+      adminId: authResult?.user?.id,
       targetUserId: userId,
       ip: clientInfo.ip,
       userAgent: clientInfo.userAgent,
