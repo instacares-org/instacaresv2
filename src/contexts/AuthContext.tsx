@@ -83,7 +83,25 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   // Fetch current user data
   const fetchUser = async (): Promise<void> => {
     try {
-      // Use JWT token authentication directly (skip NextAuth session check)
+      // First check if we have a NextAuth session (for Google OAuth)
+      if (session?.user) {
+        console.log('fetchUser: Using NextAuth session', session.user);
+        setUser({
+          id: session.user.id || session.user.email || '', 
+          email: session.user.email || '',
+          userType: (session.user as any).userType || 'PARENT',
+          approvalStatus: (session.user as any).approvalStatus || 'APPROVED',
+          profile: {
+            firstName: session.user.name?.split(' ')[0] || 'User',
+            lastName: session.user.name?.split(' ').slice(1).join(' ') || '',
+            avatar: session.user.image || undefined
+          }
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Fallback to JWT token authentication (for email/password)
       console.log('fetchUser: Starting JWT-based user fetch');
       const localToken = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null;
       const cookieToken = Cookies.get('auth-token');
@@ -271,16 +289,21 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     fetchUser();
   }, []);
   
-  // Skip NextAuth session sync since we're using JWT authentication
-  // useEffect(() => {
-  //   if (sessionStatus === 'loading') return;
-  //   if (sessionStatus === 'authenticated' && session?.user && !user) {
-  //     fetchUser();
-  //   } else if (sessionStatus === 'unauthenticated' && user) {
-  //     setUser(null);
-  //     setLoading(false);
-  //   }
-  // }, [session, sessionStatus, user]);
+  // Sync with NextAuth session changes (for Google OAuth)
+  useEffect(() => {
+    if (sessionStatus === 'loading') return;
+    
+    if (sessionStatus === 'authenticated' && session?.user && !user) {
+      // NextAuth session exists, use it
+      console.log('NextAuth session detected, fetching user');
+      fetchUser();
+    } else if (sessionStatus === 'unauthenticated' && user && !localStorage.getItem('auth-token') && !Cookies.get('auth-token')) {
+      // NextAuth session is gone AND no JWT tokens, clear user
+      console.log('No NextAuth session and no JWT tokens, clearing user');
+      setUser(null);
+      setLoading(false);
+    }
+  }, [session, sessionStatus, user]);
 
   // Helper computed values
   const isAuthenticated = !!user;

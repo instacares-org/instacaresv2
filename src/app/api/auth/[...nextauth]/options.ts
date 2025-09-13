@@ -42,7 +42,7 @@ export const authOptions: NextAuthOptions = {
               emailVerified: new Date(),
               image: user.image,
               userType: "PARENT",
-              approvalStatus: "PENDING", 
+              approvalStatus: "APPROVED", // Auto-approve Google OAuth users for testing
               isActive: true,
               lastLogin: new Date(),
             },
