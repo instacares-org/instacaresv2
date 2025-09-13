@@ -294,9 +294,9 @@ export const authOptions: NextAuthOptions = {
         return `${baseUrl}/parent-dashboard`;
       }
       if (url.includes('/login/admin')) {
-        return `${baseUrl}/admin-dashboard`;
+        return `${baseUrl}/admin`;
       }
-      
+
       // Allows relative callback URLs
       if (url.startsWith("/")) return `${baseUrl}${url}`;
       // Allows callback URLs on the same origin
