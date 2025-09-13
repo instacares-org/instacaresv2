@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { bookingOperations } from '@/lib/db';
 import { AvailabilityService } from '@/lib/availabilityService';
-// import { // verifyTokenFromRequest } from '@/lib/jwt';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { logger, getClientInfo } from '@/lib/logger';
 
 // POST /api/bookings/slot-based - Create slot-based booking
@@ -10,12 +11,12 @@ export async function POST(request: NextRequest) {
   
   try {
     // Verify authentication
-    const tokenResult = // verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       logger.security('Unauthorized slot-based booking creation attempt', {
         ip: clientInfo.ip,
         userAgent: clientInfo.userAgent,
-        error: tokenResult.error
+        error: 'No session'
       });
       
       return NextResponse.json(
@@ -25,10 +26,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify user is a parent
-    if (tokenResult.user.userType !== 'PARENT') {
+    if (session.user.userType !== 'PARENT') {
       logger.security('Non-parent user attempted to create slot-based booking', {
-        userId: tokenResult.user.userId,
-        userType: tokenResult.user.userType,
+        userId: session.user.id,
+        userType: session.user.userType,
         ip: clientInfo.ip,
         userAgent: clientInfo.userAgent
       });
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest) {
 
     // Create slot-based booking
     const booking = await bookingOperations.createBooking({
-      parentId: tokenResult.user.userId,
+      parentId: session.user.id,
       caregiverId: targetSlot.caregiver.user.id, // Use the caregiver's user ID
       startTime: start,
       endTime: end,
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
 
     logger.info('Slot-based booking created', {
       bookingId: booking.id,
-      parentId: tokenResult.user.userId,
+      parentId: session.user.id,
       caregiverId: targetSlot.caregiver.user.id,
       slotId,
       childrenCount,
@@ -181,8 +182,8 @@ export async function GET(request: NextRequest) {
   
   try {
     // Verify authentication
-    const tokenResult = // verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }

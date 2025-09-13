@@ -1,28 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
-// import { // verifyTokenFromRequest, extractTokenFromRequest } from '@/lib/jwt';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '../[...nextauth]/route';
 import { cookies } from 'next/headers';
 
 export async function GET(request: NextRequest) {
   try {
-    // Debug authentication
-    const token = extractTokenFromRequest(request);
+    // Debug NextAuth session
+    const session = await getServerSession(authOptions);
     const cookieStore = cookies();
-    const authCookie = cookieStore.get('auth-token');
     
     // Get all cookies for debugging
     const allCookies = cookieStore.getAll();
     
-    const authResult = // verifyTokenFromRequest(request);
+    // Check NextAuth session cookie
+    const sessionCookie = cookieStore.get('next-auth.session-token') || cookieStore.get('__Secure-next-auth.session-token');
     
     // Check request headers
     const authHeader = request.headers.get('authorization');
     
     return NextResponse.json({
       debug: {
-        hasToken: !!token,
-        tokenPreview: token ? `${token.substring(0, 20)}...` : null,
-        hasCookie: !!authCookie,
-        cookiePreview: authCookie ? `${authCookie.value.substring(0, 20)}...` : null,
+        hasSession: !!session,
+        sessionUser: session?.user ? {
+          id: session.user.id,
+          email: session.user.email,
+          userType: session.user.userType,
+          approvalStatus: session.user.approvalStatus
+        } : null,
+        hasSessionCookie: !!sessionCookie,
+        sessionCookiePreview: sessionCookie ? `${sessionCookie.value.substring(0, 20)}...` : null,
         allCookiesCount: allCookies.length,
         allCookieNames: allCookies.map(c => c.name),
         hasAuthHeader: !!authHeader,
@@ -30,22 +36,16 @@ export async function GET(request: NextRequest) {
         userAgent: request.headers.get('user-agent')?.substring(0, 50),
         origin: request.headers.get('origin'),
         referer: request.headers.get('referer'),
-        authResult: {
-          isValid: authResult.isValid,
-          error: authResult.error,
-          user: authResult.user ? {
-            userId: authResult.user.userId,
-            email: authResult.user.email,
-            userType: authResult.user.userType,
-            approvalStatus: authResult.user.approvalStatus,
-          } : null
+        nextAuthStatus: {
+          isAuthenticated: !!session,
+          sessionExpires: session?.expires || null
         }
       }
     });
   } catch (error) {
     return NextResponse.json({
       error: error instanceof Error ? error.message : 'Debug failed',
-      debug: 'Authentication debug endpoint failed'
+      debug: 'NextAuth debug endpoint failed'
     }, { status: 500 });
   }
 }

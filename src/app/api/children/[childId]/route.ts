@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-// import { // verifyTokenFromRequest } from '@/lib/jwt';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
 
 // DELETE /api/children/[childId] - Delete a specific child profile
@@ -8,8 +9,8 @@ export async function DELETE(
   { params }: { params: Promise<{ childId: string }> }
 ) {
   try {
-    const tokenResult = // verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -17,7 +18,7 @@ export async function DELETE(
     }
 
     // Verify user is a parent
-    if (tokenResult.user.userType !== 'PARENT') {
+    if (session.user.userType !== 'PARENT') {
       return NextResponse.json(
         { error: 'Only parents can delete child profiles' },
         { status: 403 }
@@ -30,7 +31,7 @@ export async function DELETE(
     const child = await db.child.findFirst({
       where: {
         id: childId,
-        parentId: tokenResult.user.userId
+        parentId: session.user.id
       }
     });
 
@@ -47,7 +48,7 @@ export async function DELETE(
     // Check if child has any active bookings or check-ins
     const activeBookings = await db.booking.count({
       where: {
-        parentId: tokenResult.user.userId,
+        parentId: session.user.id,
         status: {
           in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS']
         }
@@ -101,8 +102,8 @@ export async function PUT(
   { params }: { params: Promise<{ childId: string }> }
 ) {
   try {
-    const tokenResult = // verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -110,7 +111,7 @@ export async function PUT(
     }
 
     // Verify user is a parent
-    if (tokenResult.user.userType !== 'PARENT') {
+    if (session.user.userType !== 'PARENT') {
       return NextResponse.json(
         { error: 'Only parents can update child profiles' },
         { status: 403 }
@@ -124,7 +125,7 @@ export async function PUT(
     const existingChild = await db.child.findFirst({
       where: {
         id: childId,
-        parentId: tokenResult.user.userId
+        parentId: session.user.id
       }
     });
 
@@ -200,8 +201,8 @@ export async function GET(
   { params }: { params: Promise<{ childId: string }> }
 ) {
   try {
-    const tokenResult = // verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -209,7 +210,7 @@ export async function GET(
     }
 
     // Verify user is a parent
-    if (tokenResult.user.userType !== 'PARENT') {
+    if (session.user.userType !== 'PARENT') {
       return NextResponse.json(
         { error: 'Only parents can access child profiles' },
         { status: 403 }
@@ -222,7 +223,7 @@ export async function GET(
     const child = await db.child.findFirst({
       where: {
         id: childId,
-        parentId: tokenResult.user.userId
+        parentId: session.user.id
       }
     });
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-// import { // verifyTokenFromRequest } from '@/lib/jwt';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { AvailabilityService } from '@/lib/availabilityService';
 import { SlotStatus } from '@prisma/client';
 
@@ -56,15 +57,15 @@ export async function GET(request: NextRequest) {
 // POST /api/availability/slots - Create new availability slot (caregivers only)
 export async function POST(request: NextRequest) {
   try {
-    const tokenResult = // verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       return NextResponse.json(
         { error: 'Authentication required. Please log in again.' },
         { status: 401 }
       );
     }
 
-    if (tokenResult.user.userType !== 'CAREGIVER') {
+    if (session.user.userType !== 'CAREGIVER') {
       return NextResponse.json(
         { error: 'Only caregivers can create availability slots' },
         { status: 403 }
@@ -94,13 +95,13 @@ export async function POST(request: NextRequest) {
     // First find the caregiver record for this user
     const { prisma } = await import('@/lib/database');
     const caregiver = await prisma.caregiver.findUnique({
-      where: { userId: tokenResult.user.userId }
+      where: { userId: session.user.id }
     });
 
     if (!caregiver) {
       // If caregiver record doesn't exist, create it
       const user = await prisma.user.findUnique({
-        where: { id: tokenResult.user.userId },
+        where: { id: session.user.id },
         include: { profile: true }
       });
       
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
       // Create caregiver record with default values
       const newCaregiver = await prisma.caregiver.create({
         data: {
-          userId: tokenResult.user.userId,
+          userId: session.user.id,
           hourlyRate: baseRate || 25.00,
           experienceYears: 0,
           bio: '',
@@ -179,15 +180,15 @@ export async function POST(request: NextRequest) {
 // PUT /api/availability/slots - Update existing availability slot
 export async function PUT(request: NextRequest) {
   try {
-    const tokenResult = // verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
       );
     }
 
-    if (tokenResult.user.userType !== 'CAREGIVER') {
+    if (session.user.userType !== 'CAREGIVER') {
       return NextResponse.json(
         { error: 'Only caregivers can update availability slots' },
         { status: 403 }
@@ -215,7 +216,7 @@ export async function PUT(request: NextRequest) {
     // First find the caregiver record for this user
     const { prisma } = await import('@/lib/database');
     const caregiver = await prisma.caregiver.findUnique({
-      where: { userId: tokenResult.user.userId }
+      where: { userId: session.user.id }
     });
 
     if (!caregiver) {
@@ -274,15 +275,15 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/availability/slots - Delete availability slot
 export async function DELETE(request: NextRequest) {
   try {
-    const tokenResult = // verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
       );
     }
 
-    if (tokenResult.user.userType !== 'CAREGIVER') {
+    if (session.user.userType !== 'CAREGIVER') {
       return NextResponse.json(
         { error: 'Only caregivers can delete availability slots' },
         { status: 403 }
@@ -302,7 +303,7 @@ export async function DELETE(request: NextRequest) {
     // First find the caregiver record for this user
     const { prisma } = await import('@/lib/database');
     const caregiver = await prisma.caregiver.findUnique({
-      where: { userId: tokenResult.user.userId }
+      where: { userId: session.user.id }
     });
 
     if (!caregiver) {

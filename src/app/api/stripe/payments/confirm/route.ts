@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { bookingOperations } from '@/lib/db';
-// import { // verifyTokenFromRequest } from '@/lib/jwt';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,8 +16,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify authentication
-    const tokenResult = // verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -63,14 +64,14 @@ export async function POST(request: NextRequest) {
           console.log('- Payment Intent ID:', paymentIntentId);
           console.log('- Metadata caregiverId:', caregiverId);
           console.log('- Metadata caregiverName:', caregiverName);
-          console.log('- User ID from token:', tokenResult.user.userId);
+          console.log('- User ID from token:', session.user.id);
           console.log('- Full metadata:', metadata);
           
           // If caregiverId is not in metadata, we need to find it another way
           if (!caregiverId) {
             // Try to find caregiver by name - this is not ideal but works for demo
             const { PrismaClient } = await import('@prisma/client');
-            
+            const db = new PrismaClient();
             
             const caregiver = await db.user.findFirst({
               where: {
@@ -105,14 +106,14 @@ export async function POST(request: NextRequest) {
 
           // Create the booking record
           console.log('📝 CREATING BOOKING WITH:');
-          console.log('- parentId:', tokenResult.user.userId);
+          console.log('- parentId:', session.user.id);
           console.log('- caregiverId:', caregiverId);
           console.log('- startTime:', startDateTime);
           console.log('- endTime:', endDateTime);
           console.log('- totalAmount:', totalAmount);
           
           const booking = await bookingOperations.createBooking({
-            parentId: tokenResult.user.userId,
+            parentId: session.user.id,
             caregiverId: caregiverId,
             startTime: startDateTime,
             endTime: endDateTime,

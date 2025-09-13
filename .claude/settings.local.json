@@ -65,7 +65,9 @@
       "Bash(gh workflow:*)",
       "Bash(move .githubworkflowsproduction-deploy.yml .githubworkflowsproduction-deploy.yml.disabled)",
       "Bash(ssh:*)",
-      "Read(//c/Users/fhabib/Pictures/**)"
+      "Read(//c/Users/fhabib/Pictures/**)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)"
     ],
     "deny": [],
     "ask": [],

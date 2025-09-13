@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-// import { // verifyTokenFromRequest } from '@/lib/jwt';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { AvailabilityService } from '@/lib/availabilityService';
 
 // POST /api/availability/reserve - Reserve spots temporarily
 export async function POST(request: NextRequest) {
   try {
-    const tokenResult = // verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
       );
     }
 
-    if (tokenResult.user.userType !== 'PARENT') {
+    if (session.user.userType !== 'PARENT') {
       return NextResponse.json(
         { error: 'Only parents can reserve spots' },
         { status: 403 }
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
 
     const reservation = await AvailabilityService.reserveSpots({
       slotId,
-      parentId: tokenResult.user.userId,
+      parentId: session.user.id,
       childrenCount,
       reservedSpots
     });
@@ -63,8 +64,8 @@ export async function POST(request: NextRequest) {
 // DELETE /api/availability/reserve - Cancel reservation
 export async function DELETE(request: NextRequest) {
   try {
-    const tokenResult = // verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }

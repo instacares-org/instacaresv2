@@ -1,0 +1,58 @@
+{
+  "timestamp": "2025-09-13T15:00:02.704Z",
+  "summary": {
+    "total": 8,
+    "passed": 5,
+    "failed": 3,
+    "passRate": "62.5%"
+  },
+  "tests": [
+    {
+      "name": "Homepage loads correctly",
+      "status": "FAILED",
+      "duration": 1329,
+      "error": "Login link not found on homepage"
+    },
+    {
+      "name": "Login page accessible",
+      "status": "FAILED",
+      "duration": 250,
+      "error": "SyntaxError: Failed to execute 'querySelector' on 'Document': 'button:has-text(\"Continue with Google\")' is not a valid selector."
+    },
+    {
+      "name": "Google OAuth flow initiates",
+      "status": "FAILED",
+      "duration": 30076,
+      "error": "Waiting for selector `button:has-text(\"Continue with Google\")` failed"
+    },
+    {
+      "name": "Unauthorized admin access blocked",
+      "status": "PASSED",
+      "duration": 243
+    },
+    {
+      "name": "Security headers present",
+      "status": "PASSED",
+      "duration": 253
+    },
+    {
+      "name": "Responsive design works",
+      "status": "PASSED",
+      "duration": 1596
+    },
+    {
+      "name": "Error pages display correctly",
+      "status": "PASSED",
+      "duration": 102
+    },
+    {
+      "name": "Page load performance acceptable",
+      "status": "PASSED",
+      "duration": 900
+    }
+  ],
+  "environment": {
+    "baseUrl": "https://instacares.net",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+  }
+}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { bookingOperations } from '@/lib/db';
-// import { // verifyTokenFromRequest } from '@/lib/jwt';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { logger, getClientInfo } from '@/lib/logger';
 import { apiCache, cacheKeys } from '@/lib/cache';
 
@@ -14,13 +15,13 @@ export async function PATCH(
   
   try {
     // Verify authentication
-    const tokenResult = // verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       logger.security('Unauthorized booking status update attempt', {
         bookingId: bookingId,
         ip: clientInfo.ip,
         userAgent: clientInfo.userAgent,
-        error: tokenResult.error
+        error: 'No session'
       });
       
       return NextResponse.json(
@@ -58,14 +59,14 @@ export async function PATCH(
     }
 
     // Check if user is authorized to update this booking
-    const isCaregiver = tokenResult.user.userType === 'CAREGIVER' && booking.caregiverId === tokenResult.user.userId;
-    const isParent = tokenResult.user.userType === 'PARENT' && booking.parentId === tokenResult.user.userId;
-    const isAdmin = tokenResult.user.userType === 'ADMIN';
+    const isCaregiver = session.user.userType === 'CAREGIVER' && booking.caregiverId === session.user.id;
+    const isParent = session.user.userType === 'PARENT' && booking.parentId === session.user.id;
+    const isAdmin = session.user.userType === 'ADMIN';
 
     if (!isCaregiver && !isParent && !isAdmin) {
       logger.security('Unauthorized booking status update', {
-        userId: tokenResult.user.userId,
-        userType: tokenResult.user.userType,
+        userId: session.user.id,
+        userType: session.user.userType,
         bookingId: bookingId,
         ip: clientInfo.ip,
         userAgent: clientInfo.userAgent
@@ -92,8 +93,8 @@ export async function PATCH(
       bookingId: bookingId,
       oldStatus: booking.status,
       newStatus: status,
-      updatedBy: tokenResult.user.userId,
-      userType: tokenResult.user.userType
+      updatedBy: session.user.id,
+      userType: session.user.userType
     });
 
     return NextResponse.json({
@@ -113,7 +114,7 @@ export async function PATCH(
     
     logger.error('Booking status update failed', {
       bookingId: bookingId,
-      userId: tokenResult?.user?.userId,
+      userId: session?.user?.id,
       ip: clientInfo.ip,
       error: error instanceof Error ? error.message : 'Unknown error'
     });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-// import { // verifyTokenFromRequest } from '@/lib/jwt';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 
 // PATCH /api/reviews/[reviewId] - Update review (admin only for moderation)
 export async function PATCH(
@@ -13,8 +14,8 @@ export async function PATCH(
     const { isApproved, moderatorNotes } = body;
     
     // Verify admin authentication
-    const tokenResult = // verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -23,7 +24,7 @@ export async function PATCH(
     
     // Check if user is admin
     const adminUser = await db.user.findUnique({
-      where: { id: tokenResult.user.userId }
+      where: { id: session.user.id }
     });
     
     if (!adminUser || adminUser.userType !== 'ADMIN') {
@@ -102,8 +103,8 @@ export async function DELETE(
     const { reviewId } = params;
     
     // Verify admin authentication
-    const tokenResult = // verifyTokenFromRequest(request);
-    if (!tokenResult.isValid || !tokenResult.user) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -112,7 +113,7 @@ export async function DELETE(
     
     // Check if user is admin
     const adminUser = await db.user.findUnique({
-      where: { id: tokenResult.user.userId }
+      where: { id: session.user.id }
     });
     
     if (!adminUser || adminUser.userType !== 'ADMIN') {
