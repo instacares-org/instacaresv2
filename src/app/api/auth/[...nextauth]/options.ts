@@ -4,26 +4,8 @@ import FacebookProvider from "next-auth/providers/facebook";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/database";
 
-// Custom adapter to handle required userType field
-const customPrismaAdapter = {
-  ...PrismaAdapter(prisma),
-  async createUser(data: any) {
-    // Add required fields that NextAuth doesn't provide
-    const userData = {
-      ...data,
-      userType: "PARENT", // Default for OAuth users
-      approvalStatus: "PENDING",
-      isActive: true,
-    };
-    
-    return await prisma.user.create({
-      data: userData,
-    });
-  },
-};
-
 export const authOptions: NextAuthOptions = {
-  adapter: customPrismaAdapter as any,
+  // No adapter - use pure JWT with database callbacks
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || "",
@@ -45,19 +27,45 @@ export const authOptions: NextAuthOptions = {
         return false;
       }
       
-      // Custom adapter handles user creation with required fields
-      // Just update lastLogin for existing users
       try {
-        await prisma.user.update({
+        // Check if user exists in database
+        let dbUser = await prisma.user.findUnique({
           where: { email: user.email },
-          data: { lastLogin: new Date() },
-        }).catch(() => {
-          // User doesn't exist yet - adapter will create them
         });
-        
+
+        if (!dbUser) {
+          // Create new user with all required fields
+          dbUser = await prisma.user.create({
+            data: {
+              email: user.email,
+              name: user.name || "OAuth User",
+              emailVerified: new Date(),
+              image: user.image,
+              userType: "PARENT",
+              approvalStatus: "PENDING", 
+              isActive: true,
+              lastLogin: new Date(),
+            },
+          });
+          console.log("Created new OAuth user:", dbUser.email);
+        } else {
+          // Update existing user
+          await prisma.user.update({
+            where: { id: dbUser.id },
+            data: {
+              name: user.name || dbUser.name,
+              image: user.image || dbUser.image,
+              emailVerified: new Date(),
+              lastLogin: new Date(),
+            },
+          });
+          console.log("Updated existing user:", dbUser.email);
+        }
+
         return true;
       } catch (error) {
-        console.error("Error in signIn callback:", error);
+        console.error("Database error in signIn:", error);
+        // Don't fail the OAuth flow for database issues
         return true;
       }
     },
