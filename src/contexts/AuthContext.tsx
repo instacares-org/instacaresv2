@@ -83,25 +83,8 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   // Fetch current user data
   const fetchUser = async (): Promise<void> => {
     try {
-      // First try NextAuth session endpoint
-      const sessionResponse = await fetch('/api/auth/session', {
-        method: 'GET',
-        credentials: 'include',
-      });
-
-      console.log('Session response:', sessionResponse.status);
-
-      if (sessionResponse.ok) {
-        const sessionData = await sessionResponse.json();
-        console.log('Session data:', sessionData);
-        if (sessionData.success && sessionData.user) {
-          setUser(sessionData.user);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Fallback to JWT token authentication
+      // Use JWT token authentication directly (skip NextAuth session check)
+      console.log('fetchUser: Starting JWT-based user fetch');
       const localToken = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null;
       const cookieToken = Cookies.get('auth-token');
       const token = localToken || cookieToken;
