@@ -31,7 +31,12 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async signIn({ user, account, profile }) {
-      if (!user.email) return false;
+      console.log("OAuth signIn callback:", { user, account: account?.provider, profile: !!profile });
+      
+      if (!user.email) {
+        console.error("OAuth signIn failed: No user email");
+        return false;
+      }
       
       try {
         // Check if user already exists
@@ -80,13 +85,17 @@ export const authOptions: NextAuthOptions = {
           }
         });
 
+        console.log("OAuth signIn successful for:", user.email);
         return true;
       } catch (error) {
         console.error("Error during OAuth sign in:", error);
+        console.error("User data:", { email: user.email, name: user.name });
         return false;
       }
     },
     async session({ session, user, token }) {
+      console.log("OAuth session callback:", { email: session?.user?.email });
+      
       if (session?.user?.email) {
         try {
           const dbUser = await prisma.user.findUnique({
