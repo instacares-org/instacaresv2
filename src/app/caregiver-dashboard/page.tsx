@@ -94,7 +94,7 @@ interface Booking {
 
 function CaregiverDashboardContent() {
   const { user, loading: authLoading, isAuthenticated, isCaregiver, logout, refreshUser } = useAuth();
-  const { caregiverId, loading: caregiverLoading } = useCaregiverProfile();
+  const { caregiverId, loading: caregiverLoading, error: caregiverError } = useCaregiverProfile();
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -1763,7 +1763,22 @@ function CaregiverDashboardContent() {
                 />
               ) : (
                 <div className="text-center py-8 text-red-500">
-                  <p>Unable to load caregiver profile. Please try refreshing the page.</p>
+                  <ExclamationTriangleIcon className="h-12 w-12 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">Unable to load caregiver profile</h3>
+                  {caregiverError && (
+                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                      Error: {caregiverError}
+                    </p>
+                  )}
+                  <p className="text-sm mb-4">
+                    Please ensure you're logged in as a caregiver and try refreshing the page.
+                  </p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  >
+                    Refresh Page
+                  </button>
                 </div>
               )}
             </div>
