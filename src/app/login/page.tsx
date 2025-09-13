@@ -1,12 +1,14 @@
 "use client";
 
-import { signIn, getProviders } from "next-auth/react";
+import { signIn, getProviders, useSession } from "next-auth/react";
 import { useEffect, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 
 function LoginContent() {
   const [providers, setProviders] = useState<any>(null);
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const { data: session, status } = useSession();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
 
   useEffect(() => {
@@ -16,6 +18,27 @@ function LoginContent() {
     };
     getProvidersData();
   }, []);
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    console.log("Login page session check:", { session, status });
+    if (status === "authenticated" && session) {
+      console.log("User is authenticated, redirecting to:", callbackUrl);
+      router.push(callbackUrl);
+    }
+  }, [session, status, callbackUrl, router]);
+
+  // Show loading while checking authentication
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-rose-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -34,6 +57,12 @@ function LoginContent() {
           <p className="mt-2 text-center text-sm text-gray-600">
             Continue with your preferred method
           </p>
+          {/* Debug info */}
+          <div className="mt-4 p-3 bg-gray-100 rounded text-xs">
+            <p><strong>Status:</strong> {status}</p>
+            <p><strong>Session:</strong> {session ? `${session.user?.email}` : 'null'}</p>
+            <p><strong>Callback URL:</strong> {callbackUrl}</p>
+          </div>
         </div>
 
         <div className="mt-8 space-y-6">
