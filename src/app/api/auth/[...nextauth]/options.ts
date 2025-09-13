@@ -1,11 +1,29 @@
 import { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import FacebookProvider from "next-auth/providers/facebook";
-import { PrismaAdapter } from "@auth/prisma-adapter";
+import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/database";
 
+// Custom adapter to handle required userType field
+const customPrismaAdapter = {
+  ...PrismaAdapter(prisma),
+  async createUser(data: any) {
+    // Add required fields that NextAuth doesn't provide
+    const userData = {
+      ...data,
+      userType: "PARENT", // Default for OAuth users
+      approvalStatus: "PENDING",
+      isActive: true,
+    };
+    
+    return await prisma.user.create({
+      data: userData,
+    });
+  },
+};
+
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma) as any,
+  adapter: customPrismaAdapter as any,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || "",
@@ -22,48 +40,25 @@ export const authOptions: NextAuthOptions = {
     error: "/auth/error",
   },
   callbacks: {
-    async signIn({ user, account, profile }) {      
+    async signIn({ user, account, profile }) {
       if (!user.email) {
         return false;
       }
       
-      // With Prisma adapter enabled, it will handle user creation and account linking
-      // We just need to ensure the user exists and allow the linking
+      // Custom adapter handles user creation with required fields
+      // Just update lastLogin for existing users
       try {
-        let dbUser = await prisma.user.findUnique({
+        await prisma.user.update({
           where: { email: user.email },
+          data: { lastLogin: new Date() },
+        }).catch(() => {
+          // User doesn't exist yet - adapter will create them
         });
-
-        if (!dbUser) {
-          // Create new user if doesn't exist
-          dbUser = await prisma.user.create({
-            data: {
-              email: user.email,
-              name: user.name || "OAuth User",
-              emailVerified: new Date(),
-              image: user.image,
-              userType: "PARENT",
-              approvalStatus: "PENDING",
-              isActive: true,
-            },
-          });
-        } else {
-          // User exists - update their info from OAuth if needed
-          await prisma.user.update({
-            where: { id: dbUser.id },
-            data: {
-              name: user.name || dbUser.name,
-              image: user.image || dbUser.image,
-              emailVerified: new Date(),
-              lastLogin: new Date(),
-            },
-          });
-        }
-
+        
         return true;
       } catch (error) {
         console.error("Error in signIn callback:", error);
-        return true; // Allow OAuth to continue
+        return true;
       }
     },
     async session({ session, user, token }) {
