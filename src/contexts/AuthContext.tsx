@@ -129,11 +129,19 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
         console.log('fetchUser error:', response.status, errorData);
-        // Clear invalid session
-        setUser(null);
-        Cookies.remove('auth-token');
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('auth-token');
+        console.log('Current tokens when fetch failed:', {
+          localStorage: typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null,
+          cookies: Cookies.get('auth-token')
+        });
+        // Don't clear session immediately on error - could be temporary
+        // Only clear if it's clearly an auth error (401/403)
+        if (response.status === 401 || response.status === 403) {
+          console.log('Clearing invalid session due to 401/403');
+          setUser(null);
+          Cookies.remove('auth-token');
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('auth-token');
+          }
         }
       }
     } catch (error) {
@@ -171,10 +179,12 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       console.log('Login response:', { status: response.status, data });
 
       if (response.ok) {
+        console.log('Login successful, setting user:', data.user);
         setUser(data.user);
         
         // Store token in multiple places for reliability
         if (data.token) {
+          console.log('Storing auth token');
           // localStorage fallback
           localStorage.setItem('auth-token', data.token);
           // js-cookie fallback (non-httpOnly)
@@ -184,6 +194,12 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
             sameSite: 'lax'
           });
         }
+        
+        // Force a user fetch to ensure session is properly established
+        setTimeout(() => {
+          console.log('Fetching user after login to ensure session');
+          fetchUser();
+        }, 100);
         
         setLoading(false);
         return { success: true };
