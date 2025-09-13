@@ -6,10 +6,10 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 // PATCH /api/reviews/[reviewId] - Update review (admin only for moderation)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { reviewId: string } }
+  { params }: { params: Promise<{ reviewId: string }> }
 ) {
   try {
-    const { reviewId } = params;
+    const { reviewId } = await params;
     const body = await request.json();
     const { isApproved, moderatorNotes } = body;
     
@@ -97,10 +97,10 @@ export async function PATCH(
 // DELETE /api/reviews/[reviewId] - Delete review (admin only)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { reviewId: string } }
+  { params }: { params: Promise<{ reviewId: string }> }
 ) {
   try {
-    const { reviewId } = params;
+    const { reviewId } = await params;
     
     // Verify admin authentication
     const session = await getServerSession(authOptions);

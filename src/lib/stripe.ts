@@ -28,7 +28,7 @@ export const getStripeInstance = (): Stripe | null => {
   
   // Create and cache the instance
   stripeInstance = new Stripe(apiKey, {
-    apiVersion: '2024-06-20',
+    apiVersion: '2025-08-27.basil',
   });
   
   return stripeInstance;

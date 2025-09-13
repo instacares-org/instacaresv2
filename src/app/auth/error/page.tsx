@@ -1,5 +1,6 @@
-export default function AuthError({ searchParams }: { searchParams: { error?: string } }) {
-  const error = searchParams?.error;
+export default async function AuthError({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const resolvedSearchParams = await searchParams;
+  const error = resolvedSearchParams?.error;
   
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">

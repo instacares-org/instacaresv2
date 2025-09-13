@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
         passwordHash,
         userType: mappedUserType,
         approvalStatus: 'PENDING', // New users require approval
-        emailVerified: false,
+        emailVerified: null, // Use null instead of false for DateTime field
         profile: {
           create: profileData
         }

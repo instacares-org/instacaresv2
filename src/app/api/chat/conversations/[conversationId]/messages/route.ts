@@ -4,9 +4,9 @@ import { getAuthenticatedUser, createApiResponse, formatUserInfo } from '@/lib/c
 import { logger } from '@/lib/logger';
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     conversationId: string;
-  };
+  }>;
 }
 
 /**
@@ -16,12 +16,12 @@ interface RouteContext {
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
     const user = await getAuthenticatedUser(request);
-    
+
     if (!user) {
       return createApiResponse(false, null, 'Authentication required', 401);
     }
 
-    const { conversationId } = context.params;
+    const { conversationId } = await context.params;
     const { searchParams } = new URL(request.url);
     
     // Pagination parameters

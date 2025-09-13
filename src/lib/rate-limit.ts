@@ -53,7 +53,8 @@ export function getClientIP(request: NextRequest): string {
     return ips[0];
   }
   
-  return request.ip || 'unknown';
+  // Note: request.ip is not available in Next.js 15
+  return '127.0.0.1';
 }
 
 // Default key generator using IP and endpoint

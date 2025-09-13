@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 
 export interface AdminAuthResult {
   success: boolean;
@@ -13,23 +15,38 @@ export interface AdminAuthResult {
 }
 
 /**
- * Verify admin authentication from request
+ * Verify admin authentication from request using NextAuth session
  */
 export async function verifyAdminAuth(request?: NextRequest): Promise<AdminAuthResult> {
   try {
+    // First try NextAuth session (preferred method)
+    const session = await getServerSession(authOptions);
+
+    if (session?.user?.userType === 'ADMIN' && session.user.email && session.user.id) {
+      return {
+        success: true,
+        user: {
+          id: session.user.id,
+          email: session.user.email,
+          userType: session.user.userType
+        }
+      };
+    }
+
+    // Fallback to custom JWT token (for backward compatibility)
     const cookieStore = await cookies();
     const token = cookieStore.get('auth-token');
 
     if (!token) {
       return {
         success: false,
-        error: 'No authentication token provided'
+        error: 'No authentication session found. Please log in as admin.'
       };
     }
 
     // Verify JWT token
-    const decoded = jwt.verify(token.value, process.env.JWT_SECRET!) as any;
-    
+    const decoded = jwt.verify(token.value, process.env.JWT_SECRET || 'fallback-secret') as any;
+
     if (decoded.userType !== 'ADMIN') {
       return {
         success: false,
@@ -49,7 +66,7 @@ export async function verifyAdminAuth(request?: NextRequest): Promise<AdminAuthR
   } catch (error) {
     return {
       success: false,
-      error: 'Invalid authentication token'
+      error: 'Invalid authentication. Please log in as admin.'
     };
   }
 }

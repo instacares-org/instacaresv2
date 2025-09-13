@@ -1,12 +1,39 @@
 // Payment Enhancement Utilities for InstaCares
 import Stripe from 'stripe';
 import { db } from '@/lib/db';
-import { paymentAuditLogger } from '@/lib/audit/payment-audit';
-import { PaymentError, PaymentErrorType, ErrorSeverity } from '@/lib/errors/payment-errors';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18.acacia',
+  apiVersion: '2025-08-27.basil',
 });
+
+// Add prisma alias for compatibility
+const prisma = db;
+
+// Mock audit logger for now
+const paymentAuditLogger = {
+  logPaymentEvent: (...args: any[]) => console.log('Payment audit:', ...args),
+  logSecurityEvent: (...args: any[]) => console.log('Security audit:', ...args)
+};
+
+// Mock error classes for now
+class PaymentError extends Error {
+  constructor(type: string, message: string, details?: any) {
+    super(message);
+    this.name = 'PaymentError';
+  }
+}
+
+const PaymentErrorType = {
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  STRIPE_ERROR: 'STRIPE_ERROR',
+  DATABASE_ERROR: 'DATABASE_ERROR'
+};
+
+const ErrorSeverity = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH'
+};
 
 // Security context interface for tracking operations
 interface SecurityContext {

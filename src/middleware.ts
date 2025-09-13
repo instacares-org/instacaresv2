@@ -15,7 +15,8 @@ const RATE_LIMITS = {
 function getClientIP(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
   const real = request.headers.get('x-real-ip');
-  const clientIP = forwarded?.split(',')[0]?.trim() || real || request.ip || 'unknown';
+  // Note: request.ip is not available in Next.js 15, use alternative methods
+  const clientIP = forwarded?.split(',')[0]?.trim() || real || '127.0.0.1';
   return clientIP;
 }
 
