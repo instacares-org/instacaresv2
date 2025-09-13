@@ -14,12 +14,9 @@ export async function POST(request: NextRequest) {
           lastName: 'Johnson',
           phone: '+1-416-555-0101',
           streetAddress: '123 Queen Street West',
-          apartment: 'Unit 5B',
           city: 'Toronto',
           state: 'ON',
-          zipCode: 'M5H 2M9',
-          postalCode: 'M5H 2M9',
-          country: 'Canada'
+          zipCode: 'M5H 2M9'
         }
       },
       {
@@ -31,12 +28,9 @@ export async function POST(request: NextRequest) {
           lastName: 'Chen',
           phone: '+1-416-555-0202',
           streetAddress: '456 King Street East',
-          apartment: 'Suite 12A',
           city: 'Toronto',
           state: 'ON',
-          zipCode: 'M5A 1L4',
-          postalCode: 'M5A 1L4',
-          country: 'Canada'
+          zipCode: 'M5A 1L4'
         }
       }
     ];
