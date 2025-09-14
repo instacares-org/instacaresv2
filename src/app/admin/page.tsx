@@ -1235,7 +1235,7 @@ export default function AdminDashboard() {
 
         {/* Chat Management Tab */}
         {activeTab === 'chats' && (
-          <AdminChatManagement adminUserId="cmeovt72y0000wmhocc32ymtr" />
+          <AdminChatManagement adminUserId="cmf4qhrxq0000jxm105goaj7n" />
         )}
 
         {/* Review Moderation Tab */}
