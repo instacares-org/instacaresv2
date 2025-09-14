@@ -104,7 +104,8 @@
       "Bash(del create-caregiver-test.js)",
       "Bash(del fix-caregiver-password.js)",
       "Bash(del debug-caregiver-auth.js fix-caregiver-profile.js test-caregiver-login.js test-login-attempt.js)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(del production-auth-debug.js create-production-caregiver.js server.js)"
     ],
     "deny": [],
     "ask": [],
