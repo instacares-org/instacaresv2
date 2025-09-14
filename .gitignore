@@ -30,8 +30,17 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# CRITICAL: Environment files - NEVER commit these!
+# These contain sensitive production credentials
+.env
+.env.*
+.env.local
+.env.production
+.env.production.local
+.env.development
+.env.development.local
+.env.staging
+.env.test
 
 # vercel
 .vercel
@@ -42,3 +51,31 @@ next-env.d.ts
 .qodo
 
 /src/generated/prisma
+
+# Temporary development/debugging files
+*.js
+!src/**/*.js
+!InstaCaresMobile/**/*.js
+!scripts/**/*.js
+*.png
+*.json
+!package*.json
+!tsconfig*.json
+!next*.json
+!InstaCaresMobile/**/*.json
+*.md
+!README.md
+!DEPLOYMENT_SAFEGUARDS.md
+*.sh
+!scripts/**/*.sh
+testing-scripts/
+logs/
+
+# Development database files
+prisma/dev.db*
+prisma/prisma/
+
+# Screenshots and test reports
+*screenshot*.png
+*test-report*.json
+*-report-*.json
