@@ -105,7 +105,10 @@
       "Bash(del fix-caregiver-password.js)",
       "Bash(del debug-caregiver-auth.js fix-caregiver-profile.js test-caregiver-login.js test-login-attempt.js)",
       "Bash(grep:*)",
-      "Bash(del production-auth-debug.js create-production-caregiver.js server.js)"
+      "Bash(del production-auth-debug.js create-production-caregiver.js server.js)",
+      "Bash(del test-chat-debug.js get-real-caregiver-ids.js)",
+      "Bash(NODE_ENV=production node deploy-chat-test-to-production.js)",
+      "Bash(scp:*)"
     ],
     "deny": [],
     "ask": [],
