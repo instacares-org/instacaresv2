@@ -100,7 +100,11 @@
       "Bash(move verify-test-accounts.js testing-scripts )",
       "Bash(move visual-browser-test.js testing-scripts )",
       "Bash(move working-visual-test.js testing-scripts )",
-      "Bash(move:*)"
+      "Bash(move:*)",
+      "Bash(del create-caregiver-test.js)",
+      "Bash(del fix-caregiver-password.js)",
+      "Bash(del debug-caregiver-auth.js fix-caregiver-profile.js test-caregiver-login.js test-login-attempt.js)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": [],
