@@ -1234,14 +1234,24 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                         
                         const matchingSlot = allAvailability.find(slot => {
                           if (slot.date.split('T')[0] !== targetDate) return false;
-                          
+
                           const slotStart = new Date(slot.startTime);
                           const slotEnd = new Date(slot.endTime);
-                          const bookingStart = new Date(slot.date);
-                          bookingStart.setHours(startHour, startMin, 0, 0);
-                          const bookingEnd = new Date(slot.date);
-                          bookingEnd.setHours(endHour, endMin, 0, 0);
-                          
+
+                          // Parse the slot date more carefully to avoid timezone issues in validation
+                          const slotDateStr = slot.date.split('T')[0]; // Get just the date part
+                          const [year, month, day] = slotDateStr.split('-').map(Number);
+                          const bookingStart = new Date(year, month - 1, day, startHour, startMin, 0, 0);
+                          const bookingEnd = new Date(year, month - 1, day, endHour, endMin, 0, 0);
+
+                          console.log('🔍 Validation comparison:', {
+                            slotStart: slotStart.toISOString(),
+                            slotEnd: slotEnd.toISOString(),
+                            bookingStart: bookingStart.toISOString(),
+                            bookingEnd: bookingEnd.toISOString(),
+                            isValid: bookingStart >= slotStart && bookingEnd <= slotEnd && slot.availableSpots > 0
+                          });
+
                           // Check if booking time falls within this slot
                           return bookingStart >= slotStart && bookingEnd <= slotEnd && slot.availableSpots > 0;
                         });
