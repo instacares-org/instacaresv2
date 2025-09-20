@@ -1027,13 +1027,19 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                   console.log('🕐 Single-day Time Selection Debug:', {
                                     targetDate,
                                     allAvailabilityCount: allAvailability.length,
-                                    allAvailabilityDates: allAvailability.map(s => s.date.split('T')[0])
+                                    allAvailabilityDates: allAvailability.map(s => s.date.split('T')[0]),
+                                    sampleSlot: allAvailability[0] ? {
+                                      date: allAvailability[0].date,
+                                      startTime: allAvailability[0].startTime,
+                                      endTime: allAvailability[0].endTime,
+                                      availableSpots: allAvailability[0].availableSpots
+                                    } : null
                                   });
-                                  
-                                  const selectedDateSlots = allAvailability.filter(slot => 
+
+                                  const selectedDateSlots = allAvailability.filter(slot =>
                                     slot.date.split('T')[0] === targetDate && slot.availableSpots > 0
                                   );
-                                  
+
                                   console.log('🎯 Selected Date Slots:', {
                                     targetDate,
                                     slotsFound: selectedDateSlots.length,
@@ -1113,39 +1119,62 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                 const targetDate = bookingDetails.isMultiDay ? bookingDetails.startDate : bookingDetails.date;
                                 if (!targetDate) return [];
                                 
-                                const selectedDateSlots = allAvailability.filter(slot => 
+                                const selectedDateSlots = allAvailability.filter(slot =>
                                   slot.date.split('T')[0] === targetDate && slot.availableSpots > 0
                                 );
-                                
+
+                                console.log('🕐 End Time Debug:', {
+                                  targetDate,
+                                  selectedStartTime: bookingDetails.startTime,
+                                  selectedDateSlots: selectedDateSlots.map(s => ({
+                                    id: s.id,
+                                    date: s.date,
+                                    startTime: s.startTime,
+                                    endTime: s.endTime,
+                                    spots: s.availableSpots
+                                  }))
+                                });
+
                                 const availableEndTimes = [];
                                 selectedDateSlots.forEach(slot => {
-                                  const slotStart = new Date(slot.startTime);
-                                  const slotEnd = new Date(slot.endTime);
-                                  const selectedStartTime = bookingDetails.startTime;
-                                  const [startHour, startMin] = selectedStartTime.split(':').map(Number);
-                                  
-                                  // Check if selected start time falls within this slot
-                                  const selectedStart = new Date(slot.date);
-                                  selectedStart.setHours(startHour, startMin, 0, 0);
-                                  
-                                  if (selectedStart >= slotStart && selectedStart < slotEnd) {
-                                    // Generate possible end times from 1 hour after start up to slot end
-                                    const minEndTime = new Date(selectedStart);
-                                    minEndTime.setHours(minEndTime.getHours() + 1); // Minimum 1 hour booking
-                                    
-                                    // Generate hourly and half-hourly end times
-                                    for (let current = new Date(minEndTime); current <= slotEnd; current.setMinutes(current.getMinutes() + 30)) {
-                                      const timeStr = `${current.getHours().toString().padStart(2, '0')}:${current.getMinutes().toString().padStart(2, '0')}`;
-                                      if (!availableEndTimes.includes(timeStr)) {
-                                        availableEndTimes.push(timeStr);
+                                  try {
+                                    const slotStart = new Date(slot.startTime);
+                                    const slotEnd = new Date(slot.endTime);
+                                    const selectedStartTime = bookingDetails.startTime;
+                                    const [startHour, startMin] = selectedStartTime.split(':').map(Number);
+
+                                    // Create a date object for the selected start time on the slot's date
+                                    const slotDate = new Date(slot.date);
+                                    const selectedStart = new Date(slotDate.getFullYear(), slotDate.getMonth(), slotDate.getDate(), startHour, startMin, 0, 0);
+
+                                    console.log('🔍 Slot comparison:', {
+                                      slotStart: slotStart.toISOString(),
+                                      slotEnd: slotEnd.toISOString(),
+                                      selectedStart: selectedStart.toISOString(),
+                                      startsWithinSlot: selectedStart >= slotStart && selectedStart < slotEnd
+                                    });
+
+                                    if (selectedStart >= slotStart && selectedStart < slotEnd) {
+                                      // Generate possible end times from 1 hour after start up to slot end
+                                      const minEndTime = new Date(selectedStart);
+                                      minEndTime.setHours(minEndTime.getHours() + 1); // Minimum 1 hour booking
+
+                                      // Generate hourly and half-hourly end times
+                                      for (let current = new Date(minEndTime); current <= slotEnd; current.setMinutes(current.getMinutes() + 30)) {
+                                        const timeStr = `${current.getHours().toString().padStart(2, '0')}:${current.getMinutes().toString().padStart(2, '0')}`;
+                                        if (!availableEndTimes.includes(timeStr)) {
+                                          availableEndTimes.push(timeStr);
+                                        }
+                                      }
+
+                                      // Add the exact slot end time
+                                      const exactEnd = `${slotEnd.getHours().toString().padStart(2, '0')}:${slotEnd.getMinutes().toString().padStart(2, '0')}`;
+                                      if (!availableEndTimes.includes(exactEnd)) {
+                                        availableEndTimes.push(exactEnd);
                                       }
                                     }
-                                    
-                                    // Add the exact slot end time
-                                    const exactEnd = `${slotEnd.getHours().toString().padStart(2, '0')}:${slotEnd.getMinutes().toString().padStart(2, '0')}`;
-                                    if (!availableEndTimes.includes(exactEnd)) {
-                                      availableEndTimes.push(exactEnd);
-                                    }
+                                  } catch (error) {
+                                    console.error('Error processing slot for end times:', error, slot);
                                   }
                                 });
                                 
