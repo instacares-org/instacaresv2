@@ -1144,8 +1144,10 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                     const [startHour, startMin] = selectedStartTime.split(':').map(Number);
 
                                     // Create a date object for the selected start time on the slot's date
-                                    const slotDate = new Date(slot.date);
-                                    const selectedStart = new Date(slotDate.getFullYear(), slotDate.getMonth(), slotDate.getDate(), startHour, startMin, 0, 0);
+                                    // Parse the slot date more carefully to avoid timezone issues
+                                    const slotDateStr = slot.date.split('T')[0]; // Get just the date part
+                                    const [year, month, day] = slotDateStr.split('-').map(Number);
+                                    const selectedStart = new Date(year, month - 1, day, startHour, startMin, 0, 0);
 
                                     console.log('🔍 Slot comparison:', {
                                       slotStart: slotStart.toISOString(),
