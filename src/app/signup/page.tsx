@@ -123,7 +123,8 @@ export default function SignupPage() {
           confirmPassword: formData.confirmPassword,
           phone: formData.phone,
           userType: formData.userType,
-          agreeToTerms: formData.agreeToTerms
+          agreeToTerms: formData.agreeToTerms,
+          agreeToMarketing: formData.agreeToMarketing
         })
       });
 

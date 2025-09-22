@@ -5,7 +5,18 @@ import { prisma } from '@/lib/database';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    let body: any;
+    try {
+      const text = await request.text();
+      body = JSON.parse(text);
+    } catch (parseError) {
+      console.error('JSON parsing error:', parseError);
+      return NextResponse.json(
+        { error: 'Invalid JSON format in request body' },
+        { status: 400 }
+      );
+    }
+
     const { email, password, userType } = body;
 
     if (!email || !password) {
@@ -98,8 +109,12 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Login error:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     return NextResponse.json(
-      { error: 'Authentication failed' },
+      {
+        error: 'Authentication failed',
+        details: process.env.NODE_ENV === 'development' ? error instanceof Error ? error.message : String(error) : undefined
+      },
       { status: 500 }
     );
   }
