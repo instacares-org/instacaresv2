@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CheckCircleIcon, EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import Image from "next/image";
+import PasswordStrengthIndicator from "@/components/PasswordStrengthIndicator";
 
 export default function SignupPage() {
   const [formData, setFormData] = useState({
@@ -374,11 +375,10 @@ export default function SignupPage() {
                 </button>
               </div>
               {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
-              {!errors.password && (
-                <div className="mt-1 text-xs text-gray-500">
-                  Password must contain: lowercase, uppercase, number, and special character (@$!%*?&)
-                </div>
-              )}
+              <PasswordStrengthIndicator
+                password={formData.password}
+                showRequirements={true}
+              />
             </div>
 
             {/* Confirm Password */}
