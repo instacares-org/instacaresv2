@@ -53,10 +53,20 @@ export async function POST(request: NextRequest) {
         return acc;
       }, {} as Record<string, string>);
 
-      logger.info('Registration validation failed', { 
-        errors, 
+      // Enhanced logging for debugging
+      console.log('Registration validation failed:', {
+        receivedData: requestBody,
+        validationErrors: errors,
+        allIssues: validationResult.error.issues
+      });
+
+      logger.info('Registration validation failed', {
+        errors,
         ip: clientInfo.ip,
-        email: requestBody.email 
+        email: requestBody.email,
+        receivedFields: Object.keys(requestBody || {}),
+        missingFields: ['firstName', 'lastName', 'email', 'password', 'confirmPassword', 'phone', 'userType', 'agreeToTerms']
+          .filter(field => !requestBody?.[field])
       });
 
       return NextResponse.json(
