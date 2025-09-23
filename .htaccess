@@ -1,0 +1,33 @@
+# Enable rewrite engine
+RewriteEngine On
+
+# Ensure proper MIME types for static assets
+AddType application/javascript .js
+AddType text/css .css
+AddType application/json .json
+
+# Allow access to _next directory
+<IfModule mod_alias.c>
+    # Don't block _next directory
+    <Directory "_next">
+        Order allow,deny
+        Allow from all
+    </Directory>
+</IfModule>
+
+# Prevent blocking of static files
+<FilesMatch "\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$">
+    Order allow,deny
+    Allow from all
+</FilesMatch>
+
+# Enable compression for better performance
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css application/javascript application/json
+</IfModule>
+
+# Security headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+</IfModule>

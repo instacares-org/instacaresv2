@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
     // Disable strict mode that might cause issues
     forceSwcTransforms: true,
   },
+  // Try standalone output for better Hostinger compatibility
+  output: 'standalone',
   // Reduce hydration warnings from browser extensions
   reactStrictMode: false,
   typescript: {
@@ -16,9 +18,8 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    // Keep optimization disabled for production reliability
-    // The nginx + Next.js setup makes optimization complex
-    unoptimized: process.env.NODE_ENV === 'production',
+    // Disable optimization completely for Hostinger compatibility
+    unoptimized: true,
     // Removed deprecated domains configuration - using remotePatterns only
     remotePatterns: [
       {
@@ -44,56 +45,10 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 3600, // 1 hour cache
     dangerouslyAllowSVG: true,
   },
-  // Add optimized caching headers
-  async headers() {
-    return [
-      {
-        source: '/uploads/:path*',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-      {
-        source: '/_next/static/:path*',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-      {
-        source: '/logo.png',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-      {
-        source: '/_next/image/:path*',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-      {
-        source: '/caregivers/:path*',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=86400, must-revalidate',
-          },
-        ],
-      },
-    ];
-  },
+  // Disable custom headers for Hostinger compatibility
+  // async headers() {
+  //   return [];
+  // },
 };
 
 export default nextConfig;
