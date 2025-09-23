@@ -153,7 +153,7 @@ const ImprovedHeader: React.FC<ImprovedHeaderProps> = ({ className }) => {
           {/* Right Side Navigation */}
           <div className="flex items-center space-x-4 justify-end">
             <Link 
-              href="/signup" 
+              href="/?signup=true" 
               className="hidden md:inline-flex text-gray-600 hover:text-gray-900 transition-colors focus:outline-none focus:ring-2 focus:ring-rose-500 rounded-md px-2 py-1"
             >
               Sign Up

@@ -282,7 +282,7 @@ export default function CaregiverLoginPage() {
             {/* Sign Up Link */}
             <div className="text-center space-y-2">
               <Link
-                href="/signup"
+                href="/?signup=true"
                 className="w-full bg-white hover:bg-gray-50 text-green-600 font-medium py-3 px-4 rounded-lg border-2 border-green-600 transition duration-150 inline-block"
               >
                 Create Caregiver Account

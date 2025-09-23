@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import dynamic from 'next/dynamic';
 import SocialLogin from './SocialLogin';
+import PasswordStrengthIndicator from './PasswordStrengthIndicator';
 
 // Dynamic import to avoid SSR issues with Mapbox
 const MapboxAddressAutocomplete = dynamic(
@@ -42,9 +43,13 @@ export default function SignupModal({ isOpen, onClose }: SignupModalProps) {
     city: '',
     province: '',
     postalCode: '',
-    agreeToTerms: false
+    agreeToTerms: false,
+    agreeToMarketing: false
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [emailValidation, setEmailValidation] = useState({
     isChecking: false,
     exists: false,
@@ -158,6 +163,7 @@ export default function SignupModal({ isOpen, onClose }: SignupModalProps) {
           postalCode: formData.postalCode,
           userType: userType === 'caregiver' ? 'provider' : 'parent',
           agreeToTerms: formData.agreeToTerms,
+          agreeToMarketing: formData.agreeToMarketing,
         }),
       });
 
@@ -175,7 +181,8 @@ export default function SignupModal({ isOpen, onClose }: SignupModalProps) {
           city: '',
           province: '',
           postalCode: '',
-          agreeToTerms: false
+          agreeToTerms: false,
+          agreeToMarketing: false
         });
       } else {
         const errorData = await response.json();
@@ -325,29 +332,63 @@ export default function SignupModal({ isOpen, onClose }: SignupModalProps) {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
                   Password
                 </label>
-                <input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-rose-500 dark:focus:border-rose-400"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-1.5 pr-10 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-rose-500 dark:focus:border-rose-400"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    {showPassword ? (
+                      <EyeSlashIcon className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <EyeIcon className="h-4 w-4 text-gray-400" />
+                    )}
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
                   Confirm Password
                 </label>
-                <input
-                  type="password"
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-rose-500 dark:focus:border-rose-400"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    name="confirmPassword"
+                    value={formData.confirmPassword}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-1.5 pr-10 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-rose-500 dark:focus:border-rose-400"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    {showConfirmPassword ? (
+                      <EyeSlashIcon className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <EyeIcon className="h-4 w-4 text-gray-400" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
+
+            {/* Password Strength Indicator */}
+            {formData.password && (
+              <PasswordStrengthIndicator
+                password={formData.password}
+                showRequirements={true}
+              />
+            )}
 
             {/* Phone */}
             <div>
@@ -421,26 +462,42 @@ export default function SignupModal({ isOpen, onClose }: SignupModalProps) {
             )}
 
             {/* Terms and Conditions */}
-            <div className="flex items-start space-x-3">
-              <input
-                type="checkbox"
-                name="agreeToTerms"
-                checked={formData.agreeToTerms}
-                onChange={handleInputChange}
-                className="mt-1 h-4 w-4 text-rose-600 focus:ring-rose-500 border-gray-300 dark:border-gray-600 dark:bg-gray-800 rounded"
-                required
-              />
-              <label className="text-sm text-gray-700 dark:text-gray-300">
-                I acknowledge that I have read, understood, and agree to be bound by InstaCares'{' '}
-                <a href="/terms" target="_blank" className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline font-medium">
-                  Terms of Service
-                </a>{' '}
-                and{' '}
-                <a href="/privacy" target="_blank" className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline font-medium">
-                  Privacy Policy
-                </a>
-                . I understand that I am waiving certain legal rights, including the right to sue or claim compensation in certain circumstances.
-              </label>
+            <div className="space-y-3">
+              <div className="flex items-start space-x-3">
+                <input
+                  type="checkbox"
+                  name="agreeToTerms"
+                  checked={formData.agreeToTerms}
+                  onChange={handleInputChange}
+                  className="mt-1 h-4 w-4 text-rose-600 focus:ring-rose-500 border-gray-300 dark:border-gray-600 dark:bg-gray-800 rounded"
+                  required
+                />
+                <label className="text-sm text-gray-700 dark:text-gray-300">
+                  I acknowledge that I have read, understood, and agree to be bound by InstaCares'{' '}
+                  <a href="/terms" target="_blank" className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline font-medium">
+                    Terms of Service
+                  </a>{' '}
+                  and{' '}
+                  <a href="/privacy" target="_blank" className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline font-medium">
+                    Privacy Policy
+                  </a>
+                  . I understand that I am waiving certain legal rights, including the right to sue or claim compensation in certain circumstances.
+                </label>
+              </div>
+
+              {/* Marketing Checkbox */}
+              <div className="flex items-start space-x-3">
+                <input
+                  type="checkbox"
+                  name="agreeToMarketing"
+                  checked={formData.agreeToMarketing}
+                  onChange={handleInputChange}
+                  className="mt-1 h-4 w-4 text-rose-600 focus:ring-rose-500 border-gray-300 dark:border-gray-600 dark:bg-gray-800 rounded"
+                />
+                <label className="text-sm text-gray-700 dark:text-gray-300">
+                  I would like to receive promotional emails and updates from InstaCares
+                </label>
+              </div>
             </div>
           </div>
 

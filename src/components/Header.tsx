@@ -3,7 +3,7 @@
 import Image from "next/image";
 import OptimizedImage from "./OptimizedImage";
 import { GlobeAltIcon, MagnifyingGlassIcon, UserCircleIcon, Bars3BottomLeftIcon, CalendarDaysIcon, UserGroupIcon, AdjustmentsHorizontalIcon } from "@heroicons/react/24/solid";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import Calendar from "./Calendar";
 import Link from "next/link";
 import SignupModal from "./SignupModal";
@@ -42,6 +42,20 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginUserType, setLoginUserType] = useState<'parent' | 'caregiver' | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Check for signup query parameter
+  useEffect(() => {
+    // Check if we're in the browser and have the signup parameter
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('signup') === 'true' && !isAuthenticated) {
+        setShowSignupModal(true);
+        // Remove the query parameter after opening the modal
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+      }
+    }
+  }, [isAuthenticated]);
   
   // Local filter state when not connected to search page
   const [localFilters, setLocalFilters] = useState<FilterState>({

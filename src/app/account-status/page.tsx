@@ -228,7 +228,7 @@ export default function AccountStatusPage() {
             <div className="text-sm text-gray-600 space-y-2">
               <p>
                 Don't have an account?{" "}
-                <Link href="/signup" className="text-indigo-600 hover:text-indigo-500 font-medium">
+                <Link href="/?signup=true" className="text-indigo-600 hover:text-indigo-500 font-medium">
                   Sign up here
                 </Link>
               </p>
