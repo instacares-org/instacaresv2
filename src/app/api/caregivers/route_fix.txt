@@ -1,0 +1,11 @@
+return NextResponse.json({
+      success: true,
+      data: formattedCaregivers,
+      pagination: {
+        limit,
+        offset,
+        total: formattedCaregivers.length,
+        hasMore: formattedCaregivers.length === limit,
+      },
+      showCaregiverContactInfo,
+    });

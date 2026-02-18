@@ -1,0 +1,24 @@
+--- a/availabilityService.ts
++++ b/availabilityService.ts
+@@ -127,6 +127,21 @@
+       notes
+     };
+ 
++    // VALIDATION FIX: Validate parsed Date objects before attempting to save
++    // This prevents the "premature end of input" Prisma error
++    if (isNaN(startTimeObj.getTime())) {
++      const receivedValue = typeof startTime === 'string' ? startTime : String(startTime);
++      throw new Error(`Invalid startTime: Cannot parse "${receivedValue}" into a valid Date object. Expected format: "YYYY-MM-DDTHH:MM:SS" or "YYYY-MM-DDTHH:MM:SSZ"`);
++    }
++    if (isNaN(endTimeObj.getTime())) {
++      const receivedValue = typeof endTime === 'string' ? endTime : String(endTime);
++      throw new Error(`Invalid endTime: Cannot parse "${receivedValue}" into a valid Date object. Expected format: "YYYY-MM-DDTHH:MM:SS" or "YYYY-MM-DDTHH:MM:SSZ"`);
++    }
++    if (isNaN(localDate.getTime())) {
++      const receivedValue = typeof date === 'string' ? date : String(date);
++      throw new Error(`Invalid date: Cannot parse "${receivedValue}" into a valid Date object. Expected format: "YYYY-MM-DD"`);
++    }
++
+     try {
+       return await db.availabilitySlot.create({
+         data: slotData

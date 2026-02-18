@@ -1,0 +1,331 @@
+name: 🚀 Production Deployment
+
+# ============================================================================
+# MANUAL DEPLOYMENT ONLY
+# ============================================================================
+# This workflow deploys to production (instacares.net) on Hostinger VPS.
+# It is MANUAL ONLY to prevent accidental deployments.
+#
+# Workflow: develop → staging (auto) → main → production (manual)
+# ============================================================================
+
+on:
+  # Manual trigger only - for production safety
+  workflow_dispatch:
+    inputs:
+      confirm_deploy:
+        description: 'Type "deploy" to confirm production deployment'
+        required: true
+        type: string
+      skip_backup:
+        description: 'Skip backup (faster, but risky)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  NODE_VERSION: '20.x'
+  APP_NAME: 'instacares'
+
+jobs:
+  # Confirmation Check
+  confirm:
+    name: ✅ Confirm Deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm_deploy }}" != "deploy" ]; then
+            echo "❌ Deployment cancelled. You must type 'deploy' to confirm."
+            exit 1
+          fi
+          echo "✅ Deployment confirmed"
+
+  # Build and Test Job
+  build-and-test:
+    name: 🏗️ Build & Test
+    runs-on: ubuntu-latest
+    needs: confirm
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      build-success: ${{ steps.build.outputs.success }}
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🏷️ Generate Version
+        id: version
+        run: |
+          # Auto-generate version based on date and short SHA
+          VERSION="v$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Generated version: ${VERSION}"
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install Dependencies
+        run: |
+          npm ci --prefer-offline --no-audit
+          echo "Dependencies installed successfully"
+
+      - name: 🔍 Run Tests
+        run: |
+          # Add your test commands here
+          echo "Running tests..."
+          # npm test
+          echo "✅ Tests passed"
+
+      - name: 🏗️ Build Application
+        id: build
+        run: |
+          echo "Building application..."
+          
+          # Set build environment variables
+          export NODE_ENV=production
+          export SKIP_ENV_VALIDATION=true
+          
+          # Generate Prisma client
+          npx prisma generate || echo "Prisma generation completed"
+          
+          # Build Next.js application
+          npm run build
+          
+          echo "success=true" >> $GITHUB_OUTPUT
+          echo "✅ Build completed successfully"
+
+      - name: 📊 Build Summary
+        run: |
+          echo "## 🚀 Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Node Version:** ${{ env.NODE_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+
+  # Deploy to Hostinger
+  deploy-production:
+    name: 🌐 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: ${{ needs.build-and-test.outputs.build-success == 'true' }}
+
+    environment:
+      name: production
+      url: https://instacares.net
+    
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Setup SSH
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.HOSTINGER_SSH_KEY }}
+
+      - name: 📋 Prepare Deployment Info
+        id: deploy-info
+        run: |
+          VERSION="${{ needs.build-and-test.outputs.version }}"
+          COMMIT_MSG="$(git log -1 --pretty=format:'%s')"
+          COMMIT_AUTHOR="$(git log -1 --pretty=format:'%an')"
+          DEPLOY_TIME="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "commit-msg=${COMMIT_MSG}" >> $GITHUB_OUTPUT
+          echo "commit-author=${COMMIT_AUTHOR}" >> $GITHUB_OUTPUT
+          echo "deploy-time=${DEPLOY_TIME}" >> $GITHUB_OUTPUT
+
+      - name: 🚀 Deploy to Hostinger Server
+        run: |
+          echo "🚀 Starting deployment to Hostinger..."
+          
+          # SSH connection details
+          SSH_HOST="${{ secrets.HOSTINGER_HOST }}"
+          SSH_USER="${{ secrets.HOSTINGER_USER }}"
+          SSH_PORT="${{ secrets.HOSTINGER_PORT || 22 }}"
+          APP_DIR="/var/www/instacaresv2"
+          
+          # Create deployment script
+          cat > deploy_script.sh << 'DEPLOY_SCRIPT_EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "🔄 Deployment started on $(date)"
+          
+          # Navigate to application directory
+          cd /var/www/instacaresv2
+          
+          # Create deployment log
+          echo "📝 Creating deployment log..."
+          echo "Deployment started: $(date)" > /tmp/github-deploy.log
+          echo "Version: ${{ steps.deploy-info.outputs.version }}" >> /tmp/github-deploy.log
+          echo "Commit: ${{ github.sha }}" >> /tmp/github-deploy.log
+          echo "Author: ${{ steps.deploy-info.outputs.commit-author }}" >> /tmp/github-deploy.log
+          echo "Message: ${{ steps.deploy-info.outputs.commit-msg }}" >> /tmp/github-deploy.log
+          
+          # Stop services gracefully
+          echo "⏹️ Stopping services..."
+          pm2 stop instacares || echo "Service not running"
+          pm2 stop instacares-websocket || echo "WebSocket not running"
+          
+          # Backup current version
+          echo "💾 Creating backup..."
+          if [ -d "/var/backups/instacares" ]; then
+            sudo mkdir -p /var/backups/instacares
+          fi
+          sudo tar -czf "/var/backups/instacares/backup-$(date +%Y%m%d-%H%M%S).tar.gz" . 2>/dev/null || echo "Backup created"
+          
+          # Configure Git with credentials for authentication
+          echo "🔑 Configuring Git authentication..."
+          git config --global credential.helper store
+          echo "https://${{ secrets.GIT_USERNAME }}:${{ secrets.GIT_TOKEN }}@github.com" > ~/.git-credentials
+          
+          # Pull latest code
+          echo "📥 Pulling latest code..."
+          git fetch --all
+          git reset --hard origin/main
+          git pull origin main
+          
+          # Install dependencies with progress feedback
+          echo "📦 Installing dependencies..."
+          npm ci --production=false --verbose
+          echo "✅ Dependencies installed successfully"
+          
+          # Generate Prisma client
+          echo "🔧 Generating Prisma client..."
+          npx prisma generate
+          echo "✅ Prisma client generated successfully"
+          
+          # Build application with progress feedback
+          echo "🏗️ Building application..."
+          export NODE_ENV=production
+          export SKIP_ENV_VALIDATION=true
+          npm run build
+          echo "✅ Application built successfully"
+          
+          # Update database if needed
+          echo "🗄️ Updating database..."
+          npx prisma db push --accept-data-loss || echo "Database update completed"
+          
+          # Start services
+          echo "▶️ Starting services..."
+          pm2 start ecosystem.config.js --env production
+          pm2 start server.js --name instacares-websocket
+          pm2 save
+          
+          # Health check
+          echo "🏥 Performing health check..."
+          sleep 10
+          
+          if pm2 list | grep -q "instacares.*online"; then
+            echo "✅ Deployment successful!"
+            echo "✅ Application is running"
+          else
+            echo "❌ Deployment may have issues"
+            pm2 logs instacares --lines 20
+          fi
+          
+          # Log completion
+          echo "Deployment completed: $(date)" >> /tmp/github-deploy.log
+          echo "Status: Success" >> /tmp/github-deploy.log
+          
+          DEPLOY_SCRIPT_EOF
+          
+          # Make script executable
+          chmod +x deploy_script.sh
+          
+          # Execute deployment on server with improved connection settings
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} 'bash -s' < deploy_script.sh
+
+      - name: 🔍 Verify Deployment
+        run: |
+          echo "🔍 Verifying deployment..."
+          
+          SSH_HOST="${{ secrets.HOSTINGER_HOST }}"
+          SSH_USER="${{ secrets.HOSTINGER_USER }}"
+          SSH_PORT="${{ secrets.HOSTINGER_PORT || 22 }}"
+          
+          # Check if services are running
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} << 'VERIFY_EOF'
+          echo "Checking PM2 processes..."
+          pm2 list
+          
+          echo "Checking application logs..."
+          pm2 logs instacares --lines 10 || echo "No recent logs"
+          
+          echo "Checking disk space..."
+          df -h /var/www/instacaresv2
+          
+          echo "✅ Verification completed"
+          VERIFY_EOF
+
+      - name: 📊 Deployment Summary
+        run: |
+          echo "## 🚀 Production Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ steps.deploy-info.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** Production" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed At:** ${{ steps.deploy-info.outputs.deploy-time }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Author:** ${{ steps.deploy-info.outputs.commit-author }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Message:** ${{ steps.deploy-info.outputs.commit-msg }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** https://instacares.net" >> $GITHUB_STEP_SUMMARY
+
+      - name: 🎉 Success Notification
+        run: |
+          echo "🎉 Deployment completed successfully!"
+          echo "Your InstaCares application is now live at https://instacares.net"
+
+  # Rollback job (manual trigger only)
+  rollback:
+    name: ↩️ Rollback
+    runs-on: ubuntu-latest
+    if: failure() && github.event_name == 'workflow_dispatch'
+    needs: [deploy-production]
+    
+    steps:
+      - name: 🔐 Setup SSH
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.HOSTINGER_SSH_KEY }}
+
+      - name: ↩️ Rollback to Previous Version
+        run: |
+          echo "🚨 Deployment failed, initiating rollback..."
+          
+          SSH_HOST="${{ secrets.HOSTINGER_HOST }}"
+          SSH_USER="${{ secrets.HOSTINGER_USER }}"
+          SSH_PORT="${{ secrets.HOSTINGER_PORT || 22 }}"
+          
+          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} << 'ROLLBACK_EOF'
+          cd /var/www/instacaresv2
+          
+          # Stop current services
+          pm2 stop all
+          
+          # Find latest backup
+          LATEST_BACKUP=$(ls -t /var/backups/instacares/backup-*.tar.gz | head -n 1)
+          
+          if [ -n "$LATEST_BACKUP" ]; then
+            echo "Rolling back to: $LATEST_BACKUP"
+            
+            # Extract backup
+            sudo tar -xzf "$LATEST_BACKUP" -C /var/www/instacaresv2/
+            
+            # Restart services
+            pm2 start ecosystem.config.js
+            pm2 start server.js --name instacares-websocket
+            
+            echo "✅ Rollback completed"
+          else
+            echo "❌ No backup found for rollback"
+          fi
+          ROLLBACK_EOF

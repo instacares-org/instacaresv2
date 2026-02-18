@@ -1,0 +1,669 @@
+"use client";
+
+import { useState, useEffect, useCallback } from 'react';
+import { XMarkIcon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import dynamic from 'next/dynamic';
+import SocialLogin from './SocialLogin';
+import PasswordStrengthIndicator from './PasswordStrengthIndicator';
+
+// Dynamic import to avoid SSR issues with Mapbox
+const MapboxAddressAutocomplete = dynamic(
+  () => import('./MapboxAddressAutocomplete'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Address
+        </label>
+        <div className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 animate-pulse">
+          Loading address search...
+        </div>
+      </div>
+    )
+  }
+);
+
+interface SignupModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export default function SignupModal({ isOpen, onClose }: SignupModalProps) {
+  const [userType, setUserType] = useState<'parent' | 'caregiver' | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [showQualificationQuestions, setShowQualificationQuestions] = useState(false);
+  const [qualificationAnswers, setQualificationAnswers] = useState({
+    hasInsurance: null as boolean | null,
+    hasFireAlarmAndCO: null as boolean | null,
+    hasPets: null as boolean | null,
+    hasBackgroundCheck: null as boolean | null,
+    hasFirstAid: null as boolean | null,
+    hasOtherCertifications: null as boolean | null,
+  });
+
+
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    dateOfBirth: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    phone: '',
+    streetAddress: '',
+    apartment: '',
+    city: '',
+    province: '',
+    postalCode: '',
+    agreeToTerms: false,
+    agreeToMarketing: false
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [emailValidation, setEmailValidation] = useState({
+    isChecking: false,
+    exists: false,
+    message: '',
+    isValid: true
+  });
+
+  // Debounced email validation
+  const checkEmailAvailability = useCallback(async (email: string) => {
+    if (!email || email.length < 3 || !email.includes('@')) {
+      setEmailValidation({
+        isChecking: false,
+        exists: false,
+        message: '',
+        isValid: true
+      });
+      return;
+    }
+
+    setEmailValidation(prev => ({ ...prev, isChecking: true }));
+
+    try {
+      const response = await fetch('/api/auth/check-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setEmailValidation({
+          isChecking: false,
+          exists: result.exists,
+          message: result.exists 
+            ? '⚠️ This email address is already registered. Please use a different email or try logging in.' 
+            : '✅ Email address is available',
+          isValid: !result.exists
+        });
+      } else {
+        setEmailValidation({
+          isChecking: false,
+          exists: false,
+          message: '',
+          isValid: true
+        });
+      }
+    } catch (error) {
+      setEmailValidation({
+        isChecking: false,
+        exists: false,
+        message: '',
+        isValid: true
+      });
+    }
+  }, []);
+
+  // Debounce email checking
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      checkEmailAvailability(formData.email);
+    }, 800); // Wait 800ms after user stops typing
+
+    return () => clearTimeout(timer);
+  }, [formData.email, checkEmailAvailability]);
+
+  
+  const handleQualificationAnswer = (question: keyof typeof qualificationAnswers, answer: boolean) => {
+    setQualificationAnswers(prev => ({
+      ...prev,
+      [question]: answer
+    }));
+  };
+
+  const allQuestionsAnswered = Object.values(qualificationAnswers).every(answer => answer !== null);
+
+  const proceedToSignup = () => {
+    if (!allQuestionsAnswered) {
+      alert('Please answer all questions to continue');
+      return;
+    }
+    setShowQualificationQuestions(false);
+    setShowForm(true);
+  };
+
+const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (formData.password !== formData.confirmPassword) {
+      alert('Passwords do not match');
+      return;
+    }
+
+    if (!formData.agreeToTerms) {
+      alert('You must agree to the Terms of Service and Privacy Policy');
+      return;
+    }
+
+    if (emailValidation.exists) {
+      alert('This email address is already registered. Please use a different email or try logging in.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          dateOfBirth: formData.dateOfBirth,
+          email: formData.email,
+          password: formData.password,
+          confirmPassword: formData.confirmPassword,
+          phone: formData.phone,
+          streetAddress: formData.streetAddress,
+          apartment: formData.apartment,
+          city: formData.city,
+          province: formData.province,
+          postalCode: formData.postalCode,
+          userType: userType === 'caregiver' ? 'provider' : 'parent',
+          agreeToTerms: formData.agreeToTerms,
+          agreeToMarketing: formData.agreeToMarketing,
+          qualificationAnswers: userType === "caregiver" ? qualificationAnswers : undefined,
+        }),
+      });
+
+      if (response.ok) {
+        alert('Registration successful! Please wait for admin approval.');
+        onClose();
+        setFormData({
+          firstName: '',
+          lastName: '',
+          email: '',
+          password: '',
+          confirmPassword: '',
+          phone: '',
+          streetAddress: '',
+          apartment: '',
+          city: '',
+          province: '',
+          postalCode: '',
+          agreeToTerms: false,
+          agreeToMarketing: false
+        });
+      } else {
+        const errorData = await response.json();
+        if (response.status === 409) {
+          alert('An account with this email address already exists. Please use a different email or try logging in instead.');
+        } else {
+          alert(errorData.error || errorData.message || 'Registration failed');
+        }
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      alert('Registration failed. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-2">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-lg w-full min-h-[600px] max-h-[95vh] overflow-y-auto shadow-2xl border border-white/20 dark:border-gray-800 relative">
+        {/* Background gradient overlay for depth */}
+        <div className="absolute inset-0 bg-gradient-to-br from-white/80 to-gray-50/50 dark:from-gray-900/80 dark:to-gray-800/50 rounded-2xl pointer-events-none"></div>
+        <div className="relative z-10">
+        {/* Close Button Only */}
+        <div className="absolute top-4 right-4 z-20">
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition"
+          >
+            <XMarkIcon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+          </button>
+        </div>
+
+        {/* Step 1: Account Type Selection - Shows FIRST */}
+        {userType === null && (
+          <div className="p-6 text-center">
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">Choose Your Account Type</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Select how you'll be using InstaCares</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 max-w-sm mx-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setUserType('parent');
+                  setShowForm(true);
+                }}
+                className="p-6 rounded-xl border-2 border-gray-300 hover:border-rose-500 hover:bg-rose-50 dark:border-gray-600 dark:hover:border-rose-400 dark:hover:bg-rose-900/20 transition-all group"
+              >
+                <div className="text-center">
+                  <div className="text-4xl mb-3">👨‍👩‍👧‍👦</div>
+                  <div className="font-bold text-lg mb-1 text-gray-900 dark:text-gray-100 group-hover:text-rose-700 dark:group-hover:text-rose-300">Parent</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">I'm looking for childcare services</div>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUserType('caregiver');
+                  setShowQualificationQuestions(true);
+                }}
+                className="p-6 rounded-xl border-2 border-gray-300 hover:border-rose-500 hover:bg-rose-50 dark:border-gray-600 dark:hover:border-rose-400 dark:hover:bg-rose-900/20 transition-all group"
+              >
+                <div className="text-center">
+                  <div className="text-4xl mb-3">👩‍🏫</div>
+                  <div className="font-bold text-lg mb-1 text-gray-900 dark:text-gray-100 group-hover:text-rose-700 dark:group-hover:text-rose-300">Caregiver</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">I'm offering childcare services</div>
+                </div>
+              </button>
+{/* Pre-Qualification Questions - Elegant Design */}
+        {userType === 'caregiver' && showQualificationQuestions && (
+          <div className="p-8">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Quick Questions</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Help us understand your qualifications</p>
+            </div>
+
+            {/* Questions Grid */}
+            <div className="space-y-5 mb-8">
+              {[
+                { 
+                  key: 'hasInsurance', 
+                  question: 'Do you have daycare insurance?',
+                  icon: '🛡️'
+                },
+                { 
+                  key: 'hasFireAlarmAndCO', 
+                  question: 'Do you have fire alarm & CO detectors?',
+                  icon: '🚨'
+                },
+                { 
+                  key: 'hasPets', 
+                  question: 'Do you have any pets?',
+                  icon: '🐕'
+                },
+                { 
+                  key: 'hasBackgroundCheck', 
+                  question: 'Do you have a recent background check (VSC)?',
+                  icon: '✓'
+                },
+                { 
+                  key: 'hasFirstAid', 
+                  question: 'Are you certified in first aid & CPR?',
+                  icon: '⚕️'
+                },
+                { 
+                  key: 'hasOtherCertifications', 
+                  question: 'Do you have other childcare certifications?',
+                  icon: '📜'
+                },
+              ].map(({ key, question, icon }) => {
+                const answer = qualificationAnswers[key as keyof typeof qualificationAnswers];
+                return (
+                  <div key={key} className="group">
+                    {/* Question */}
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-2xl">{icon}</span>
+                      <p className="text-base font-medium text-gray-800 dark:text-gray-200">
+                        {question}
+                      </p>
+                    </div>
+                    
+                    {/* Answer Buttons */}
+                    <div className="grid grid-cols-2 gap-3 pl-11">
+                      <button 
+                        type="button" 
+                        onClick={() => handleQualificationAnswer(key as any, true)}
+                        className={}
+                      >
+                        ✓ Yes
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => handleQualificationAnswer(key as any, false)}
+                        className={}
+                      >
+                        ✗ No
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex gap-3 pt-6 border-t-2 border-gray-200 dark:border-gray-700">
+              <button 
+                type="button" 
+                onClick={() => { 
+                  setShowQualificationQuestions(false); 
+                  setUserType(null); 
+                  setQualificationAnswers({ 
+                    hasInsurance: null, 
+                    hasFireAlarmAndCO: null, 
+                    hasPets: null, 
+                    hasBackgroundCheck: null, 
+                    hasFirstAid: null, 
+                    hasOtherCertifications: null 
+                  }); 
+                }}
+                className="px-6 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg font-medium text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
+              >
+                ← Back
+              </button>
+              <button 
+                type="button" 
+                onClick={proceedToSignup}
+                disabled={!allQuestionsAnswered}
+                className={}
+              >
+                Continue to Sign Up →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Form - Show when not in qualification mode */}
+        {showForm && (
+        <form onSubmit={handleSubmit} className="p-4">
+          <div className="space-y-3">
+            {/* Name Fields */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
+                  First Name
+                </label>
+                <input
+                  type="text"
+                  name="firstName"
+                  value={formData.firstName}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-rose-500 dark:focus:border-rose-400"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
+                  Last Name
+                </label>
+                <input
+                  type="text"
+                  name="lastName"
+                  value={formData.lastName}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-rose-500 dark:focus:border-rose-400"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Email */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
+                Email
+              </label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleInputChange}
+                className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-rose-500 dark:focus:border-rose-400"
+                required
+              />
+              {emailValidation.isChecking && (
+                <p className="text-xs text-gray-500 mt-1">Checking availability...</p>
+              )}
+              {!emailValidation.isChecking && emailValidation.exists && (
+                <p className="text-xs text-red-600 mt-1">This email is already registered</p>
+              )}
+              {!emailValidation.isChecking && !emailValidation.exists && formData.email && emailValidation.isValid && (
+                <p className="text-xs text-green-600 mt-1">Email available</p>
+              )}
+            </div>
+
+            {/* Date of Birth */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
+                Date of Birth
+              </label>
+              <input
+                type="date"
+                name="dateOfBirth"
+                value={formData.dateOfBirth}
+                onChange={handleInputChange}
+                max={new Date().toISOString().split('T')[0]}
+                className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-rose-500 dark:focus:border-rose-400"
+                required
+              />
+            </div>
+
+            {/* Password */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-rose-500 dark:focus:border-rose-400 pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  {showPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
+            </div>
+
+            {/* Confirm Password */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
+                Confirm Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-rose-500 dark:focus:border-rose-400 pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  {showConfirmPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
+            </div>
+
+            {/* Phone */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
+                Phone Number
+              </label>
+              <input
+                type="tel"
+                name="phone"
+                value={formData.phone}
+                onChange={handleInputChange}
+                className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-rose-500 dark:focus:border-rose-400"
+                required
+              />
+            </div>
+
+            {/* Street Address */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-0.5">
+                Street Address
+              </label>
+              <input
+                type="text"
+                name="streetAddress"
+                value={formData.streetAddress}
+                onChange={handleInputChange}
+                className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:outline-none focus:border-rose-500 dark:focus:border-rose-400"
+                required
+              />
+            </div>
+
+            {/* Apartment/Unit Number */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Apartment/Unit Number (Optional)
+              </label>
+              <input
+                type="text"
+                value={formData.apartment}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  apartment: e.target.value
+                }))}
+                placeholder="e.g., Apt 1A, Unit 205"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent text-sm"
+              />
+            </div>
+
+            {/* Show selected address details */}
+            {(formData.streetAddress || formData.city || formData.province || formData.postalCode) && (
+              <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Selected Address:</div>
+                <div className="text-sm text-gray-800 dark:text-gray-200">
+                  {formData.streetAddress && (
+                    <div>
+                      {formData.streetAddress}
+                      {formData.apartment && `, ${formData.apartment}`}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    {formData.city && <span>{formData.city}</span>}
+                    {formData.province && <span>{formData.province}</span>}
+                    {formData.postalCode && <span>{formData.postalCode}</span>}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Terms and Conditions */}
+            <div className="space-y-3">
+              <div className="flex items-start space-x-3">
+                <input
+                  type="checkbox"
+                  name="agreeToTerms"
+                  checked={formData.agreeToTerms}
+                  onChange={handleInputChange}
+                  className="mt-1 h-4 w-4 text-rose-600 focus:ring-rose-500 border-gray-300 dark:border-gray-600 dark:bg-gray-800 rounded"
+                  required
+                />
+                <label className="text-sm text-gray-700 dark:text-gray-300">
+                  I acknowledge that I have read, understood, and agree to be bound by InstaCares'{' '}
+                  <a href="/terms" target="_blank" className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline font-medium">
+                    Terms of Service
+                  </a>{' '}
+                  and{' '}
+                  <a href="/privacy" target="_blank" className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline font-medium">
+                    Privacy Policy
+                  </a>
+                  . I understand that I am waiving certain legal rights, including the right to sue or claim compensation in certain circumstances.
+                </label>
+              </div>
+
+              {/* Marketing Checkbox */}
+              <div className="flex items-start space-x-3">
+                <input
+                  type="checkbox"
+                  name="agreeToMarketing"
+                  checked={formData.agreeToMarketing}
+                  onChange={handleInputChange}
+                  className="mt-1 h-4 w-4 text-rose-600 focus:ring-rose-500 border-gray-300 dark:border-gray-600 dark:bg-gray-800 rounded"
+                />
+                <label className="text-sm text-gray-700 dark:text-gray-300">
+                  I would like to receive promotional emails and updates from InstaCares
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={isSubmitting || emailValidation.exists || emailValidation.isChecking}
+            className="w-full mt-4 bg-rose-500 hover:bg-rose-600 dark:bg-rose-600 dark:hover:bg-rose-700 text-white py-2.5 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+          >
+            {isSubmitting ? 'Creating Account...' : emailValidation.exists ? 'Email Already Exists' : 'Sign Up'}
+          </button>
+
+          {/* Social Login Options */}
+          <div className="mt-6 space-y-4">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300 dark:border-gray-700"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400">or sign up with</span>
+              </div>
+            </div>
+            <SocialLogin 
+              userType={userType} 
+              onSocialLogin={(provider, userType) => {
+                console.log(`Social signup successful with ${provider} as ${userType}`);
+                onClose();
+                // Redirect to appropriate dashboard
+                if (userType === 'parent') {
+                  window.location.href = '/parent-dashboard';
+                } else {
+                  window.location.href = '/caregiver-dashboard';
+                }
+              }}
+            />
+          </div>
+        </form>
+        )}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,552 @@
+'use client';
+import { Fragment, useState } from 'react';
+import { Dialog, Transition, Tab } from '@headlessui/react';
+import Image from 'next/image';
+import {
+  XMarkIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ExclamationTriangleIcon,
+  UserCircleIcon,
+  PhotoIcon,
+  CalendarDaysIcon,
+  CreditCardIcon,
+  ShieldCheckIcon,
+  StarIcon,
+  ClockIcon,
+  CurrencyDollarIcon,
+  MapPinIcon,
+  PhoneIcon,
+  CheckBadgeIcon
+} from '@heroicons/react/24/outline';
+import { CheckCircleIcon as CheckCircleIconSolid } from '@heroicons/react/24/solid';
+
+interface CaregiverDetailModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  caregiverData: any;
+  onApprove: (userId: string, notes: string) => void;
+  onReject: (userId: string, reason: string) => void;
+  onUpdateVerification: (caregiverId: string, field: string, status: string) => void;
+}
+
+export default function CaregiverDetailModal({
+  isOpen,
+  onClose,
+  caregiverData,
+  onApprove,
+  onReject,
+  onUpdateVerification
+}: CaregiverDetailModalProps) {
+  // All hooks must come BEFORE any conditional returns
+  const [notes, setNotes] = useState('');
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
+
+  // Early return AFTER all hooks
+  if (!caregiverData) return null;
+
+  // Destructure caregiverData
+  const { user, profile, caregiver, verification, approvalData, photos = [], availabilitySlots = [], reviews = [] } = caregiverData;
+
+  // Simple inline calculations instead of useMemo
+  const profileCompletionChecks = {
+    avatarUploaded: !!profile?.avatar,
+    daycarePhotos: photos.length >= 3,
+    scheduleConfigured: availabilitySlots.length > 0,
+    paymentSetup: !!caregiver?.stripeOnboarded,
+    bioComplete: !!caregiver?.bio && caregiver.bio.length > 50,
+    phoneVerified: !!profile?.phone,
+    locationSet: !!profile?.city,
+    rateSet: !!caregiver?.hourlyRate
+  };
+
+  const profileCompletionCompleted = Object.values(profileCompletionChecks).filter(Boolean).length;
+  const profileCompletionTotal = Object.keys(profileCompletionChecks).length;
+  const profileCompletionPercentage = Math.round((profileCompletionCompleted / profileCompletionTotal) * 100);
+
+  const riskColors: any = {
+    LOW: 'text-green-700 bg-green-100 border-green-200',
+    MEDIUM: 'text-yellow-700 bg-yellow-100 border-yellow-200',
+    HIGH: 'text-red-700 bg-red-100 border-red-200'
+  };
+
+  const formatAvailabilitySlot = (slot: any) => {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const formatTime = (time: string) => {
+      const [hours, minutes] = time.split(':');
+      const hour = parseInt(hours);
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+      return `${displayHour}:${minutes} ${ampm}`;
+    };
+
+    return {
+      day: days[slot.dayOfWeek] || slot.dayOfWeek,
+      time: `${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`
+    };
+  };
+
+  return (
+    <>
+      <Transition appear show={isOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={onClose}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-3">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-4xl bg-white rounded-xl shadow-2xl max-h-[92vh] overflow-hidden flex flex-col">
+                  {/* Header */}
+                  <div className="flex items-start justify-between p-5 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        {profile?.avatar ? (
+                          <Image
+                            src={profile.avatar}
+                            alt={profile.firstName}
+                            width={48}
+                            height={48}
+                            className="rounded-full object-cover border-2 border-white shadow-md"
+                          />
+                        ) : (
+                          <UserCircleIcon className="h-12 w-12 text-gray-400" />
+                        )}
+                        {verification?.idVerificationStatus === 'APPROVED' && (
+                          <CheckBadgeIcon className="absolute -bottom-1 -right-1 h-5 w-5 text-blue-600 bg-white rounded-full" />
+                        )}
+                      </div>
+                      <div>
+                        <Dialog.Title className="text-lg font-bold text-gray-900">
+                          {profile?.firstName} {profile?.lastName}
+                        </Dialog.Title>
+                        <p className="text-sm text-gray-600">{user?.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${riskColors[approvalData?.riskLevel] || 'text-gray-700 bg-gray-100 border-gray-200'}`}>
+                        {approvalData?.riskLevel || 'PENDING'} RISK • {approvalData?.riskScore || 0}
+                      </span>
+                      <button
+                        onClick={onClose}
+                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        <XMarkIcon className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tab Navigation */}
+                  <Tab.Group>
+                    <Tab.List className="flex gap-1 bg-gray-100 p-1 mx-5 mt-5 rounded-lg">
+                      {[
+                        { name: 'Profile', icon: UserCircleIcon },
+                        { name: 'Photos', icon: PhotoIcon },
+                        { name: 'Schedule', icon: CalendarDaysIcon },
+                        { name: 'Payment', icon: CreditCardIcon },
+                        { name: 'Verifications', icon: ShieldCheckIcon },
+                        { name: 'Reviews', icon: StarIcon }
+                      ].map(({ name, icon: Icon }) => (
+                        <Tab
+                          key={name}
+                          className={({ selected }: any) =>
+                            `flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium rounded-md transition-all ${
+                              selected
+                                ? 'bg-white text-blue-600 shadow-sm'
+                                : 'text-gray-600 hover:text-gray-900'
+                            }`
+                          }
+                        >
+                          <Icon className="h-4 w-4" />
+                          {name}
+                        </Tab>
+                      ))}
+                    </Tab.List>
+
+                    <Tab.Panels className="flex-1 overflow-y-auto p-5">
+                      {/* Profile Tab */}
+                      <Tab.Panel className="space-y-4">
+                        {/* Profile Completion */}
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
+                          <div className="flex justify-between items-center mb-2">
+                            <h3 className="text-sm font-semibold text-gray-700">Profile Completion</h3>
+                            <span className="text-2xl font-bold text-blue-600">{profileCompletionPercentage}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                            <div
+                              className="bg-blue-600 h-2 rounded-full transition-all"
+                              style={{ width: `${profileCompletionPercentage}%` }}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {Object.entries(profileCompletionChecks).map(([key, value]) => (
+                              <div key={key} className="flex items-center gap-2">
+                                {value ? (
+                                  <CheckCircleIconSolid className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                ) : (
+                                  <XCircleIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                )}
+                                <span className="text-xs text-gray-600">
+                                  {key.replace(/([A-Z])/g, ' $1').trim()}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Personal Information */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                              <UserCircleIcon className="h-4 w-4" />
+                              Personal Info
+                            </h4>
+                            <dl className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <PhoneIcon className="h-4 w-4 text-gray-400" />
+                                <dt className="text-xs text-gray-500">Phone:</dt>
+                                <dd className="text-sm font-medium text-gray-900">{profile?.phone || 'Not provided'}</dd>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <MapPinIcon className="h-4 w-4 text-gray-400" />
+                                <dt className="text-xs text-gray-500">Location:</dt>
+                                <dd className="text-sm font-medium text-gray-900">{profile?.city || 'Not set'}</dd>
+                              </div>
+                            </dl>
+                          </div>
+
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                              <CurrencyDollarIcon className="h-4 w-4" />
+                              Caregiver Details
+                            </h4>
+                            <dl className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <CurrencyDollarIcon className="h-4 w-4 text-gray-400" />
+                                <dt className="text-xs text-gray-500">Rate:</dt>
+                                <dd className="text-sm font-medium text-gray-900">${caregiver?.hourlyRate || 0}/hr</dd>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <ClockIcon className="h-4 w-4 text-gray-400" />
+                                <dt className="text-xs text-gray-500">Experience:</dt>
+                                <dd className="text-sm font-medium text-gray-900">{caregiver?.experienceYears || 0} years</dd>
+                              </div>
+                            </dl>
+                          </div>
+                        </div>
+
+                        {/* Bio */}
+                        {caregiver?.bio && (
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-2">About</h4>
+                            <p className="text-sm text-gray-600 leading-relaxed">{caregiver.bio}</p>
+                          </div>
+                        )}
+
+                        {/* Age Groups */}
+                        {caregiver?.ageGroups && Array.isArray(caregiver.ageGroups) && caregiver.ageGroups.length > 0 && (
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-2">Age Groups</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {caregiver.ageGroups.map((group: any, index: number) => (
+                                <span
+                                  key={group.id || index}
+                                  className="px-3 py-1 text-sm bg-purple-100 text-purple-800 rounded-full"
+                                >
+                                  {group.name || group}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Specialties */}
+                        {caregiver?.specialties && Array.isArray(caregiver.specialties) && caregiver.specialties.length > 0 && (
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-2">Specialties</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {caregiver.specialties.map((specialty: any, index: number) => (
+                                <span
+                                  key={index}
+                                  className="px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded-full"
+                                >
+                                  {typeof specialty === 'string' ? specialty : specialty.name}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </Tab.Panel>
+
+                      {/* Photos Tab */}
+                      <Tab.Panel className="space-y-4">
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h3 className="text-sm font-semibold text-gray-700 mb-3">Daycare Photos</h3>
+                          {photos.length > 0 ? (
+                            <div className="grid grid-cols-3 gap-3">
+                              {photos.map((photo: any, index: number) => (
+                                <div
+                                  key={photo.id}
+                                  className="relative aspect-square rounded-lg overflow-hidden cursor-pointer hover:opacity-90 transition"
+                                  onClick={() => setSelectedPhotoIndex(index)}
+                                >
+                                  <Image
+                                    src={photo.url}
+                                    alt={`Daycare photo ${index + 1}`}
+                                    fill
+                                    className="object-cover"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-500 text-center py-8">No photos uploaded yet</p>
+                          )}
+                        </div>
+                      </Tab.Panel>
+
+                      {/* Schedule Tab */}
+                      <Tab.Panel className="space-y-4">
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h3 className="text-sm font-semibold text-gray-700 mb-3">Availability Schedule</h3>
+                          {availabilitySlots.length > 0 ? (
+                            <div className="space-y-2">
+                              {availabilitySlots.map((slot: any, index: number) => {
+                                const formatted = formatAvailabilitySlot(slot);
+                                return (
+                                  <div
+                                    key={index}
+                                    className="flex items-center justify-between p-3 bg-white rounded-md border border-gray-200"
+                                  >
+                                    <span className="text-sm font-medium text-gray-700">{formatted.day}</span>
+                                    <span className="text-sm text-gray-600">{formatted.time}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-500 text-center py-8">No schedule configured</p>
+                          )}
+                        </div>
+                      </Tab.Panel>
+
+                      {/* Payment Tab */}
+                      <Tab.Panel className="space-y-4">
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h3 className="text-sm font-semibold text-gray-700 mb-3">Payment Setup</h3>
+                          <div className="flex items-center gap-3 p-4 bg-white rounded-md border border-gray-200">
+                            {caregiver?.stripeOnboarded ? (
+                              <>
+                                <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                                <span className="text-sm text-gray-700">Stripe account connected and verified</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircleIcon className="h-5 w-5 text-red-500" />
+                                <span className="text-sm text-gray-700">Payment account not set up</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </Tab.Panel>
+
+                      {/* Verifications Tab */}
+                      <Tab.Panel className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          {[
+                            { key: 'idVerificationStatus', label: 'ID Verification', field: 'id' },
+                            { key: 'backgroundCheckStatus', label: 'Background Check', field: 'backgroundCheck' },
+                            { key: 'insuranceStatus', label: 'Insurance', field: 'insurance' },
+                            { key: 'referencesStatus', label: 'References', field: 'references' }
+                          ].map(({ key, label, field }) => {
+                            const status = verification?.[key];
+                            return (
+                              <div key={key} className="bg-gradient-to-br from-gray-50 to-white border border-gray-200 p-4 rounded-lg">
+                                <div className="flex items-center justify-between mb-3">
+                                  <h4 className="text-sm font-semibold text-gray-700">{label}</h4>
+                                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                    status === 'APPROVED'
+                                      ? 'bg-green-100 text-green-700'
+                                      : 'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    {status || 'PENDING'}
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => onUpdateVerification(caregiver?.id, field, 'APPROVED')}
+                                  disabled={status === 'APPROVED'}
+                                  className={`w-full px-3 py-2 text-sm font-medium rounded-md transition ${
+                                    status === 'APPROVED'
+                                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                                  }`}
+                                >
+                                  {status === 'APPROVED' ? 'Verified' : 'Mark as Verified'}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Verification Checklist */}
+                        <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-3">Verification Checklist</h4>
+                          <div className="grid grid-cols-2 gap-3">
+                            {Object.entries(approvalData?.checklist || {}).map(([key, value]: any) => (
+                              <div key={key} className="flex items-center gap-2">
+                                {value ? (
+                                  <CheckCircleIcon className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                ) : (
+                                  <XCircleIcon className="h-4 w-4 text-red-500 flex-shrink-0" />
+                                )}
+                                <span className="text-sm text-gray-600">
+                                  {key.replace(/([A-Z])/g, ' $1').trim()}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </Tab.Panel>
+
+                      {/* Reviews Tab */}
+                      <Tab.Panel className="space-y-4">
+                        {reviews.length > 0 ? (
+                          <div className="space-y-3">
+                            {reviews.map((review: any) => (
+                              <div key={review.id} className="bg-gray-50 p-4 rounded-lg">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-1">
+                                    {[...Array(5)].map((_, i) => (
+                                      <StarIcon
+                                        key={i}
+                                        className={`h-4 w-4 ${
+                                          i < review.rating ? 'text-yellow-400 fill-current' : 'text-gray-300'
+                                        }`}
+                                      />
+                                    ))}
+                                  </div>
+                                  <span className="text-xs text-gray-500">{review.date}</span>
+                                </div>
+                                <p className="text-sm text-gray-600">{review.comment}</p>
+                                <p className="text-xs text-gray-500 mt-2">— {review.authorName}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-12">
+                            <StarIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                            <p className="text-sm text-gray-500">No reviews available yet</p>
+                          </div>
+                        )}
+                      </Tab.Panel>
+                    </Tab.Panels>
+                  </Tab.Group>
+
+                  {/* Footer Actions */}
+                  <div className="border-t bg-gray-50 p-5">
+                    <div className="space-y-3">
+                      <textarea
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                        rows={3}
+                        placeholder="Add approval notes..."
+                      />
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {!approvalData?.readyForApproval ? (
+                            <>
+                              <ExclamationTriangleIcon className="h-5 w-5 text-amber-600" />
+                              <span className="text-sm font-medium text-amber-600">
+                                Complete all verifications first
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircleIcon className="h-5 w-5 text-green-600" />
+                              <span className="text-sm font-medium text-green-600">
+                                Ready for approval
+                              </span>
+                            </>
+                          )}
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              const reason = prompt('Rejection reason:');
+                              if (reason) onReject(user?.id, reason);
+                            }}
+                            className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 transition"
+                          >
+                            Reject Application
+                          </button>
+                          <button
+                            onClick={() => onApprove(user?.id, notes || 'Approved')}
+                            disabled={!approvalData?.readyForApproval}
+                            className={`px-4 py-2 text-sm font-medium rounded-md transition ${
+                              approvalData?.readyForApproval
+                                ? 'bg-green-600 text-white hover:bg-green-700'
+                                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                            }`}
+                          >
+                            Approve Caregiver
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+
+      {/* Photo Lightbox */}
+      {selectedPhotoIndex !== null && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setSelectedPhotoIndex(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh]">
+            <Image
+              src={photos[selectedPhotoIndex].url}
+              alt={`Daycare photo ${selectedPhotoIndex + 1}`}
+              width={800}
+              height={600}
+              className="object-contain"
+            />
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedPhotoIndex(null);
+              }}
+              className="absolute top-4 right-4 text-white bg-black/50 rounded-full p-2 hover:bg-black/70 transition"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

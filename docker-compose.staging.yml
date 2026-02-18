@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  instacares-staging:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: instacares-staging
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=staging
+      - PORT=3000
+    env_file:
+      - .env.staging
+    volumes:
+      - ./public/uploads:/app/public/uploads
+      - staging_logs:/app/logs
+    depends_on:
+      - staging_db
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  staging_db:
+    image: mysql:8.0
+    container_name: instacares-staging-db
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: staging_root_password
+      MYSQL_DATABASE: instacares_staging
+      MYSQL_USER: staging_user
+      MYSQL_PASSWORD: staging_password
+    volumes:
+      - staging_db_data:/var/lib/mysql
+      - ./prisma/schema.prisma:/docker-entrypoint-initdb.d/schema.prisma
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password
+
+  redis:
+    image: redis:7-alpine
+    container_name: instacares-staging-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - staging_redis_data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  nginx:
+    image: nginx:alpine
+    container_name: instacares-staging-nginx
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./nginx/staging.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - instacares-staging
+    restart: unless-stopped
+
+volumes:
+  staging_db_data:
+  staging_redis_data:
+  staging_logs:

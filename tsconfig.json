@@ -1,0 +1,49 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "src_backup_production",
+    "config_backup_production",
+    "backups",
+    "InstaCaresMobile",
+    "*-fixed.ts",
+    "clear_session_post.ts",
+    "csrf_hmac.ts",
+    "force_logout_post.ts",
+    "middleware_with_csrf.ts",
+    "secure_health_route.ts",
+    "secure_socket_route.ts",
+    "src/page.tsx",
+    "src/lib/db_temp.ts",
+    "src/app/api/admin/dashboard/route-complex-backup.ts",
+    "test_files",
+    "scripts",
+    "backup_dual_role_*",
+    "prisma_backup_production",
+    "src/app/api/admin/dashboard/route-complex.ts",
+    "prisma"
+  ]
+}

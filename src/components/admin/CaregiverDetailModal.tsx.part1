@@ -1,0 +1,91 @@
+'use client';
+import { Fragment, useState, useMemo } from 'react';
+import { Dialog, Transition, Tab } from '@headlessui/react';
+import Image from 'next/image';
+import { 
+  XMarkIcon, 
+  CheckCircleIcon, 
+  XCircleIcon, 
+  ExclamationTriangleIcon,
+  UserCircleIcon,
+  PhotoIcon,
+  CalendarDaysIcon,
+  CreditCardIcon,
+  ShieldCheckIcon,
+  StarIcon,
+  ClockIcon,
+  CurrencyDollarIcon,
+  MapPinIcon,
+  PhoneIcon,
+  EnvelopeIcon,
+  CheckBadgeIcon
+} from '@heroicons/react/24/outline';
+import { CheckCircleIcon as CheckCircleIconSolid } from '@heroicons/react/24/solid';
+
+interface CaregiverDetailModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  caregiverData: any;
+  onApprove: (userId: string, notes: string) => void;
+  onReject: (userId: string, reason: string) => void;
+  onUpdateVerification: (caregiverId: string, field: string, status: string) => void;
+}
+
+export default function CaregiverDetailModal({ 
+  isOpen, 
+  onClose, 
+  caregiverData, 
+  onApprove, 
+  onReject, 
+  onUpdateVerification 
+}: CaregiverDetailModalProps) {
+  const [notes, setNotes] = useState('');
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
+  
+  if (!caregiverData) return null;
+
+  const { user, profile, caregiver, verification, approvalData, photos = [], availabilitySlots = [], reviews = [] } = caregiverData;
+
+  // Calculate profile completion percentage
+  const profileCompletion = useMemo(() => {
+    const checks = {
+      avatarUploaded: !!profile?.avatar,
+      daycarePhotos: photos.length >= 3,
+      scheduleConfigured: availabilitySlots.length > 0,
+      paymentSetup: !!caregiver?.stripeOnboarded,
+      bioComplete: !!caregiver?.bio && caregiver.bio.length > 50,
+      phoneVerified: !!profile?.phone,
+      locationSet: !!profile?.city,
+      rateSet: !!caregiver?.hourlyRate
+    };
+    
+    const completed = Object.values(checks).filter(Boolean).length;
+    const total = Object.keys(checks).length;
+    
+    return {
+      percentage: Math.round((completed / total) * 100),
+      checks
+    };
+  }, [profile, caregiver, photos, availabilitySlots]);
+
+  const riskColors: any = { 
+    LOW: 'text-green-700 bg-green-100 border-green-200', 
+    MEDIUM: 'text-yellow-700 bg-yellow-100 border-yellow-200', 
+    HIGH: 'text-red-700 bg-red-100 border-red-200' 
+  };
+
+  const formatAvailabilitySlot = (slot: any) => {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const formatTime = (time: string) => {
+      const [hours, minutes] = time.split(':');
+      const hour = parseInt(hours);
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+      return `${displayHour}:${minutes} ${ampm}`;
+    };
+    
+    return {
+      day: days[slot.dayOfWeek] || slot.dayOfWeek,
+      time: `${formatTime(slot.startTime)} - ${formatTime(slot.endTime)}`
+    };
+  };
