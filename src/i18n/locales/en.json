@@ -1,0 +1,406 @@
+{
+  "common": {
+    "signUp": "Sign Up",
+    "login": "Log In",
+    "logout": "Log Out",
+    "search": "Search",
+    "cancel": "Cancel",
+    "save": "Save",
+    "close": "Close",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "tryAgain": "Try Again",
+    "viewAll": "View All",
+    "learnMore": "Learn More",
+    "book": "Book",
+    "madeInCanada": "Made in Canada",
+    "allRightsReserved": "All rights reserved",
+    "slots": "slots",
+    "slot": "slot"
+  },
+  "header": {
+    "findCaregivers": "Find Caregivers",
+    "becomeCaregiver": "Become a Caregiver",
+    "howItWorks": "How It Works",
+    "safety": "Safety",
+    "help": "Help",
+    "searchPlaceholder": "Search caregivers...",
+    "anywhere": "Anywhere",
+    "whereInCanada": "Where in Canada?",
+    "addDates": "Add dates",
+    "addGuests": "Add guests",
+    "filters": "Filters",
+    "howManyChildren": "How many children?",
+    "selectChildrenCount": "Select the number of children you need care for",
+    "infants": "Infants",
+    "infantsAge": "Under 2 years",
+    "children": "Children",
+    "childrenAge": "Ages 2-12",
+    "profile": "Profile",
+    "dashboard": "Dashboard",
+    "caregiverDashboard": "Caregiver Dashboard",
+    "parentDashboard": "Parent Dashboard",
+    "switchToCaregiver": "Switch to Caregiver",
+    "switchToParent": "Switch to Parent",
+    "settings": "Settings",
+    "adminPortal": "Admin Portal"
+  },
+  "banner": {
+    "findTrustedChildcare": "Find Trusted Childcare Now"
+  },
+  "home": {
+    "heroTitle": "Find trusted childcare near you",
+    "heroSubtitle": "Connect with verified caregivers in your community",
+    "findCaregivers": "Find Caregivers",
+    "verifiedProviders": "Verified childcare providers near you",
+    "showingProviders": "Showing providers within {radius}km of your location",
+    "distance": "Distance",
+    "noCaregivers": "No caregivers found in your area.",
+    "findClosest": "Find caregivers closest to you",
+    "enableLocation": "Enable location access to discover trusted providers in your area",
+    "searchWithin": "Search within",
+    "enableLocationBtn": "Enable Location",
+    "locationDenied": "Location access denied",
+    "showingFromCanada": "Showing caregivers from across Canada."
+  },
+  "safety": {
+    "title": "Your Child's Safety Is Our #1 Priority",
+    "subtitle": "Every caregiver on InstaCares undergoes comprehensive verification to ensure the highest standards of trust and safety.",
+    "backgroundCheck": "Background Checked",
+    "backgroundCheckDesc": "Comprehensive criminal background checks verified through official channels",
+    "idVerified": "ID Verified",
+    "idVerifiedDesc": "Government-issued photo ID verification ensures identity authenticity",
+    "fullyInsured": "Fully Insured",
+    "fullyInsuredDesc": "Comprehensive liability insurance coverage for complete peace of mind",
+    "parentReviewed": "Parent Reviewed",
+    "parentReviewedDesc": "Real reviews from parents help you make informed childcare decisions",
+    "verificationBadge": "100% of our caregivers complete verification before joining InstaCares",
+    "safetyFirst": "Safety First",
+    "safetyNotice": "Always meet caregivers in person, check references, and verify credentials before hiring. InstaCares facilitates connections but users are responsible for their own safety and decisions.",
+    "followGuidelines": "Follow safety guidelines",
+    "verifiedCaregivers": "Verified caregivers",
+    "trustedPlatform": "Trusted platform"
+  },
+  "caregiver": {
+    "hourlyRate": "/hr",
+    "reviews": "reviews",
+    "verified": "VERIFIED",
+    "backgroundCheckBadge": "BACKGROUND CHECK ✓",
+    "topRated": "TOP RATED",
+    "experience": "years experience",
+    "viewProfile": "View Profile",
+    "bookNow": "Book Now",
+    "availability": "Availability",
+    "specialties": "Specialties",
+    "about": "About",
+    "noAvailability": "No Availability Posted Yet",
+    "availableToday": "Available today",
+    "availableTomorrow": "Available tomorrow",
+    "availableThisWeek": "Available this week",
+    "setupInProgress": "Setup in progress"
+  },
+  "filters": {
+    "title": "Filters",
+    "priceRange": "Price Range",
+    "any": "Any",
+    "ageGroups": "Age Groups",
+    "infants": "Infants (0-1)",
+    "toddlers": "Toddlers (1-3)",
+    "schoolAge": "School Age (4-12)",
+    "teens": "Teens (13+)",
+    "specialServices": "Special Services",
+    "overnight": "Overnight Care",
+    "tutoring": "Tutoring",
+    "cooking": "Meal Preparation",
+    "housekeeping": "Light Housekeeping",
+    "pets": "Pet Friendly",
+    "experience": "Experience",
+    "highlyRated": "Highly Rated (4.5+)",
+    "sortBy": "Sort By",
+    "recommended": "Recommended",
+    "priceLowHigh": "Price: Low to High",
+    "priceHighLow": "Price: High to Low",
+    "ratingHigh": "Highest Rated",
+    "mostReviews": "Most Reviews",
+    "newest": "Newest"
+  },
+  "footer": {
+    "companyDescription": "Connecting families with trusted, verified childcare providers across Canada. Safe, reliable, and convenient childcare solutions for modern families.",
+    "quickLinks": "Quick Links",
+    "findCaregivers": "Find Caregivers",
+    "becomeCaregiver": "Become a Caregiver",
+    "signUpAsParent": "Sign Up as Parent",
+    "adminPortal": "Admin Portal",
+    "legalSupport": "Legal & Support",
+    "termsOfService": "Terms of Service",
+    "privacyPolicy": "Privacy Policy",
+    "support": "Support",
+    "safetyTrust": "Safety & Trust",
+    "copyright": "InstaCares. All rights reserved.",
+    "madeInCanada": "Made in Canada"
+  },
+  "auth": {
+    "signUpTitle": "Create your account",
+    "loginTitle": "Welcome back",
+    "email": "Email",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "firstName": "First Name",
+    "lastName": "Last Name",
+    "phone": "Phone Number",
+    "forgotPassword": "Forgot password?",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "signUpAsParent": "Sign up as Parent",
+    "signUpAsCaregiver": "Sign up as Caregiver",
+    "orContinueWith": "Or continue with",
+    "google": "Continue with Google",
+    "parentLogin": "Parent Login",
+    "caregiverLogin": "Caregiver Login",
+    "accessParentDashboard": "Access your parent dashboard",
+    "accessCaregiverDashboard": "Access your caregiver dashboard",
+    "enterEmail": "Enter your email address",
+    "enterPassword": "Enter your password",
+    "signingIn": "Signing in...",
+    "signInAs": "Sign In as {userType}",
+    "createAccount": "Create {userType} Account",
+    "parent": "Parent",
+    "caregiver": "Caregiver"
+  },
+  "dashboard": {
+    "welcome": "Welcome back",
+    "myBookings": "My Bookings",
+    "myChildren": "My Children",
+    "messages": "Messages",
+    "settings": "Settings",
+    "profile": "Profile",
+    "notifications": "Notifications",
+    "support": "Support"
+  },
+  "language": {
+    "select": "Language",
+    "english": "English",
+    "french": "Français",
+    "spanish": "Español"
+  },
+  "search": {
+    "anyWeek": "Any week",
+    "addChildren": "Add children",
+    "child": "child",
+    "children": "children",
+    "infants": "Infants",
+    "infantsAge": "Under 2 years",
+    "childrenLabel": "Children",
+    "childrenAge": "Ages 2-12",
+    "total": "Total"
+  },
+  "userMenu": {
+    "welcomeTitle": "Welcome to InstaCares",
+    "welcomeSubtitle": "Choose how you'd like to get started",
+    "imAParent": "I'm a Parent",
+    "parentDescription": "Looking for trusted childcare providers",
+    "parentAction": "Find, book & manage care",
+    "imACaregiver": "I'm a Caregiver",
+    "caregiverDescription": "Offering professional childcare services",
+    "caregiverAction": "Earn money helping families",
+    "newToInstaCares": "New to InstaCares?",
+    "createAccount": "Create an account"
+  },
+  "signup": {
+    "title": "Sign Up",
+    "completeProfile": "Complete Your Profile",
+    "continue": "Continue",
+    "creatingAccount": "Creating Account...",
+    "completingProfile": "Completing Profile...",
+    "completeProfileBtn": "Complete Profile",
+    "loadingAddress": "Loading address search...",
+    "address": "Address",
+    "addressPlaceholder": "Start typing your address...",
+    "apartment": "Apartment/Unit (Optional)",
+    "apartmentPlaceholder": "e.g., Apt 1A, Unit 205",
+    "dateOfBirth": "Date of Birth",
+    "mustBe18": "You must be 18 or older",
+    "mustBe18Error": "You must be at least 18 years old to register",
+    "phonePlaceholder": "(416) 555-1234",
+    "phoneMinDigits": "Phone number must be at least 10 digits",
+    "profilePhoto": "Profile Photo (Optional)",
+    "clickToUpload": "Click to upload",
+    "fileSizeError": "File size must be less than 5MB",
+    "or": "or",
+    "steps": {
+      "questionnaire": "Questionnaire",
+      "caregiverQuestionnaire": "Caregiver Questionnaire",
+      "accountType": "Account Type",
+      "profileInfo": "Profile Information",
+      "accountDetails": "Account Details",
+      "addressTerms": "Address & Terms"
+    },
+    "userType": {
+      "iAmA": "I am a...",
+      "parent": "Parent",
+      "parentDesc": "Looking for childcare",
+      "caregiver": "Caregiver",
+      "caregiverDesc": "Offering services"
+    },
+    "questionnaire": {
+      "title": "Please answer the following questions:",
+      "welcomeCaregiver": "Welcome! As a caregiver, please answer the following questions to complete your profile.",
+      "welcomeParent": "Welcome! Please complete your profile to continue using InstaCares.",
+      "provideProfileInfo": "Please provide your profile information.",
+      "hasInsurance": "Do you have insurance for your daycare?",
+      "hasFireAlarmCO": "Do you have a fire alarm and carbon monoxide detectors where children will be staying?",
+      "hasPets": "Do you have any pets?",
+      "describePets": "Please describe your pets:",
+      "petsPlaceholder": "e.g., 1 dog, 2 cats",
+      "hasBackgroundCheck": "Do you have a recent background check (VSC)?",
+      "hasFirstAidCPR": "Do you have first aid including infant and child CPR?",
+      "hasOtherCertifications": "Do you have any other child care related certification?",
+      "describeCertifications": "Please describe your certifications:",
+      "certificationsPlaceholder": "e.g., ECE diploma, Special needs training",
+      "yes": "Yes",
+      "no": "No"
+    },
+    "terms": {
+      "agreeToTerms": "I agree to InstaCares' {termsLink} and {privacyLink}",
+      "termsOfService": "Terms of Service",
+      "privacyPolicy": "Privacy Policy",
+      "agreeToMarketing": "I would like to receive promotional emails from InstaCares"
+    },
+    "validation": {
+      "agreeToTermsRequired": "You must agree to the Terms of Service and Privacy Policy",
+      "passwordsNoMatch": "Passwords do not match",
+      "emailExists": "An account with this email already exists.",
+      "emailAlreadyRegistered": "This email is already registered.",
+      "emailAvailable": "Email available",
+      "phoneRequired": "Phone number must be at least 10 digits",
+      "dobRequired": "Date of birth is required",
+      "addressRequired": "Please complete your address"
+    },
+    "messages": {
+      "registrationSuccess": "Registration successful! Please wait for admin approval.",
+      "registrationFailed": "Registration failed",
+      "profileCompleteFailed": "Failed to complete profile. Please try again."
+    }
+  },
+  "terms": {
+    "backToHome": "Back to Home",
+    "title": "Terms of Service",
+    "importantNotice": "IMPORTANT NOTICE",
+    "importantNoticeText": "YOU AGREE TO THESE TERMS OF USE WHEN YOU BROWSE INSTACARES.COM. YOU WILL WAIVE CERTAIN LEGAL RIGHTS, INCLUDING THE RIGHT TO SUE OR CLAIM COMPENSATION IN CERTAIN CIRCUMSTANCES. READ THIS DOCUMENT CAREFULLY.",
+    "termsOfUse": "Terms of Use",
+    "intro1": "The terms and conditions that govern the use of the Instacares.com site and/or the Instacares.com Services by Canadian residents are outlined below.",
+    "intro2": "Prior to using the site or its services, kindly review the following terms. Whether you are registering as a parent seeking child care or a caregiver, by utilizing the site or its services, you hereby represent, warrant, understand, agree to, and accept these terms in their entirety.",
+    "lastUpdated": "Last updated:",
+    "descriptionTitle": "Description of Services",
+    "descriptionContent": "Instacares.com's mission is to foster the recognition and trustworthiness of high-quality care. Our objective is to enhance transparency between parents and caregivers, thereby mitigating the potential risks associated with seeking care.\n\nWe offer an online platform that enables caregivers to post profiles and interact with parents about potential daycare requirements. However, we do not employ any caregivers, nor do we represent any caregivers or parents. We do not provide referral services.\n\nWe verify, review, evaluate, interview, and perform background checks on caregivers based on the information submitted to us. However, we provide no assurance or representation regarding the quality, timing, or legality of the services actually delivered by caregivers or the integrity, responsibility, or actions of caregivers and parents.",
+    "responsibilitiesTitle": "User Responsibilities",
+    "responsibilitiesContent": "You are solely responsible for:\n• Interviewing, performing reference checks on, verifying information provided by, and selecting an appropriate caregiver or parent\n• Complying with all applicable employment, non-discrimination, and other laws\n• Verifying the age of the caregiver (must be 18 years or older)\n• Verifying the caregiver's eligibility to work in Canada\n\nWe conduct limited screening of caregivers based on information provided to us. Do not rely on this limited screening as complete, accurate, up-to-date, or conclusive.",
+    "eligibilityTitle": "Eligibility Requirements",
+    "eligibilityContent": "To use our services, you must:\n• Be eighteen (18) years of age or older\n• Have the capacity to form legally binding contracts\n• Reside in a postal code region where Instacares.com offers services\n• Be a citizen or legal resident of Canada or hold a valid Canadian visa\n• If you're a caregiver, be legally entitled to work in Canada\n• Have completed a vulnerable sector check within the last 5 years\n\nYou represent that you have never been involved in any criminal offence involving violence, abuse, neglect, theft, fraud, or any offence endangering the safety of others.",
+    "conductTitle": "User Conduct Rules",
+    "conductContent": "By using our services, you agree NOT to:\n• Use the site for any unlawful purpose or illegal activities\n• Post defamatory, inaccurate, abusive, obscene, or offensive content\n• Harass, abuse, or harm another person or group\n• Use another user's account without permission\n• Provide false or inaccurate information\n• Make automated use of the system or scrape data\n• Use our communication systems for commercial solicitation\n\nWe reserve the right to review and delete any content that violates these terms.",
+    "feesTitle": "Fees and Payments",
+    "feesContent": "Parents may be charged transaction fees when using our platform to make reservations. Service fees are generally non-refundable except as determined at Instacares.com's sole discretion.\n\nWe reserve the right to change service fees at any time with notice to registered users. Fee changes will not affect bookings made prior to the effective date.\n\nParents may elect, with caregiver consent, to make payments on-site without incurring transaction fees.",
+    "cancellationTitle": "Cancellation and Refund Policy",
+    "cancellationContent": "BOOKING CANCELLATIONS BY PARENTS:\n• Cancellation 24+ hours before scheduled start time: 100% refund of booking amount (platform transaction fees are non-refundable)\n• Cancellation 12-24 hours before scheduled start time: 50% refund of booking amount (platform transaction fees are non-refundable)\n• Cancellation less than 12 hours before scheduled start time: No refund\n• No-show without cancellation: No refund\n\nREFUND PROCESSING:\n• Approved refunds are processed automatically to the original payment method\n• Refunds typically appear within 5-10 business days depending on your financial institution\n• Platform transaction fees are non-refundable in all cases\n• You will receive email confirmation when a refund is processed\n\nCAREGIVER-INITIATED CANCELLATIONS:\n• If a caregiver cancels a confirmed booking, parents receive a 100% full refund including all platform fees\n• Caregivers who frequently cancel may face account restrictions or suspension\n\nSPECIAL CIRCUMSTANCES:\nExceptions to our standard cancellation policy may be granted at Instacares.com's sole discretion for:\n• Documented medical emergencies (doctor's note required)\n• Extreme weather events or natural disasters\n• Government-mandated closures or evacuations\n• Other extraordinary circumstances beyond your control\n\nTo request a special circumstance review, contact info@instacares.com with supporting documentation within 48 hours of the incident.\n\nPAYMENT DISPUTES:\n• All disputes must be reported within 7 days of the booking date\n• We will investigate and respond within 5 business days\n• Our decision on disputes is final\n\nNO-SHOW POLICY:\n• If you fail to show up for a confirmed booking without prior cancellation, no refund will be issued\n• The caregiver will receive full payment for the reserved time\n• Repeated no-shows may result in account restrictions or permanent suspension",
+    "liabilityTitle": "Limitation of Liability",
+    "liabilityContent": "IMPORTANT: There are risks, including the risk of physical harm, when dealing with people you connect with through our site. You assume all risks associated with interactions with other users.\n\nInstacares.com is not responsible for the conduct of any user of the site or services. We expressly disclaim any liability for damage, suits, claims, and/or controversies that may arise from user interactions.\n\nOur aggregate liability will not exceed the price paid for your account, or if you haven't paid, we have no liability. We are not liable for any indirect, consequential, or incidental damages.",
+    "indemnificationTitle": "Indemnification",
+    "indemnificationContent": "You agree to indemnify, defend, and hold harmless Instacares.com and its employees from any claims, losses, expenses, or demands of liability arising from:\n• Materials and content you submit through the Site\n• Your use of the Site or Services in violation of these Terms\n• Any claim by a third party arising from your actions",
+    "terminationTitle": "Termination",
+    "terminationContent": "Instacares.com reserves the right to terminate your access to the site and services at any time, with or without notice, for any reason including:\n• Violation of these terms\n• Misuse of site content\n• Being unsuitable for participation as a user\n• Any other reason at our sole discretion",
+    "ageRestrictionsTitle": "Age Restrictions",
+    "ageRestrictionsContent": "Instacares.com is intended for people 18 and over. We will not knowingly collect any information from individuals under 18. If we determine you are under 18, your registration will be terminated immediately.",
+    "jurisdictionTitle": "Jurisdiction",
+    "jurisdictionContent": "Any dispute arising out of the Site and/or Services shall be governed by the laws of the Province of Ontario, and you expressly agree to the exclusive jurisdiction of the courts of Ontario.",
+    "contactTitle": "Contact Information",
+    "contactCompany": "Team Instacares",
+    "contactAddress1": "22 King Street South, Suite 300",
+    "contactAddress2": "Waterloo, Ontario, N2J 1N8",
+    "contactWeb": "Web:",
+    "contactEmail": "Email:",
+    "contactPhone": "Phone:",
+    "agreementText": "By using Instacares.com, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service.",
+    "acceptButton": "I Understand and Accept"
+  },
+  "privacy": {
+    "backToHome": "← Back to Home",
+    "title": "Privacy Policy",
+    "updated": "Updated: April 2024",
+    "questionsTitle": "Questions About Our Privacy Policy?",
+    "questionsText": "If you have any questions about this Privacy Policy or how we handle your personal information, please contact us.",
+    "emailUs": "Email Us",
+    "callUs": "Call Us: (888) 394-0259",
+    "sections": {
+      "overview": {
+        "title": "Overview",
+        "content": "Instacare 24/7 Inc. respects the privacy and security of your personal information.\n\nThis Privacy Policy describes how Instacare 24/7 Inc. and its affiliates (herein, collectively, \"INSTACARES,\" \"we\", \"us\" and \"our\") collect, use, share, retain, and protect personal information obtained through your customer relationship with us.\n\nAny capitalized term not otherwise defined in this Privacy Policy will be understood to have the meaning given to such term in our Terms of Service.\n\nBy using any of our Services, using or accessing our Platform, website, or social media pages (collectively, the \"Sites\"), or contacting us for customer support (i.e., by email, telephone, filling out forms or otherwise), you agree to the terms of this Privacy Policy and consent to the policies and practices described herein for the collection, use and disclosure of your Personal Information."
+      },
+      "personalInfo": {
+        "title": "What is Personal Information?",
+        "content": "Personal information is any information that identifies you, or by which your identity could be deduced. This may include information such as your name, address, phone number, email address, payment details (for example, your credit card information), transaction history and any other information you provide us (collectively, \"Personal Information\")."
+      },
+      "collection": {
+        "title": "What Personal Information Do We Collect and Why Do We Collect It?",
+        "content": "We collect and store any information that you provide to us directly when you create an Account, use our Services, access our Platform, visit our Sites, or contact customer support. Most of the information collected about you for retail services is basic information that we need to perform our Services, complete a purchase with respect to our paid Services, or process and keep track of transactions.\n\nAny information you submit through or publish on the Sites may be accessed and utilized by visitors to the Sites, Caregivers, Parents, and other users. If you provide us with any Personal Information of another person, you represent and warrant to us that you have the right and authority to provide us with that Personal Information.\n\nWhen you access our Platform, visit our Sites, or use our Services, we may also collect certain kinds of user information, such as IP addresses, browser and device types, log files, and which pages or content you access. This information may be associated with you and used to deliver our Services and provide technical troubleshooting. Certain parts of our Platform and Sites use cookies to enable our systems to recognize your browser and to provide convenience and other features to you, such as recognizing you as an existing customer or previous visitor.\n\nWe use your Personal Information to: (a) register your Account, verify your Account information, and provide our Services to you; (b) communicate with you from time to time via telephone, email and/or the Platform; (c) improve and optimize our Platform, Sites and Services (for example, by generating analytics about how visitors browse and interact with the Platform and Sites, and to assess the success of our marketing and advertising campaigns); and (d) other business purposes.\n\nWhen you make a payment to us, we use third-party services to process payments and do not have access to your payment information. The third-party services will be responsible for securely managing your personal and financial data in accordance with payment card industry data security standards."
+      },
+      "caregiverInfo": {
+        "title": "Caregiver Information",
+        "content": "Caregivers should be aware that we collect and store all the information that you provide to us in creating your Account and setting up a profile on the Platform which information may include details regarding the care you offer, your availability, your location, your experience, the languages you speak, the related services you may provide, photographs and images, your phone number(s), references, and any other information you choose to include in your Account.\n\nWhile Caregivers are required to submit a criminal record check with vulnerable sector check in connection with registering an Account, the results of this record check will not be published on the Sites, other than a notation published on a Caregiver's public profile confirming a vulnerable sector check has been provided and verified."
+      },
+      "parentInfo": {
+        "title": "Parent Information",
+        "content": "Parents should be aware that we collect, store and share Personal Information on the Sites through the Platform and other online features and offerings, such as our online communications platform, that certain registered users may use to communicate and share information with one another.\n\nWe may also collect Personal Information about you from third parties. Without limitation and by way of example only, this occurs when Caregivers are rated or reviewed, when we obtain information from references for a Caregiver, when Parents, Caregivers and others communicate directly with each other through the Sites, and when we receive information about Parents, Caregivers and others by phone, email, or in person.\n\nOur Sites and Services are intended for individuals aged 18 years and older. Accordingly, we do not knowingly collect any Personal Information from individuals under the age of 18 years."
+      },
+      "cookies": {
+        "title": "Cookies and Other Technologies",
+        "content": "We may use cookies and tracking pixels (also referred to as web beacons) to track site usage and trends, customize your experience on the Sites, and improve the quality of our Services.\n\nA cookie is a data file that resides on your computer, mobile phone, or other device and allows us to recognize you as a registered Parent or Caregiver when you return to the Sites using the same device and web browser. You can remove or block cookies, or change your cookie settings, at any time, but in some cases, doing so may impact your ability to use our Sites and Services. Tracking pixels do not identify individual users, and the analysis of the data obtained by tracking pixels is performed on an aggregate basis."
+      },
+      "sharing": {
+        "title": "Sharing Information",
+        "content": "Our Services involve the facilitation of introductions and interactions between Parents and Caregivers. In order to perform our Services, we will share certain Personal Information submitted by you with other Parents and Caregivers in order to enable you and such other registered users to search for, find, interact with, connect with, and share information with such registered users as you may have an interest in interacting with, or who may have an interest in interacting with you.\n\nWe will also share the information that Parents and Caregivers include in their Accounts (excluding your contact information) with site visitors and registered users generally. With limited exceptions, you will be able decide how much public-facing information you want to share with other users and visitors to the Sites. Your approximate residential location (through Google map plotting) will be made available on the Platform.\n\nWe are committed to protecting your privacy and, except in connection with the performance of our Services or as otherwise permitted pursuant to this Privacy Policy, we will not otherwise disclose your Personal Information to third parties to enable them to market their products and services. We will not sell your Personal Information under any circumstances. INSTACARES may use third-party services to deliver the Services to you, including but not limited to email, electronic document signing software applications, and other web tools. You acknowledge and agree that you may be required to agree to third-party terms of service in order to receive such third-party services and use the Services.\n\nBy consenting to this Privacy Policy, your information will be accessed and used in the following ways: (a) by employees and independent contractors engaged by INSTACARES (collectively, our \"Representatives\") to deliver our Services and respond to inquiries related to our Services; (b) by our Representatives to confirm your registration on our Platform, purchase of our Services (as applicable), understand our customer demographics and preferences, and communicate with you; (c) by third party service providers to provide certain services, such as processing payment card information, videoconferencing, web hosting, and email service providers; (d) by Parents and/or Caregivers in connection with your use of the Platform and our Services, as more particularly described in our Terms of Service; and (e) by companies that we share information with, such as advertisers, which may use the information we provide to them, often in combination with their existing information, to provide you with more relevant advertising, and to help us and third parties do the same.\n\nWe may also share your Personal Information as permitted or required by applicable laws and regulations, to respond to a subpoena, search warrant or other lawful request for information we receive, or to otherwise protect our rights and property.\n\nWe may also disclose your Personal Information without your consent in emergencies if it is clearly in your interest for us to do so and your consent cannot be obtained in a timely way, or if required or permitted by the Personal Information Protection and Electronic Documents Act (Canada) or substantially similar applicable provincial legislation.\n\nWe may also disclose your Personal Information to a public body or a law enforcement agency in Canada concerning an offense under the laws of Canada or a province (including to protect our rights and property or to protect the health, safety, and property of our community) or to respond to inquiries from or assist in an investigation by any such public body or law enforcement agency."
+      },
+      "retention": {
+        "title": "How Long Do We Keep Your Information?",
+        "content": "We retain your Personal Information as long as required to provide our Services, or as long as required for INSTACARES to fulfill our business requirements, agreements, contracts, and legal obligations, whichever is later. When you create an Account, we will maintain your Personal Information for our records unless and until you ask us to delete this information. If you wish to update, review, or validate your Personal Information, please contact us at: info@instacares.com"
+      },
+      "consent": {
+        "title": "How Do We Get Your Consent?",
+        "content": "INSTACARES does not collect, use or disclose your Personal Information without your consent except where required by law. Consent may be provided in writing or orally or may be implied through your conduct with us.\n\nBY PROVIDING US WITH YOUR PERSONAL INFORMATION OR USING OUR PLATFORM, SITES AND/OR SERVICES, YOU CONSENT TO OUR COLLECTION, USE AND DISCLOSURE OF YOUR PERSONAL INFORMATION IN ACCORDANCE WITH THIS PRIVACY POLICY AND AS OTHERWISE PERMITTED OR REQUIRED BY LAW."
+      },
+      "security": {
+        "title": "How Do We Keep Your Information Safe?",
+        "content": "INSTACARES takes commercially reasonable precautions to protect your Personal Information in accordance with this Privacy Policy and applicable laws by implementing industry standard safeguards and following our internal data security practices and procedures, which include administrative, technical, and physical security measures. When we are required by law to provide information to third parties, we take reasonable steps to verify the lawful authority for the collection and we disclose only the information that is legally required. Our security practices rely on you keeping your username and password secure and not sharing that information with anyone else. You are also responsible for keeping your devices secure, to prevent unauthorized use and access of any passwords and account information. All Personal Information that we collect will be stored on our server, which is located in the State of Virginia, USA."
+      },
+      "emailRisks": {
+        "title": "What Are The Risks Of Email Communications?",
+        "content": "Although we primarily communicate with our Users and Suppliers via the Platform, we may communicate with you from time to time via email and/or SMS text message including, without limitation, to send you notifications regarding reservations for Caregiver services and notify you of other updates to our Services, Terms of Service and/or Privacy Policy. You should be aware that email and SMS correspondence cannot be guaranteed to be secure, unchanged, error free or safe. Email and SMS transmissions can be intercepted, diverted, altered, lost, or delayed.\n\nUnless you notify us in writing not to use email and/or SMS to communicate with you, your acceptance of this Privacy Policy is deemed to include your consent for INSTACARES to use email and/or SMS to communicate with you, and your agreement to assume all risks in connection with same.\n\nNote that our Services may only be available to you for so long as you continue to consent to INSTACARES communicating with you via email and SMS."
+      },
+      "optOut": {
+        "title": "How Can You Opt-Out Of Receiving Marketing Communications?",
+        "content": "If you decide you no longer want your Personal Information used or shared for marketing our Services to you, you may opt out of receiving promotional offers at any time by submitting a written request to us. We will process your request within a reasonable period of time following receipt of your request. Please note that even if you have opted out of receiving marketing communications, we may still contact you for non-marketing purposes including, without limitation, fraud, collections, account maintenance and transactional and/or operational purposes."
+      },
+      "dataProcessors": {
+        "title": "Third-Party Data Processors",
+        "content": "In order to provide our Services, we engage the following third-party data processors who may receive and process your Personal Information on our behalf. In compliance with the Personal Information Protection and Electronic Documents Act (PIPEDA), we are providing the names and purposes of each processor below.\n\nStripe, Inc. (stripe.com) — Payment Processing: When you make or receive payments through InstaCares, your name, email address, payment card details, and booking amounts are securely transmitted to Stripe for payment processing and storage of payment methods. Stripe processes this information in accordance with its own privacy policy: https://stripe.com/privacy. Stripe is PCI DSS Level 1 certified.\n\nResend (resend.com) — Transactional Email Delivery: When we send you transactional emails such as booking confirmations, receipts, and notifications, your email address and name are transmitted to Resend for email delivery. Resend processes this information solely to deliver emails on our behalf. Resend's privacy policy: https://resend.com/legal/privacy-policy.\n\nGoogle (google.com) — OAuth Authentication: If you choose to sign in using Google, your email address, name, and profile picture are shared with us through Google's OAuth service to authenticate your identity and create or access your account. This is an optional sign-in method. Google's privacy policy: https://policies.google.com/privacy.\n\nFacebook/Meta (facebook.com) — OAuth Authentication: If you choose to sign in using Facebook, your email address, name, and profile picture are shared with us through Facebook's OAuth service to authenticate your identity and create or access your account. This is an optional sign-in method. Meta's privacy policy: https://www.facebook.com/privacy/policy.\n\nMapbox (mapbox.com) — Maps and Location Services: When you search for caregivers, approximate location data is transmitted to Mapbox to provide map displays and location-based search functionality. Mapbox does not receive your name, email, or other personally identifying information. Mapbox's privacy policy: https://www.mapbox.com/legal/privacy.\n\nAll third-party data processors listed above are contractually required to protect your Personal Information and use it only for the purposes for which it was disclosed. We do not sell your Personal Information to any third party."
+      },
+      "childrenData": {
+        "title": "Children's Information",
+        "content": "InstaCares collects information about children solely for the purpose of facilitating safe and effective childcare services. This information may include your child's name, date of birth, gender, allergies, medications, medical conditions, blood type, dietary restrictions, emergency contacts, and photographs.\n\nThis information is classified as sensitive personal information under PIPEDA and is collected only with explicit parental consent. We collect this information to ensure caregivers can provide safe, appropriate care for your child, particularly regarding allergies, medical conditions, and emergency procedures.\n\nChildren's medical and health information is shared only with caregivers you have booked through the Platform and only for the duration of the caregiving engagement. We do not share children's information with any third party for marketing or other purposes.\n\nYou may update or delete your child's information at any time through your parent dashboard. If you wish to have all of your child's data permanently removed, please contact us at info@instacares.com."
+      },
+      "dataRights": {
+        "title": "Your Data Rights Under PIPEDA",
+        "content": "Under the Personal Information Protection and Electronic Documents Act (PIPEDA), you have the following rights regarding your Personal Information:\n\nRight of Access: You have the right to request access to the Personal Information we hold about you. We will respond to your request within 30 days.\n\nRight of Correction: You have the right to request correction of any inaccurate or incomplete Personal Information. You can update most of your information directly through your account dashboard.\n\nRight to Withdraw Consent: You may withdraw your consent for us to collect, use, or disclose your Personal Information at any time, subject to legal or contractual restrictions. Please note that withdrawing consent may affect our ability to provide Services to you.\n\nRight to Request Deletion: You may request deletion of your Personal Information and account by contacting us at info@instacares.com. Upon receiving your request, we will delete your Personal Information within 30 days, except where we are required by law to retain certain records (such as financial transaction records, which are retained for 7 years as required by Canadian tax law).\n\nRight to File a Complaint: If you believe your privacy rights have been violated, you have the right to file a complaint with the Office of the Privacy Commissioner of Canada (https://www.priv.gc.ca).\n\nTo exercise any of these rights, please contact us at info@instacares.com or call (888) 394-0259."
+      },
+      "otherInfo": {
+        "title": "Use of Other Information",
+        "content": "We may use information that is not Personal Information to help us improve our Sites and our Services and to customize the user experience, such as by providing targeted, useful advertising based on the type of childcare services you seek. We may also aggregate information collected via cookies and similar technologies to use in statistical analysis to help us track trends and analyze patterns in the use of our Sites and Services.\n\nWe may share such information collected from you with our affiliates, third-party service providers, and others for any other commercial purpose, provided such information is not Personal Information and such information has been de-identified prior to being shared.\n\nWe may change our Privacy Policy from time to time. It is your responsibility to review our Privacy Policy for any changes. You understand and agree that your continued use of the Platform, Sites or our Services constitutes your agreement to any such changes.\n\nNote that our Platform and Sites may contain links to other websites or social media pages which are not governed by this Privacy Policy. If you follow a link to any such other website or social media page, you agree you are doing so at your own risk."
+      },
+      "contact": {
+        "title": "Contact Us",
+        "content": "If you have further questions or concerns regarding our privacy policies or procedures, or if you would like to review, verify, or update your Personal Information, please contact us.\n\nYou may contact us at:\n\nTeam Instacares\n22 King Street South, Suite 300\nWaterloo, Ontario,\nN2J 1N8\n\nweb: www.instacares.com\nEmail: info@instacares.com\nPhone: (888) 394-0259"
+      }
+    }
+  }
+}
