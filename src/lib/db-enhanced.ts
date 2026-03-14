@@ -78,7 +78,7 @@ function createPrismaClient() {
             
             if (typeof modelMethod === 'function') {
               return (...args: any[]) => {
-                return executeWithRetry(() => (modelMethod as Function).apply(modelTarget, args));
+                return executeWithRetry(() => (modelMethod as (...a: any[]) => any).apply(modelTarget, args));
               };
             }
             

@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 export default async function AuthError({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const resolvedSearchParams = await searchParams;
   const error = resolvedSearchParams?.error;
@@ -15,12 +17,12 @@ export default async function AuthError({ searchParams }: { searchParams: Promis
               <p className="text-sm text-red-700">Error: {error}</p>
             </div>
           )}
-          <a
+          <Link
             href="/"
             className="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
           >
             Return to Home
-          </a>
+          </Link>
         </div>
       </div>
     </div>

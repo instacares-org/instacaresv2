@@ -115,6 +115,7 @@ logs/
 !tsconfig*.json
 !next*.json
 !InstaCaresMobile/**/*.json
+!src/i18n/locales/*.json
 
 # Markdown - only track docs that matter
 *.md

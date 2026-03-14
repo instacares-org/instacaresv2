@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
   EyeIcon, 
@@ -442,13 +443,13 @@ export default function AdminLogin() {
           <div className="text-center space-y-2">
             <p className="text-sm text-gray-500">
               Not an admin? Go to{' '}
-              <a href="/" className="text-blue-600 hover:text-blue-500 font-medium transition-colors">
+              <Link href="/" className="text-blue-600 hover:text-blue-500 font-medium transition-colors">
                 Parent Login
-              </a>
+              </Link>
               {' '}or{' '}
-              <a href="/" className="text-blue-600 hover:text-blue-500 font-medium transition-colors">
+              <Link href="/" className="text-blue-600 hover:text-blue-500 font-medium transition-colors">
                 Caregiver Login
-              </a>
+              </Link>
             </p>
             <p className="text-xs text-gray-400">
               Having trouble? Contact system administrator

@@ -1,0 +1,406 @@
+{
+  "common": {
+    "signUp": "Registrarse",
+    "login": "Iniciar sesión",
+    "logout": "Cerrar sesión",
+    "search": "Buscar",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "close": "Cerrar",
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "tryAgain": "Intentar de nuevo",
+    "viewAll": "Ver todo",
+    "learnMore": "Más información",
+    "book": "Reservar",
+    "madeInCanada": "Hecho en Canadá",
+    "allRightsReserved": "Todos los derechos reservados",
+    "slots": "espacios",
+    "slot": "espacio"
+  },
+  "header": {
+    "findCaregivers": "Buscar cuidadores",
+    "becomeCaregiver": "Convertirse en cuidador",
+    "howItWorks": "Cómo funciona",
+    "safety": "Seguridad",
+    "help": "Ayuda",
+    "searchPlaceholder": "Buscar cuidadores...",
+    "anywhere": "Cualquier lugar",
+    "whereInCanada": "¿Dónde en Canadá?",
+    "addDates": "Agregar fechas",
+    "addGuests": "Agregar invitados",
+    "filters": "Filtros",
+    "howManyChildren": "¿Cuántos niños?",
+    "selectChildrenCount": "Selecciona el número de niños que necesitas cuidar",
+    "infants": "Bebés",
+    "infantsAge": "Menores de 2 años",
+    "children": "Niños",
+    "childrenAge": "2-12 años",
+    "profile": "Perfil",
+    "dashboard": "Panel de control",
+    "caregiverDashboard": "Panel del cuidador",
+    "parentDashboard": "Panel del padre",
+    "switchToCaregiver": "Cambiar a modo cuidador",
+    "switchToParent": "Cambiar a modo padre",
+    "settings": "Configuración",
+    "adminPortal": "Portal de administración"
+  },
+  "banner": {
+    "findTrustedChildcare": "Encuentra cuidado infantil de confianza"
+  },
+  "home": {
+    "heroTitle": "Encuentra cuidado infantil de confianza cerca de ti",
+    "heroSubtitle": "Conéctate con cuidadores verificados en tu comunidad",
+    "findCaregivers": "Buscar cuidadores",
+    "verifiedProviders": "Proveedores de cuidado infantil verificados cerca de ti",
+    "showingProviders": "Mostrando proveedores dentro de {radius}km de tu ubicación",
+    "distance": "Distancia",
+    "noCaregivers": "No se encontraron cuidadores en tu área.",
+    "findClosest": "Encuentra los cuidadores más cercanos",
+    "enableLocation": "Activa el acceso a la ubicación para descubrir proveedores de confianza en tu área",
+    "searchWithin": "Buscar dentro de",
+    "enableLocationBtn": "Activar ubicación",
+    "locationDenied": "Acceso a ubicación denegado",
+    "showingFromCanada": "Mostrando cuidadores de todo Canadá."
+  },
+  "safety": {
+    "title": "La seguridad de tu hijo es nuestra prioridad #1",
+    "subtitle": "Cada cuidador en InstaCares pasa por una verificación exhaustiva para garantizar los más altos estándares de confianza y seguridad.",
+    "backgroundCheck": "Antecedentes verificados",
+    "backgroundCheckDesc": "Verificaciones completas de antecedentes penales a través de canales oficiales",
+    "idVerified": "Identidad verificada",
+    "idVerifiedDesc": "La verificación de identificación con foto garantiza la autenticidad de la identidad",
+    "fullyInsured": "Completamente asegurado",
+    "fullyInsuredDesc": "Cobertura de seguro de responsabilidad completa para total tranquilidad",
+    "parentReviewed": "Evaluado por padres",
+    "parentReviewedDesc": "Las reseñas reales de padres te ayudan a tomar decisiones informadas",
+    "verificationBadge": "El 100% de nuestros cuidadores completan la verificación antes de unirse a InstaCares",
+    "safetyFirst": "Seguridad primero",
+    "safetyNotice": "Siempre conoce a los cuidadores en persona, verifica referencias y credenciales antes de contratar. InstaCares facilita las conexiones pero los usuarios son responsables de su propia seguridad y decisiones.",
+    "followGuidelines": "Sigue las pautas de seguridad",
+    "verifiedCaregivers": "Cuidadores verificados",
+    "trustedPlatform": "Plataforma de confianza"
+  },
+  "caregiver": {
+    "hourlyRate": "/hora",
+    "reviews": "reseñas",
+    "verified": "VERIFICADO",
+    "backgroundCheckBadge": "ANTECEDENTES VERIFICADOS ✓",
+    "topRated": "MEJOR CALIFICADO",
+    "experience": "años de experiencia",
+    "viewProfile": "Ver perfil",
+    "bookNow": "Reservar ahora",
+    "availability": "Disponibilidad",
+    "specialties": "Especialidades",
+    "about": "Acerca de",
+    "noAvailability": "Sin disponibilidad publicada",
+    "availableToday": "Disponible hoy",
+    "availableTomorrow": "Disponible mañana",
+    "availableThisWeek": "Disponible esta semana",
+    "setupInProgress": "Configuración en progreso"
+  },
+  "filters": {
+    "title": "Filtros",
+    "priceRange": "Rango de precio",
+    "any": "Cualquiera",
+    "ageGroups": "Grupos de edad",
+    "infants": "Bebés (0-1)",
+    "toddlers": "Niños pequeños (1-3)",
+    "schoolAge": "Edad escolar (4-12)",
+    "teens": "Adolescentes (13+)",
+    "specialServices": "Servicios especiales",
+    "overnight": "Cuidado nocturno",
+    "tutoring": "Tutoría",
+    "cooking": "Preparación de comidas",
+    "housekeeping": "Limpieza ligera",
+    "pets": "Acepta mascotas",
+    "experience": "Experiencia",
+    "highlyRated": "Muy bien calificado (4.5+)",
+    "sortBy": "Ordenar por",
+    "recommended": "Recomendado",
+    "priceLowHigh": "Precio: menor a mayor",
+    "priceHighLow": "Precio: mayor a menor",
+    "ratingHigh": "Mejor calificado",
+    "mostReviews": "Más reseñas",
+    "newest": "Más reciente"
+  },
+  "footer": {
+    "companyDescription": "Conectando familias con proveedores de cuidado infantil de confianza y verificados en todo Canadá. Soluciones de cuidado infantil seguras, confiables y convenientes para familias modernas.",
+    "quickLinks": "Enlaces rápidos",
+    "findCaregivers": "Buscar cuidadores",
+    "becomeCaregiver": "Convertirse en cuidador",
+    "signUpAsParent": "Registrarse como padre",
+    "adminPortal": "Portal de administración",
+    "legalSupport": "Legal y soporte",
+    "termsOfService": "Términos de servicio",
+    "privacyPolicy": "Política de privacidad",
+    "support": "Soporte",
+    "safetyTrust": "Seguridad y confianza",
+    "copyright": "InstaCares. Todos los derechos reservados.",
+    "madeInCanada": "Hecho en Canadá"
+  },
+  "auth": {
+    "signUpTitle": "Crea tu cuenta",
+    "loginTitle": "Bienvenido de nuevo",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "confirmPassword": "Confirmar contraseña",
+    "firstName": "Nombre",
+    "lastName": "Apellido",
+    "phone": "Número de teléfono",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "noAccount": "¿No tienes una cuenta?",
+    "hasAccount": "¿Ya tienes una cuenta?",
+    "signUpAsParent": "Registrarse como padre",
+    "signUpAsCaregiver": "Registrarse como cuidador",
+    "orContinueWith": "O continuar con",
+    "google": "Continuar con Google",
+    "parentLogin": "Inicio de sesión para padres",
+    "caregiverLogin": "Inicio de sesión para cuidadores",
+    "accessParentDashboard": "Accede a tu panel de padre",
+    "accessCaregiverDashboard": "Accede a tu panel de cuidador",
+    "enterEmail": "Ingresa tu correo electrónico",
+    "enterPassword": "Ingresa tu contraseña",
+    "signingIn": "Iniciando sesión...",
+    "signInAs": "Iniciar sesión como {userType}",
+    "createAccount": "Crear cuenta de {userType}",
+    "parent": "Padre",
+    "caregiver": "Cuidador"
+  },
+  "dashboard": {
+    "welcome": "Bienvenido de nuevo",
+    "myBookings": "Mis reservas",
+    "myChildren": "Mis hijos",
+    "messages": "Mensajes",
+    "settings": "Configuración",
+    "profile": "Perfil",
+    "notifications": "Notificaciones",
+    "support": "Soporte"
+  },
+  "language": {
+    "select": "Idioma",
+    "english": "English",
+    "french": "Français",
+    "spanish": "Español"
+  },
+  "search": {
+    "anyWeek": "Cualquier semana",
+    "addChildren": "Agregar niños",
+    "child": "niño",
+    "children": "niños",
+    "infants": "Bebés",
+    "infantsAge": "Menores de 2 años",
+    "childrenLabel": "Niños",
+    "childrenAge": "2-12 años",
+    "total": "Total"
+  },
+  "userMenu": {
+    "welcomeTitle": "Bienvenido a InstaCares",
+    "welcomeSubtitle": "Elige cómo te gustaría comenzar",
+    "imAParent": "Soy un padre",
+    "parentDescription": "Buscando proveedores de cuidado infantil de confianza",
+    "parentAction": "Buscar, reservar y gestionar el cuidado",
+    "imACaregiver": "Soy un cuidador",
+    "caregiverDescription": "Ofreciendo servicios profesionales de cuidado infantil",
+    "caregiverAction": "Gana dinero ayudando a familias",
+    "newToInstaCares": "¿Nuevo en InstaCares?",
+    "createAccount": "Crear una cuenta"
+  },
+  "signup": {
+    "title": "Registro",
+    "completeProfile": "Completa tu perfil",
+    "continue": "Continuar",
+    "creatingAccount": "Creando cuenta...",
+    "completingProfile": "Completando perfil...",
+    "completeProfileBtn": "Completar perfil",
+    "loadingAddress": "Cargando búsqueda de dirección...",
+    "address": "Dirección",
+    "addressPlaceholder": "Comienza a escribir tu dirección...",
+    "apartment": "Apartamento/Unidad (Opcional)",
+    "apartmentPlaceholder": "ej., Apt 1A, Unidad 205",
+    "dateOfBirth": "Fecha de nacimiento",
+    "mustBe18": "Debes tener 18 años o más",
+    "mustBe18Error": "Debes tener al menos 18 años para registrarte",
+    "phonePlaceholder": "(416) 555-1234",
+    "phoneMinDigits": "El número de teléfono debe tener al menos 10 dígitos",
+    "profilePhoto": "Foto de perfil (Opcional)",
+    "clickToUpload": "Haz clic para subir",
+    "fileSizeError": "El tamaño del archivo debe ser menor a 5MB",
+    "or": "o",
+    "steps": {
+      "questionnaire": "Cuestionario",
+      "caregiverQuestionnaire": "Cuestionario del cuidador",
+      "accountType": "Tipo de cuenta",
+      "profileInfo": "Información del perfil",
+      "accountDetails": "Detalles de la cuenta",
+      "addressTerms": "Dirección y términos"
+    },
+    "userType": {
+      "iAmA": "Soy un/una...",
+      "parent": "Padre/Madre",
+      "parentDesc": "Buscando cuidado infantil",
+      "caregiver": "Cuidador(a)",
+      "caregiverDesc": "Ofreciendo servicios"
+    },
+    "questionnaire": {
+      "title": "Por favor responde las siguientes preguntas:",
+      "welcomeCaregiver": "¡Bienvenido! Como cuidador, por favor responde las siguientes preguntas para completar tu perfil.",
+      "welcomeParent": "¡Bienvenido! Por favor completa tu perfil para continuar usando InstaCares.",
+      "provideProfileInfo": "Por favor proporciona la información de tu perfil.",
+      "hasInsurance": "¿Tienes seguro para tu guardería?",
+      "hasFireAlarmCO": "¿Tienes alarma contra incendios y detectores de monóxido de carbono donde estarán los niños?",
+      "hasPets": "¿Tienes mascotas?",
+      "describePets": "Por favor describe tus mascotas:",
+      "petsPlaceholder": "ej., 1 perro, 2 gatos",
+      "hasBackgroundCheck": "¿Tienes una verificación de antecedentes reciente (VSC)?",
+      "hasFirstAidCPR": "¿Tienes capacitación en primeros auxilios incluyendo RCP para bebés y niños?",
+      "hasOtherCertifications": "¿Tienes otras certificaciones relacionadas con el cuidado infantil?",
+      "describeCertifications": "Por favor describe tus certificaciones:",
+      "certificationsPlaceholder": "ej., Diploma en ECE, Capacitación en necesidades especiales",
+      "yes": "Sí",
+      "no": "No"
+    },
+    "terms": {
+      "agreeToTerms": "Acepto los {termsLink} y la {privacyLink} de InstaCares",
+      "termsOfService": "Términos de Servicio",
+      "privacyPolicy": "Política de Privacidad",
+      "agreeToMarketing": "Me gustaría recibir correos promocionales de InstaCares"
+    },
+    "validation": {
+      "agreeToTermsRequired": "Debes aceptar los Términos de Servicio y la Política de Privacidad",
+      "passwordsNoMatch": "Las contraseñas no coinciden",
+      "emailExists": "Ya existe una cuenta con este correo electrónico.",
+      "emailAlreadyRegistered": "Este correo electrónico ya está registrado.",
+      "emailAvailable": "Correo electrónico disponible",
+      "phoneRequired": "El número de teléfono debe tener al menos 10 dígitos",
+      "dobRequired": "La fecha de nacimiento es requerida",
+      "addressRequired": "Por favor completa tu dirección"
+    },
+    "messages": {
+      "registrationSuccess": "¡Registro exitoso! Por favor espera la aprobación del administrador.",
+      "registrationFailed": "Error en el registro",
+      "profileCompleteFailed": "Error al completar el perfil. Por favor intenta de nuevo."
+    }
+  },
+  "terms": {
+    "backToHome": "Volver al inicio",
+    "title": "Términos de servicio",
+    "importantNotice": "AVISO IMPORTANTE",
+    "importantNoticeText": "USTED ACEPTA ESTOS TÉRMINOS DE USO CUANDO NAVEGA POR INSTACARES.COM. RENUNCIARÁ A CIERTOS DERECHOS LEGALES, INCLUYENDO EL DERECHO A DEMANDAR O RECLAMAR COMPENSACIÓN EN CIERTAS CIRCUNSTANCIAS. LEA ESTE DOCUMENTO CUIDADOSAMENTE.",
+    "termsOfUse": "Términos de uso",
+    "intro1": "Los términos y condiciones que rigen el uso del sitio Instacares.com y/o los servicios de Instacares.com por parte de residentes canadienses se describen a continuación.",
+    "intro2": "Antes de utilizar el sitio o sus servicios, revise los siguientes términos. Ya sea que se registre como padre que busca cuidado infantil o como cuidador, al utilizar el sitio o sus servicios, usted declara, garantiza, entiende, acepta y se adhiere a estos términos en su totalidad.",
+    "lastUpdated": "Última actualización:",
+    "descriptionTitle": "Descripción de los servicios",
+    "descriptionContent": "La misión de Instacares.com es fomentar el reconocimiento y la confiabilidad del cuidado de calidad. Nuestro objetivo es mejorar la transparencia entre padres y cuidadores, mitigando así los riesgos potenciales asociados con la búsqueda de cuidado.\n\nOfrecemos una plataforma en línea que permite a los cuidadores publicar perfiles e interactuar con los padres sobre posibles necesidades de cuidado infantil. Sin embargo, no empleamos a ningún cuidador ni representamos a ningún cuidador o padre. No proporcionamos servicios de referencia.\n\nVerificamos, revisamos, evaluamos, entrevistamos y realizamos verificaciones de antecedentes de los cuidadores según la información que se nos proporciona. Sin embargo, no proporcionamos ninguna garantía o representación con respecto a la calidad, el tiempo o la legalidad de los servicios realmente proporcionados por los cuidadores o la integridad, responsabilidad o acciones de los cuidadores y padres.",
+    "responsibilitiesTitle": "Responsabilidades del usuario",
+    "responsibilitiesContent": "Usted es el único responsable de:\n• Entrevistar, realizar verificaciones de referencias, verificar la información proporcionada y seleccionar un cuidador o padre apropiado\n• Cumplir con todas las leyes aplicables de empleo, no discriminación y otras\n• Verificar la edad del cuidador (debe tener 18 años o más)\n• Verificar la elegibilidad del cuidador para trabajar en Canadá\n\nRealizamos una evaluación limitada de los cuidadores según la información que se nos proporciona. No confíe en esta evaluación limitada como completa, precisa, actualizada o concluyente.",
+    "eligibilityTitle": "Requisitos de elegibilidad",
+    "eligibilityContent": "Para usar nuestros servicios, debe:\n• Tener dieciocho (18) años o más\n• Tener la capacidad de celebrar contratos legalmente vinculantes\n• Residir en una región de código postal donde Instacares.com ofrece servicios\n• Ser ciudadano o residente legal de Canadá o tener una visa canadiense válida\n• Si es cuidador, estar legalmente autorizado para trabajar en Canadá\n• Haber completado una verificación del sector vulnerable en los últimos 5 años\n\nUsted declara que nunca ha estado involucrado en ningún delito penal que implique violencia, abuso, negligencia, robo, fraude o cualquier delito que ponga en peligro la seguridad de otros.",
+    "conductTitle": "Reglas de conducta del usuario",
+    "conductContent": "Al usar nuestros servicios, usted acepta NO:\n• Usar el sitio para cualquier propósito ilegal o actividades ilegales\n• Publicar contenido difamatorio, inexacto, abusivo, obsceno u ofensivo\n• Acosar, abusar o dañar a otra persona o grupo\n• Usar la cuenta de otro usuario sin permiso\n• Proporcionar información falsa o inexacta\n• Hacer uso automatizado del sistema o extraer datos\n• Usar nuestros sistemas de comunicación para solicitud comercial\n\nNos reservamos el derecho de revisar y eliminar cualquier contenido que viole estos términos.",
+    "feesTitle": "Tarifas y pagos",
+    "feesContent": "Los padres pueden ser cobrados tarifas de transacción al usar nuestra plataforma para hacer reservas. Las tarifas de servicio generalmente no son reembolsables excepto según lo determine Instacares.com a su entera discreción.\n\nNos reservamos el derecho de cambiar las tarifas de servicio en cualquier momento con aviso a los usuarios registrados. Los cambios de tarifas no afectarán las reservas realizadas antes de la fecha de vigencia.\n\nLos padres pueden optar, con el consentimiento del cuidador, por realizar pagos en el sitio sin incurrir en tarifas de transacción.",
+    "cancellationTitle": "Política de cancelación y reembolso",
+    "cancellationContent": "CANCELACIONES DE RESERVA POR PADRES:\n• Cancelación más de 24 horas antes de la hora de inicio programada: reembolso del 100% del monto de la reserva (las tarifas de transacción de la plataforma no son reembolsables)\n• Cancelación 12-24 horas antes de la hora de inicio programada: reembolso del 50% del monto de la reserva (las tarifas de transacción de la plataforma no son reembolsables)\n• Cancelación menos de 12 horas antes de la hora de inicio programada: sin reembolso\n• No presentarse sin cancelación: sin reembolso\n\nPROCESAMIENTO DE REEMBOLSOS:\n• Los reembolsos aprobados se procesan automáticamente al método de pago original\n• Los reembolsos generalmente aparecen dentro de 5-10 días hábiles dependiendo de su institución financiera\n• Las tarifas de transacción de la plataforma no son reembolsables en ningún caso\n• Recibirá confirmación por correo electrónico cuando se procese un reembolso\n\nCANCELACIONES INICIADAS POR EL CUIDADOR:\n• Si un cuidador cancela una reserva confirmada, los padres reciben un reembolso completo del 100%, incluyendo todas las tarifas de la plataforma\n• Los cuidadores que cancelan con frecuencia pueden enfrentar restricciones de cuenta o suspensión\n\nCIRCUNSTANCIAS ESPECIALES:\nSe pueden otorgar excepciones a nuestra política de cancelación estándar a la entera discreción de Instacares.com para:\n• Emergencias médicas documentadas (se requiere nota del médico)\n• Eventos climáticos extremos o desastres naturales\n• Cierres o evacuaciones ordenadas por el gobierno\n• Otras circunstancias extraordinarias fuera de su control\n\nPara solicitar una revisión de circunstancias especiales, contacte info@instacares.com con documentación de respaldo dentro de las 48 horas del incidente.\n\nDISPUTAS DE PAGO:\n• Todas las disputas deben reportarse dentro de los 7 días de la fecha de reserva\n• Investigaremos y responderemos dentro de 5 días hábiles\n• Nuestra decisión sobre disputas es final\n\nPOLÍTICA DE NO PRESENTARSE:\n• Si no se presenta a una reserva confirmada sin cancelación previa, no se emitirá reembolso\n• El cuidador recibirá el pago completo por el tiempo reservado\n• Las ausencias repetidas pueden resultar en restricciones de cuenta o suspensión permanente",
+    "liabilityTitle": "Limitación de responsabilidad",
+    "liabilityContent": "IMPORTANTE: Existen riesgos, incluyendo el riesgo de daño físico, al tratar con personas que conecta a través de nuestro sitio. Usted asume todos los riesgos asociados con las interacciones con otros usuarios.\n\nInstacares.com no es responsable de la conducta de ningún usuario del sitio o servicios. Rechazamos expresamente cualquier responsabilidad por daños, demandas, reclamaciones y/o controversias que puedan surgir de las interacciones entre usuarios.\n\nNuestra responsabilidad total no excederá el precio pagado por su cuenta, o si no ha pagado, no tenemos responsabilidad. No somos responsables de daños indirectos, consecuentes o incidentales.",
+    "indemnificationTitle": "Indemnización",
+    "indemnificationContent": "Usted acepta indemnizar, defender y mantener indemne a Instacares.com y sus empleados de cualquier reclamación, pérdida, gasto o demanda de responsabilidad que surja de:\n• Materiales y contenido que envíe a través del sitio\n• Su uso del sitio o servicios en violación de estos términos\n• Cualquier reclamación de un tercero que surja de sus acciones",
+    "terminationTitle": "Terminación",
+    "terminationContent": "Instacares.com se reserva el derecho de terminar su acceso al sitio y servicios en cualquier momento, con o sin aviso, por cualquier razón, incluyendo:\n• Violación de estos términos\n• Mal uso del contenido del sitio\n• Ser inadecuado para participar como usuario\n• Cualquier otra razón a nuestra entera discreción",
+    "ageRestrictionsTitle": "Restricciones de edad",
+    "ageRestrictionsContent": "Instacares.com está destinado a personas de 18 años o más. No recopilaremos conscientemente ninguna información de personas menores de 18 años. Si determinamos que tiene menos de 18 años, su registro será terminado inmediatamente.",
+    "jurisdictionTitle": "Jurisdicción",
+    "jurisdictionContent": "Cualquier disputa que surja del sitio y/o servicios se regirá por las leyes de la provincia de Ontario, y usted acepta expresamente la jurisdicción exclusiva de los tribunales de Ontario.",
+    "contactTitle": "Información de contacto",
+    "contactCompany": "Equipo Instacares",
+    "contactAddress1": "22 King Street South, Suite 300",
+    "contactAddress2": "Waterloo, Ontario, N2J 1N8",
+    "contactWeb": "Web:",
+    "contactEmail": "Correo electrónico:",
+    "contactPhone": "Teléfono:",
+    "agreementText": "Al usar Instacares.com, reconoce que ha leído, entendido y acepta estar sujeto a estos Términos de Servicio.",
+    "acceptButton": "Entiendo y acepto"
+  },
+  "privacy": {
+    "backToHome": "← Volver al inicio",
+    "title": "Política de privacidad",
+    "updated": "Actualizado: Abril 2024",
+    "questionsTitle": "¿Preguntas sobre nuestra política de privacidad?",
+    "questionsText": "Si tiene alguna pregunta sobre esta Política de Privacidad o cómo manejamos su información personal, por favor contáctenos.",
+    "emailUs": "Envíenos un correo",
+    "callUs": "Llámenos: (888) 394-0259",
+    "sections": {
+      "overview": {
+        "title": "Resumen",
+        "content": "Instacare 24/7 Inc. respeta la privacidad y seguridad de su información personal.\n\nEsta Política de Privacidad describe cómo Instacare 24/7 Inc. y sus afiliados (en adelante, colectivamente, \"INSTACARES\", \"nosotros\", \"nos\" y \"nuestro\") recopilan, usan, comparten, retienen y protegen la información personal obtenida a través de su relación de cliente con nosotros.\n\nCualquier término en mayúsculas no definido de otra manera en esta Política de Privacidad se entenderá que tiene el significado dado a dicho término en nuestros Términos de Servicio.\n\nAl usar cualquiera de nuestros Servicios, usar o acceder a nuestra Plataforma, sitio web o páginas de redes sociales (colectivamente, los \"Sitios\"), o contactarnos para soporte al cliente (es decir, por correo electrónico, teléfono, llenando formularios o de otra manera), usted acepta los términos de esta Política de Privacidad y consiente las políticas y prácticas descritas aquí para la recopilación, uso y divulgación de su Información Personal."
+      },
+      "personalInfo": {
+        "title": "¿Qué es la información personal?",
+        "content": "La información personal es cualquier información que lo identifica, o por la cual su identidad podría deducirse. Esto puede incluir información como su nombre, dirección, número de teléfono, dirección de correo electrónico, detalles de pago (por ejemplo, la información de su tarjeta de crédito), historial de transacciones y cualquier otra información que nos proporcione (colectivamente, \"Información Personal\")."
+      },
+      "collection": {
+        "title": "¿Qué información personal recopilamos y por qué la recopilamos?",
+        "content": "Recopilamos y almacenamos cualquier información que nos proporcione directamente cuando crea una Cuenta, usa nuestros Servicios, accede a nuestra Plataforma, visita nuestros Sitios o contacta al soporte al cliente. La mayor parte de la información recopilada sobre usted para servicios minoristas es información básica que necesitamos para realizar nuestros Servicios, completar una compra con respecto a nuestros Servicios pagados, o procesar y hacer seguimiento de transacciones.\n\nCualquier información que envíe o publique en los Sitios puede ser accedida y utilizada por visitantes de los Sitios, Cuidadores, Padres y otros usuarios. Si nos proporciona cualquier Información Personal de otra persona, usted declara y garantiza que tiene el derecho y la autoridad para proporcionarnos esa Información Personal.\n\nCuando accede a nuestra Plataforma, visita nuestros Sitios o usa nuestros Servicios, también podemos recopilar ciertos tipos de información del usuario, como direcciones IP, tipos de navegadores y dispositivos, archivos de registro y qué páginas o contenido accede. Esta información puede asociarse con usted y usarse para entregar nuestros Servicios y proporcionar solución de problemas técnicos. Ciertas partes de nuestra Plataforma y Sitios usan cookies para permitir que nuestros sistemas reconozcan su navegador y proporcionen conveniencia y otras características, como reconocerlo como un cliente existente o visitante anterior.\n\nUsamos su Información Personal para: (a) registrar su Cuenta, verificar la información de su Cuenta y proporcionarle nuestros Servicios; (b) comunicarnos con usted de vez en cuando por teléfono, correo electrónico y/o la Plataforma; (c) mejorar y optimizar nuestra Plataforma, Sitios y Servicios (por ejemplo, generando análisis sobre cómo los visitantes navegan e interactúan con la Plataforma y los Sitios, y para evaluar el éxito de nuestras campañas de marketing y publicidad); y (d) otros propósitos comerciales.\n\nCuando realiza un pago con nosotros, usamos servicios de terceros para procesar pagos y no tenemos acceso a su información de pago. Los servicios de terceros serán responsables de administrar de manera segura sus datos personales y financieros de acuerdo con los estándares de seguridad de datos de la industria de tarjetas de pago."
+      },
+      "caregiverInfo": {
+        "title": "Información del cuidador",
+        "content": "Los cuidadores deben saber que recopilamos y almacenamos toda la información que nos proporciona al crear su Cuenta y configurar un perfil en la Plataforma, cuya información puede incluir detalles sobre el cuidado que ofrece, su disponibilidad, su ubicación, su experiencia, los idiomas que habla, los servicios relacionados que puede proporcionar, fotografías e imágenes, sus números de teléfono, referencias y cualquier otra información que elija incluir en su Cuenta.\n\nAunque se requiere que los Cuidadores presenten una verificación de antecedentes penales con verificación del sector vulnerable en conexión con el registro de una Cuenta, los resultados de esta verificación de antecedentes no se publicarán en los Sitios, aparte de una notación publicada en el perfil público de un Cuidador confirmando que se ha proporcionado y verificado una verificación del sector vulnerable."
+      },
+      "parentInfo": {
+        "title": "Información del padre",
+        "content": "Los padres deben saber que recopilamos, almacenamos y compartimos Información Personal en los Sitios a través de la Plataforma y otras características y ofertas en línea, como nuestra plataforma de comunicaciones en línea, que ciertos usuarios registrados pueden usar para comunicarse y compartir información entre sí.\n\nTambién podemos recopilar Información Personal sobre usted de terceros. Sin limitación y solo a modo de ejemplo, esto ocurre cuando los Cuidadores son calificados o revisados, cuando obtenemos información de referencias para un Cuidador, cuando los Padres, Cuidadores y otros se comunican directamente entre sí a través de los Sitios, y cuando recibimos información sobre Padres, Cuidadores y otros por teléfono, correo electrónico o en persona.\n\nNuestros Sitios y Servicios están destinados a personas de 18 años o más. En consecuencia, no recopilamos conscientemente ninguna Información Personal de personas menores de 18 años."
+      },
+      "cookies": {
+        "title": "Cookies y otras tecnologías",
+        "content": "Podemos usar cookies y píxeles de seguimiento (también conocidos como balizas web) para rastrear el uso del sitio y las tendencias, personalizar su experiencia en los Sitios y mejorar la calidad de nuestros Servicios.\n\nUna cookie es un archivo de datos que reside en su computadora, teléfono móvil u otro dispositivo y nos permite reconocerlo como un Padre o Cuidador registrado cuando regresa a los Sitios usando el mismo dispositivo y navegador web. Puede eliminar o bloquear cookies, o cambiar la configuración de sus cookies, en cualquier momento, pero en algunos casos, hacerlo puede afectar su capacidad de usar nuestros Sitios y Servicios. Los píxeles de seguimiento no identifican a usuarios individuales, y el análisis de los datos obtenidos por los píxeles de seguimiento se realiza de forma agregada."
+      },
+      "sharing": {
+        "title": "Compartir información",
+        "content": "Nuestros Servicios implican la facilitación de presentaciones e interacciones entre Padres y Cuidadores. Para realizar nuestros Servicios, compartiremos cierta Información Personal enviada por usted con otros Padres y Cuidadores para permitirle a usted y a dichos otros usuarios registrados buscar, encontrar, interactuar, conectarse y compartir información con aquellos usuarios registrados con los que pueda tener interés en interactuar, o que puedan tener interés en interactuar con usted.\n\nTambién compartiremos la información que los Padres y Cuidadores incluyen en sus Cuentas (excluyendo su información de contacto) con los visitantes del sitio y los usuarios registrados en general. Con excepciones limitadas, podrá decidir cuánta información pública desea compartir con otros usuarios y visitantes de los Sitios. Su ubicación residencial aproximada (a través del trazado de Google map) estará disponible en la Plataforma.\n\nNos comprometemos a proteger su privacidad y, excepto en conexión con la realización de nuestros Servicios o según lo permitido de otra manera en esta Política de Privacidad, no divulgaremos de otra manera su Información Personal a terceros para permitirles comercializar sus productos y servicios. No venderemos su Información Personal bajo ninguna circunstancia. INSTACARES puede usar servicios de terceros para entregarle los Servicios, incluyendo pero no limitado a correo electrónico, aplicaciones de software de firma electrónica de documentos y otras herramientas web. Usted reconoce y acepta que puede ser requerido aceptar términos de servicio de terceros para recibir dichos servicios de terceros y usar los Servicios.\n\nAl consentir esta Política de Privacidad, su información será accedida y utilizada de las siguientes maneras: (a) por empleados y contratistas independientes contratados por INSTACARES (colectivamente, nuestros \"Representantes\") para entregar nuestros Servicios y responder a consultas relacionadas con nuestros Servicios; (b) por nuestros Representantes para confirmar su registro en nuestra Plataforma, compra de nuestros Servicios (según corresponda), entender las características demográficas y preferencias de nuestros clientes, y comunicarse con usted; (c) por proveedores de servicios de terceros para proporcionar ciertos servicios, como procesar información de tarjetas de pago, videoconferencias, alojamiento web y proveedores de servicios de correo electrónico; (d) por Padres y/o Cuidadores en conexión con su uso de la Plataforma y nuestros Servicios, como se describe más particularmente en nuestros Términos de Servicio; y (e) por empresas con las que compartimos información, como anunciantes, que pueden usar la información que les proporcionamos, a menudo en combinación con su información existente, para proporcionarle publicidad más relevante, y para ayudarnos a nosotros y a terceros a hacer lo mismo.\n\nTambién podemos compartir su Información Personal según lo permitido o requerido por las leyes y regulaciones aplicables, para responder a una citación, orden de registro u otra solicitud legal de información que recibamos, o para proteger de otra manera nuestros derechos y propiedad.\n\nTambién podemos divulgar su Información Personal sin su consentimiento en emergencias si es claramente en su interés hacerlo y su consentimiento no puede obtenerse de manera oportuna, o si es requerido o permitido por la Ley de Protección de Información Personal y Documentos Electrónicos (Canadá) o legislación provincial sustancialmente similar aplicable.\n\nTambién podemos divulgar su Información Personal a un organismo público o agencia de aplicación de la ley en Canadá con respecto a un delito bajo las leyes de Canadá o una provincia (incluyendo para proteger nuestros derechos y propiedad o para proteger la salud, seguridad y propiedad de nuestra comunidad) o para responder a consultas o ayudar en una investigación por cualquier organismo público o agencia de aplicación de la ley."
+      },
+      "retention": {
+        "title": "¿Cuánto tiempo conservamos su información?",
+        "content": "Conservamos su Información Personal mientras sea necesario para proporcionar nuestros Servicios, o mientras sea necesario para que INSTACARES cumpla con nuestros requisitos comerciales, acuerdos, contratos y obligaciones legales, lo que sea posterior. Cuando crea una Cuenta, mantendremos su Información Personal para nuestros registros a menos y hasta que nos pida que eliminemos esta información. Si desea actualizar, revisar o validar su Información Personal, contáctenos en: info@instacares.com"
+      },
+      "consent": {
+        "title": "¿Cómo obtenemos su consentimiento?",
+        "content": "INSTACARES no recopila, usa ni divulga su Información Personal sin su consentimiento excepto cuando lo requiera la ley. El consentimiento puede proporcionarse por escrito o verbalmente o puede estar implícito a través de su conducta con nosotros.\n\nAL PROPORCIONARNOS SU INFORMACIÓN PERSONAL O USAR NUESTRA PLATAFORMA, SITIOS Y/O SERVICIOS, USTED CONSIENTE NUESTRA RECOPILACIÓN, USO Y DIVULGACIÓN DE SU INFORMACIÓN PERSONAL DE ACUERDO CON ESTA POLÍTICA DE PRIVACIDAD Y SEGÚN LO PERMITIDO O REQUERIDO POR LA LEY."
+      },
+      "security": {
+        "title": "¿Cómo mantenemos segura su información?",
+        "content": "INSTACARES toma precauciones comercialmente razonables para proteger su Información Personal de acuerdo con esta Política de Privacidad y las leyes aplicables implementando salvaguardas estándar de la industria y siguiendo nuestras prácticas y procedimientos internos de seguridad de datos, que incluyen medidas de seguridad administrativas, técnicas y físicas. Cuando la ley nos requiere proporcionar información a terceros, tomamos medidas razonables para verificar la autoridad legal para la recopilación y divulgamos solo la información que es legalmente requerida. Nuestras prácticas de seguridad dependen de que usted mantenga su nombre de usuario y contraseña seguros y no comparta esa información con nadie más. Usted también es responsable de mantener sus dispositivos seguros, para prevenir el uso y acceso no autorizado de cualquier contraseña e información de cuenta. Toda la Información Personal que recopilamos se almacenará en nuestro servidor, que está ubicado en el Estado de Virginia, EE. UU."
+      },
+      "emailRisks": {
+        "title": "¿Cuáles son los riesgos de las comunicaciones por correo electrónico?",
+        "content": "Aunque principalmente nos comunicamos con nuestros Usuarios y Proveedores a través de la Plataforma, podemos comunicarnos con usted de vez en cuando por correo electrónico y/o mensaje de texto SMS incluyendo, sin limitación, para enviarle notificaciones sobre reservas de servicios de Cuidador y notificarle de otras actualizaciones a nuestros Servicios, Términos de Servicio y/o Política de Privacidad. Debe saber que la correspondencia por correo electrónico y SMS no puede garantizarse que sea segura, sin cambios, sin errores o segura. Las transmisiones de correo electrónico y SMS pueden ser interceptadas, desviadas, alteradas, perdidas o retrasadas.\n\nA menos que nos notifique por escrito que no use correo electrónico y/o SMS para comunicarse con usted, su aceptación de esta Política de Privacidad se considera que incluye su consentimiento para que INSTACARES use correo electrónico y/o SMS para comunicarse con usted, y su acuerdo de asumir todos los riesgos en conexión con lo mismo.\n\nTenga en cuenta que nuestros Servicios solo pueden estar disponibles para usted mientras continúe consintiendo que INSTACARES se comunique con usted por correo electrónico y SMS."
+      },
+      "optOut": {
+        "title": "¿Cómo puede optar por no recibir comunicaciones de marketing?",
+        "content": "Si decide que ya no quiere que su Información Personal sea usada o compartida para comercializar nuestros Servicios hacia usted, puede optar por no recibir ofertas promocionales en cualquier momento enviándonos una solicitud por escrito. Procesaremos su solicitud dentro de un período de tiempo razonable después de recibir su solicitud. Tenga en cuenta que incluso si ha optado por no recibir comunicaciones de marketing, aún podemos contactarlo para propósitos no relacionados con marketing incluyendo, sin limitación, fraude, cobros, mantenimiento de cuenta y propósitos transaccionales y/u operacionales."
+      },
+      "dataProcessors": {
+        "title": "Procesadores de datos de terceros",
+        "content": "Para proporcionar nuestros Servicios, contratamos los siguientes procesadores de datos de terceros que pueden recibir y procesar su Información Personal en nuestro nombre. En cumplimiento con la Ley de Protección de Información Personal y Documentos Electrónicos (PIPEDA), proporcionamos a continuación los nombres y propósitos de cada procesador.\n\nStripe, Inc. (stripe.com) — Procesamiento de pagos: Cuando realiza o recibe pagos a través de InstaCares, su nombre, dirección de correo electrónico, datos de tarjeta de pago y montos de reserva se transmiten de forma segura a Stripe para el procesamiento de pagos y el almacenamiento de métodos de pago. Stripe procesa esta información de acuerdo con su propia política de privacidad: https://stripe.com/privacy. Stripe cuenta con certificación PCI DSS Nivel 1.\n\nResend (resend.com) — Envío de correos electrónicos transaccionales: Cuando le enviamos correos electrónicos transaccionales como confirmaciones de reserva, recibos y notificaciones, su dirección de correo electrónico y nombre se transmiten a Resend para la entrega de correos electrónicos. Resend procesa esta información únicamente para entregar correos electrónicos en nuestro nombre. Política de privacidad de Resend: https://resend.com/legal/privacy-policy.\n\nGoogle (google.com) — Autenticación OAuth: Si elige iniciar sesión con Google, su dirección de correo electrónico, nombre y foto de perfil se comparten con nosotros a través del servicio OAuth de Google para autenticar su identidad y crear o acceder a su cuenta. Este es un método de inicio de sesión opcional. Política de privacidad de Google: https://policies.google.com/privacy.\n\nFacebook/Meta (facebook.com) — Autenticación OAuth: Si elige iniciar sesión con Facebook, su dirección de correo electrónico, nombre y foto de perfil se comparten con nosotros a través del servicio OAuth de Facebook para autenticar su identidad y crear o acceder a su cuenta. Este es un método de inicio de sesión opcional. Política de privacidad de Meta: https://www.facebook.com/privacy/policy.\n\nMapbox (mapbox.com) — Mapas y servicios de ubicación: Cuando busca cuidadores, datos de ubicación aproximada se transmiten a Mapbox para proporcionar la visualización de mapas y la funcionalidad de búsqueda basada en ubicación. Mapbox no recibe su nombre, correo electrónico ni otra información de identificación personal. Política de privacidad de Mapbox: https://www.mapbox.com/legal/privacy.\n\nTodos los procesadores de datos de terceros enumerados anteriormente están obligados contractualmente a proteger su Información Personal y utilizarla únicamente para los fines para los que fue divulgada. No vendemos su Información Personal a ningún tercero."
+      },
+      "childrenData": {
+        "title": "Información de los niños",
+        "content": "InstaCares recopila información sobre los niños únicamente con el propósito de facilitar servicios de cuidado infantil seguros y efectivos. Esta información puede incluir el nombre, fecha de nacimiento, género, alergias, medicamentos, condiciones médicas, tipo de sangre, restricciones dietéticas, contactos de emergencia y fotografías de su hijo.\n\nEsta información se clasifica como información personal sensible bajo PIPEDA y solo se recopila con el consentimiento explícito de los padres. La información médica de los niños solo se comparte con los cuidadores que usted ha reservado a través de la plataforma.\n\nPuede actualizar o eliminar la información de su hijo en cualquier momento a través de su panel de padres."
+      },
+      "dataRights": {
+        "title": "Sus derechos bajo PIPEDA",
+        "content": "Bajo la Ley de Protección de Información Personal y Documentos Electrónicos (PIPEDA), usted tiene los siguientes derechos:\n\nDerecho de acceso: Tiene derecho a solicitar acceso a la Información Personal que tenemos sobre usted. Responderemos a su solicitud dentro de 30 días.\n\nDerecho de corrección: Tiene derecho a solicitar la corrección de cualquier Información Personal inexacta o incompleta.\n\nDerecho a retirar el consentimiento: Puede retirar su consentimiento en cualquier momento, sujeto a restricciones legales o contractuales.\n\nDerecho a solicitar la eliminación: Puede solicitar la eliminación de su Información Personal contactándonos en info@instacares.com. Procesaremos su solicitud dentro de 30 días.\n\nDerecho a presentar una queja: Tiene derecho a presentar una queja ante la Oficina del Comisionado de Privacidad de Canadá (https://www.priv.gc.ca).\n\nPara ejercer cualquiera de estos derechos, contáctenos en info@instacares.com o llame al (888) 394-0259."
+      },
+      "otherInfo": {
+        "title": "Uso de otra información",
+        "content": "Podemos usar información que no es Información Personal para ayudarnos a mejorar nuestros Sitios y nuestros Servicios y personalizar la experiencia del usuario, como proporcionando publicidad dirigida y útil basada en el tipo de servicios de cuidado infantil que busca. También podemos agregar información recopilada a través de cookies y tecnologías similares para usar en análisis estadístico para ayudarnos a rastrear tendencias y analizar patrones en el uso de nuestros Sitios y Servicios.\n\nPodemos compartir dicha información recopilada de usted con nuestros afiliados, proveedores de servicios de terceros y otros para cualquier otro propósito comercial, siempre que dicha información no sea Información Personal y dicha información haya sido desidentificada antes de ser compartida.\n\nPodemos cambiar nuestra Política de Privacidad de vez en cuando. Es su responsabilidad revisar nuestra Política de Privacidad para cualquier cambio. Usted entiende y acepta que su uso continuado de la Plataforma, Sitios o nuestros Servicios constituye su acuerdo a cualquier cambio.\n\nTenga en cuenta que nuestra Plataforma y Sitios pueden contener enlaces a otros sitios web o páginas de redes sociales que no están gobernados por esta Política de Privacidad. Si sigue un enlace a cualquier otro sitio web o página de redes sociales, acepta que lo hace bajo su propio riesgo."
+      },
+      "contact": {
+        "title": "Contáctenos",
+        "content": "Si tiene más preguntas o inquietudes sobre nuestras políticas o procedimientos de privacidad, o si desea revisar, verificar o actualizar su Información Personal, contáctenos.\n\nPuede contactarnos en:\n\nEquipo Instacares\n22 King Street South, Suite 300\nWaterloo, Ontario,\nN2J 1N8\n\nweb: www.instacares.com\nCorreo electrónico: info@instacares.com\nTeléfono: (888) 394-0259"
+      }
+    }
+  }
+}
