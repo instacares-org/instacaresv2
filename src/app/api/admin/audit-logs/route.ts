@@ -1,17 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { verifyAdminAuth } from '@/lib/adminAuth';
+import { requirePermission } from '@/lib/adminAuth';
 import { purgeOldAuditLogs, logAuditEvent, AuditActions } from '@/lib/audit-log';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await verifyAdminAuth(request);
-    if (!authResult.success) {
-      return NextResponse.json(
-        { error: authResult.error || 'Admin authentication required' },
-        { status: 401 }
-      );
-    }
+    const permCheck = await requirePermission(request, 'canViewAuditLogs');
+    if (!permCheck.authorized) return permCheck.response!;
 
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action') || '';
@@ -49,7 +45,7 @@ export async function GET(request: NextRequest) {
       db.auditLog.count({ where }),
     ]);
 
-    return NextResponse.json({
+    return apiSuccess({
       logs,
       pagination: {
         total,
@@ -60,23 +56,15 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error fetching audit logs:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch audit logs' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch audit logs');
   }
 }
 
 // DELETE - Purge old audit logs (retention policy)
 export async function DELETE(request: NextRequest) {
   try {
-    const authResult = await verifyAdminAuth(request);
-    if (!authResult.success) {
-      return NextResponse.json(
-        { error: authResult.error || 'Admin authentication required' },
-        { status: 401 }
-      );
-    }
+    const permCheck = await requirePermission(request, 'canViewAuditLogs');
+    if (!permCheck.authorized) return permCheck.response!;
 
     const { searchParams } = new URL(request.url);
     const retentionDays = Math.max(90, parseInt(searchParams.get('retentionDays') || '365'));
@@ -84,24 +72,19 @@ export async function DELETE(request: NextRequest) {
     const purgedCount = await purgeOldAuditLogs(retentionDays);
 
     logAuditEvent({
-      adminId: authResult.user!.id,
-      adminEmail: authResult.user!.email,
+      adminId: permCheck.user!.id,
+      adminEmail: permCheck.user!.email,
       action: 'AUDIT_LOGS_PURGED',
       resource: 'auditLog',
       details: { retentionDays, purgedCount },
       request,
     });
 
-    return NextResponse.json({
-      success: true,
-      message: `Purged ${purgedCount} audit log entries older than ${retentionDays} days`,
+    return apiSuccess({
       purgedCount,
-    });
+    }, `Purged ${purgedCount} audit log entries older than ${retentionDays} days`);
   } catch (error) {
     console.error('Error purging audit logs:', error);
-    return NextResponse.json(
-      { error: 'Failed to purge audit logs' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to purge audit logs');
   }
 }

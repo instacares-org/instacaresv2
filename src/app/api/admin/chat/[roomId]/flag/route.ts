@@ -1,7 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { verifyAdminAuth } from '@/lib/adminAuth';
+import { requirePermission } from '@/lib/adminAuth';
 import { logAuditEvent, AuditActions } from '@/lib/audit-log';
+import { z } from 'zod';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+
+const flagBodySchema = z.object({
+  reason: z.string().max(1000, 'Reason too long').optional(),
+  flaggedBy: z.string().max(200, 'FlaggedBy too long').optional(),
+});
 
 // POST - Flag a chat room for review
 export async function POST(
@@ -11,15 +18,18 @@ export async function POST(
   try {
     const { roomId } = await params;
 
-    // Verify admin authentication via session (not query params)
-    const authResult = await verifyAdminAuth(req);
-    if (!authResult.success) {
-      return NextResponse.json({ error: authResult.error || 'Admin authentication required' }, { status: 401 });
-    }
-    const adminUserId = authResult.user!.id;
+    // Require admin authentication with permission check
+    const permCheck = await requirePermission(req, 'canModerateChat');
+    if (!permCheck.authorized) return permCheck.response!;
+    const adminUserId = permCheck.user!.id;
 
     const body = await req.json();
-    const { reason, flaggedBy } = body;
+    const parsed = flagBodySchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
+    }
+
+    const { reason, flaggedBy } = parsed.data;
 
     // Get the chat room
     const chatRoom = await db.chatRoom.findUnique({
@@ -58,7 +68,7 @@ export async function POST(
     });
 
     if (!chatRoom) {
-      return NextResponse.json({ error: 'Chat room not found' }, { status: 404 });
+      return ApiErrors.notFound('Chat room not found');
     }
 
     // Create a system message to log the flag action in the chat
@@ -81,7 +91,7 @@ export async function POST(
     // Persistent audit log
     logAuditEvent({
       adminId: adminUserId,
-      adminEmail: authResult.user!.email,
+      adminEmail: permCheck.user!.email,
       action: AuditActions.CHAT_FLAGGED,
       resource: 'chatRoom',
       resourceId: roomId,
@@ -89,19 +99,14 @@ export async function POST(
       request: req,
     });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Chat room flagged for review',
+    return apiSuccess({
       roomId,
       reason: reason || 'Flagged for review',
       flaggedAt: new Date().toISOString()
-    });
+    }, 'Chat room flagged for review');
 
   } catch (error) {
     console.error('Error flagging chat room:', error);
-    return NextResponse.json(
-      { error: 'Failed to flag chat room' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to flag chat room');
   }
 }

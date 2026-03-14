@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const { searchParams } = new URL(request.url);
@@ -329,9 +330,7 @@ export async function GET(request: NextRequest) {
       quarterlyData[quarter].expenses += booking.platformFee;
     });
 
-    return NextResponse.json({
-      success: true,
-      data: {
+    return apiSuccess({
         // Earnings data
         earnings: {
           total: Math.round(totalEarnings),
@@ -389,14 +388,10 @@ export async function GET(request: NextRequest) {
           start: startDate.toISOString(),
           end: endDate.toISOString()
         }
-      }
     });
 
   } catch (error) {
     console.error('Error fetching caregiver analytics:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch analytics data' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch analytics data');
   }
 }

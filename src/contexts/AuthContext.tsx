@@ -108,7 +108,7 @@ export interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  login: (email: string, password: string, userType?: 'parent' | 'caregiver', rememberMe?: boolean) => Promise<{ success: boolean; error?: string; status?: string }>;
+  login: (email: string, password: string, userType?: 'parent' | 'caregiver' | 'babysitter', rememberMe?: boolean) => Promise<{ success: boolean; error?: string; status?: string }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   isAuthenticated: boolean;
@@ -168,13 +168,9 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     const isComplete = hasPhone && hasDOB && hasStreet && hasCity;
 
     console.log('[Client isProfileComplete] Check:', {
-      phone: profile.phone,
       hasPhone,
-      dateOfBirth: profile.dateOfBirth,
       hasDOB,
-      streetAddress: profile.streetAddress,
       hasStreet,
-      city: profile.city,
       hasCity,
       isComplete
     });
@@ -219,16 +215,11 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
 
     console.log('AuthContext convertSessionToUser:', {
       serverNeedsCompletion: session.user.needsProfileCompletion,
-      serverNeedsCompletionType: typeof session.user.needsProfileCompletion,
       clientIsProfileComplete: !profileIncomplete,
       finalNeedsCompletion: needsProfileCompletion,
-      sessionUserKeys: Object.keys(session.user),
       hasProfile: !!session.user.profile,
-      // Dual role debug - explicitly check these fields
-      rawIsParent: session.user.isParent,
-      rawIsCaregiver: session.user.isCaregiver,
-      rawActiveRole: session.user.activeRole,
-      rawUserType: session.user.userType,
+      activeRole: session.user.activeRole,
+      userType: session.user.userType,
     });
 
     // Dual role fields - from session or derive from userType

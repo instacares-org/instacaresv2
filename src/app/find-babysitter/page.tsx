@@ -108,7 +108,7 @@ export default function FindBabysitterPage() {
 
       const res = await fetch(`/api/babysitters?${params.toString()}`);
       const data = await res.json();
-      setBabysitters(data.babysitters || []);
+      setBabysitters(data.data?.babysitters || data.babysitters || []);
     } catch (error) {
       console.error('Failed to fetch babysitters:', error);
     } finally {

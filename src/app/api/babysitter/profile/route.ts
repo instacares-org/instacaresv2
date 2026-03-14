@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod';
-import { requireAuth, apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+import { requireAuth, apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 // Validation schema for profile update
 const profileUpdateSchema = z.object({
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
         trustBadges.push({ type: 'SECURE_PAYMENTS', label: 'Secure Payments' });
       }
 
-      return NextResponse.json({
+      return apiSuccess({
         id: babysitter.id,
         firstName: babysitter.user.profile?.firstName,
         lastName: babysitter.user.profile?.lastName?.charAt(0) + '.', // Privacy: only show initial

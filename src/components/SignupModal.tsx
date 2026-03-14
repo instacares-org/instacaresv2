@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { XMarkIcon, EyeIcon, EyeSlashIcon, ArrowLeftIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { addCSRFHeader } from '@/lib/csrf';
 import dynamic from 'next/dynamic';
@@ -124,10 +124,12 @@ export default function SignupModal({
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [phoneError, setPhoneError] = useState<string>('');
+  const oauthInitializedRef = useRef(false);
 
   // Reset form when modal closes or initialize OAuth mode
   useEffect(() => {
     if (!isOpen) {
+      oauthInitializedRef.current = false;
       setCurrentStep(1);
       setUserType('parent');
       setQuestionnaireData({
@@ -168,8 +170,9 @@ export default function SignupModal({
       }));
       setAvatarFile(null);
       setAvatarPreview(null);
-    } else if (isOpen && isOAuthMode && oauthUserData) {
-      // Initialize form with OAuth user data
+    } else if (isOpen && isOAuthMode && oauthUserData && !oauthInitializedRef.current) {
+      // Initialize form with OAuth user data — only once per modal open
+      oauthInitializedRef.current = true;
       setFormData(prev => ({
         ...prev,
         firstName: oauthUserData.firstName || '',
@@ -179,7 +182,7 @@ export default function SignupModal({
       if (oauthUserData.image) {
         setAvatarPreview(oauthUserData.image);
       }
-      // Start at step 1 for OAuth (which is the profile step)
+      // Start at step 1 for OAuth (which is the questionnaire/profile step)
       setCurrentStep(1);
     }
   }, [isOpen, isOAuthMode, oauthUserData]);
@@ -1371,7 +1374,7 @@ export default function SignupModal({
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          if (file.size > 5 * 1024 * 1024) {
+                          if (file.size > 50 * 1024 * 1024) {
                             alert(t('signup.fileSizeError'));
                             return;
                           }

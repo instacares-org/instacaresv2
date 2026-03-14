@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { db } from '@/lib/db';
 
 // GET /api/caregiver-reviews?caregiverId=xxx - Get all reviews for a caregiver
@@ -8,13 +9,7 @@ export async function GET(request: NextRequest) {
     const caregiverId = searchParams.get('caregiverId');
 
     if (!caregiverId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Caregiver ID is required',
-        },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Caregiver ID is required');
     }
 
     console.log(`🔍 Fetching reviews for caregiver: ${caregiverId}`);
@@ -80,22 +75,13 @@ export async function GET(request: NextRequest) {
       serviceType: 'Childcare', // Default service type
     }));
 
-    return NextResponse.json({
-      success: true,
-      data: formattedReviews,
+    return apiSuccess({
+      reviews: formattedReviews,
       total: formattedReviews.length,
     });
 
   } catch (error) {
     console.error('Error fetching reviews:', error);
-    
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to fetch reviews',
-        message: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error',
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch reviews');
   }
 }

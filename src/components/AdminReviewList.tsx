@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { 
+import Image from 'next/image';
+import {
   StarIcon,
   ClockIcon,
   CheckBadgeIcon,
@@ -72,13 +73,14 @@ const AdminReviewList: React.FC<AdminReviewListProps> = ({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch reviews');
+        throw new Error(data.data?.error || data.error || 'Failed to fetch reviews');
       }
 
-      setReviews(data.reviews || []);
-      
+      const reviewsData = data.data?.reviews || data.reviews || [];
+      setReviews(reviewsData);
+
       // Calculate stats
-      const allReviews = data.reviews || [];
+      const allReviews = reviewsData;
       const pending = allReviews.filter((r: ReviewData) => !r.isApproved);
       const approved = allReviews.filter((r: ReviewData) => r.isApproved);
       const avgRating = approved.length > 0
@@ -245,9 +247,11 @@ const AdminReviewList: React.FC<AdminReviewListProps> = ({
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-3">
                   {review.reviewer.avatar ? (
-                    <img
+                    <Image
                       src={review.reviewer.avatar}
                       alt={review.reviewer.name}
+                      width={40}
+                      height={40}
                       className="h-10 w-10 rounded-full object-cover"
                     />
                   ) : (

@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
 /**
  * GET /api/users/status
@@ -29,19 +30,13 @@ export async function GET(request: NextRequest) {
 
     const authenticatedUser = authResult.user;
     if (!authenticatedUser) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
     const { searchParams } = new URL(request.url);
     const requestedEmail = searchParams.get('email');
 
     if (!requestedEmail) {
-      return NextResponse.json(
-        { error: 'Email parameter is required' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Email parameter is required');
     }
 
     // ✅ STEP 2: Authorization check - can user access this data?
@@ -59,10 +54,7 @@ export async function GET(request: NextRequest) {
         url: request.url
       });
 
-      return NextResponse.json(
-        { error: 'Unauthorized - You can only check your own account status' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('Unauthorized - You can only check your own account status');
     }
 
     // ✅ STEP 3: Fetch user data (now authorized)
@@ -84,10 +76,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'No account found with this email address' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('No account found with this email address');
     }
 
     // ✅ STEP 4: Log access for audit trail
@@ -98,7 +87,7 @@ export async function GET(request: NextRequest) {
       ip: clientInfo.ip
     });
 
-    return NextResponse.json({ 
+    return apiSuccess({
       user,
       meta: {
         accessedBy: isAdmin ? 'admin' : 'self',
@@ -112,9 +101,6 @@ export async function GET(request: NextRequest) {
       stack: error instanceof Error ? error.stack : undefined
     });
     
-    return NextResponse.json(
-      { error: 'Failed to check account status' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to check account status');
   }
 }

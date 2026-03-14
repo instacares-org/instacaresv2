@@ -1,8 +1,9 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { z } from 'zod';
 import { getCommissionRate, getStripeInstance } from '@/lib/stripe';
 import { requireAuth, apiSuccess, ApiErrors } from '@/lib/api-utils';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 
 // Validation schema for booking
 const bookingSchema = z.object({
@@ -24,6 +25,14 @@ const bookingSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.BOOKING);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
     const { user, error: authError } = await requireAuth('PARENT');
     if (authError) return authError;
 

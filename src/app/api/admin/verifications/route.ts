@@ -1,21 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/database';
-import { withAuth } from '@/lib/auth-middleware';
+import { NextRequest } from 'next/server';
+import { prisma } from '@/lib/db';
+import { requirePermission } from '@/lib/adminAuth';
 import { logger } from '@/lib/logger';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function PUT(request: NextRequest) {
   try {
-    const authResult = await withAuth(request, 'ADMIN', true);
-    if (!authResult.isAuthorized) return authResult.response;
+    const permCheck = await requirePermission(request, 'canApproveUsers');
+    if (!permCheck.authorized) return permCheck.response!;
     
     const body = await request.json();
     const { caregiverId, verificationType, status, notes } = body;
     
     if (!caregiverId || !verificationType || !status) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+      return ApiErrors.badRequest('Missing required fields');
     }
     
     const updateData: any = { updatedAt: new Date() };
@@ -24,7 +25,7 @@ export async function PUT(request: NextRequest) {
       case 'id':
         updateData.idVerificationStatus = status;
         if (status === 'APPROVED') updateData.idVerifiedAt = new Date();
-        if (status === 'APPROVED') updateData.idVerifiedBy = authResult.user?.id;
+        if (status === 'APPROVED') updateData.idVerifiedBy = permCheck.user!.id;
         break;
       case 'backgroundCheck':
         updateData.backgroundCheckStatus = status;
@@ -37,7 +38,7 @@ export async function PUT(request: NextRequest) {
         updateData.referencesStatus = status;
         break;
       default:
-        return NextResponse.json({ error: 'Invalid verification type' }, { status: 400 });
+        return ApiErrors.badRequest('Invalid verification type');
     }
     
     const verification = await prisma.caregiverVerification.upsert({
@@ -50,15 +51,15 @@ export async function PUT(request: NextRequest) {
     });
     
     logger.info('Admin updated verification status', {
-      adminId: authResult.user?.id,
+      adminId: permCheck.user!.id,
       caregiverId,
       verificationType,
       status
     });
     
-    return NextResponse.json({ success: true, verification });
+    return apiSuccess({ verification });
   } catch (error) {
     logger.error('Failed to update verification', error);
-    return NextResponse.json({ error: 'Failed to update verification' }, { status: 500 });
+    return ApiErrors.internal('Failed to update verification');
   }
 }

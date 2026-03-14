@@ -1,14 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomId: string }> }
 ) {
   try {
-    // ✅ STEP 1: Require authentication (REMOVE userId query param vulnerability)
+    // STEP 1: Require authentication (REMOVE userId query param vulnerability)
     const authResult = await withAuth(request, 'ANY');
     if (!authResult.isAuthorized) {
       const clientInfo = getClientInfo(request);
@@ -23,7 +24,7 @@ export async function POST(
     const user = authResult.user!;
     const { roomId } = await params;
 
-    // ✅ STEP 2: Verify user has access to this chat room
+    // STEP 2: Verify user has access to this chat room
     const chatRoom = await db.chatRoom.findFirst({
       where: {
         id: roomId,
@@ -39,14 +40,14 @@ export async function POST(
         userId: user.id,
         roomId
       });
-      return NextResponse.json({ error: 'Chat room not found or access denied' }, { status: 404 });
+      return ApiErrors.notFound('Chat room not found or access denied');
     }
 
-    // ✅ STEP 3: Mark all unread messages in this room as read for this user
+    // STEP 3: Mark all unread messages in this room as read for this user
     const result = await db.message.updateMany({
       where: {
         chatRoomId: roomId,
-        senderId: { not: user.id }, // ✅ Use session user ID
+        senderId: { not: user.id }, // Use session user ID
         isRead: false,
       },
       data: {
@@ -61,13 +62,10 @@ export async function POST(
       messagesUpdated: result.count
     });
 
-    return NextResponse.json({ success: true, messagesUpdated: result.count });
+    return apiSuccess({ messagesUpdated: result.count });
   } catch (error) {
     console.error('Error marking messages as read:', error);
     logger.error('Mark as read error', { error });
-    return NextResponse.json(
-      { error: 'Failed to mark messages as read' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to mark messages as read');
   }
 }

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { Ratelimit } from '@upstash/ratelimit';
+import { getRedisClient } from './redis';
 
 // Strong password validation schema with comprehensive security requirements
 export const passwordSchema = z
@@ -106,48 +108,105 @@ export interface RateLimitResult {
   resetTime?: number;
 }
 
-// Simple in-memory rate limiter (should use Redis in production)
+// In-memory fallback store (used when Redis is unavailable)
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 
-export function checkRateLimit(
-  identifier: string, 
-  maxAttempts: number = 5, 
-  windowMs: number = 15 * 60 * 1000 // 15 minutes
+// Cache Ratelimit instances per config to avoid creating new ones on every call
+const validationLimiterCache = new Map<string, Ratelimit>();
+
+function getValidationLimiter(maxAttempts: number, windowMs: number): Ratelimit | null {
+  const redis = getRedisClient();
+  if (!redis) return null;
+
+  const cacheKey = `validation:${maxAttempts}:${windowMs}`;
+  const cached = validationLimiterCache.get(cacheKey);
+  if (cached) return cached;
+
+  const limiter = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(maxAttempts, `${windowMs} ms`),
+    prefix: 'rl:validation',
+  });
+  validationLimiterCache.set(cacheKey, limiter);
+  return limiter;
+}
+
+// In-memory fallback rate limiter
+function checkRateLimitInMemory(
+  identifier: string,
+  maxAttempts: number,
+  windowMs: number
 ): RateLimitResult {
   const now = Date.now();
   const key = identifier;
-  
+
   const current = rateLimitMap.get(key);
-  
+
   // Clean up expired entries
   if (current && now > current.resetTime) {
     rateLimitMap.delete(key);
   }
-  
+
   const limit = rateLimitMap.get(key);
-  
+
   if (!limit) {
     // First request
     rateLimitMap.set(key, { count: 1, resetTime: now + windowMs });
     return { success: true, remaining: maxAttempts - 1, resetTime: now + windowMs };
   }
-  
+
   if (limit.count >= maxAttempts) {
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: `Too many attempts. Try again in ${Math.ceil((limit.resetTime - now) / 60000)} minutes.`,
       remaining: 0,
-      resetTime: limit.resetTime
+      resetTime: limit.resetTime,
     };
   }
-  
+
   // Increment counter
   limit.count++;
   rateLimitMap.set(key, limit);
-  
-  return { 
-    success: true, 
+
+  return {
+    success: true,
     remaining: maxAttempts - limit.count,
-    resetTime: limit.resetTime
+    resetTime: limit.resetTime,
   };
+}
+
+export async function checkRateLimit(
+  identifier: string,
+  maxAttempts: number = 5,
+  windowMs: number = 15 * 60 * 1000 // 15 minutes
+): Promise<RateLimitResult> {
+  const limiter = getValidationLimiter(maxAttempts, windowMs);
+
+  if (limiter) {
+    try {
+      const result = await limiter.limit(identifier);
+      const now = Date.now();
+
+      if (result.success) {
+        return {
+          success: true,
+          remaining: result.remaining,
+          resetTime: result.reset,
+        };
+      }
+
+      return {
+        success: false,
+        error: `Too many attempts. Try again in ${Math.ceil((result.reset - now) / 60000)} minutes.`,
+        remaining: 0,
+        resetTime: result.reset,
+      };
+    } catch {
+      // Redis error — fall back to in-memory
+      return checkRateLimitInMemory(identifier, maxAttempts, windowMs);
+    }
+  }
+
+  // Redis unavailable — use in-memory fallback
+  return checkRateLimitInMemory(identifier, maxAttempts, windowMs);
 }

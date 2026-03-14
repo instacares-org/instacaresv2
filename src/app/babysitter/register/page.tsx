@@ -40,8 +40,8 @@ function BasicInfoStep({ data, updateData, errors }: StepProps) {
       alert('Please select an image file');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB');
+    if (file.size > 50 * 1024 * 1024) {
+      alert('File size must be less than 50MB');
       return;
     }
 

@@ -3,16 +3,18 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
 import { getCommissionRate, DEFAULT_COMMISSION_RATE } from '@/lib/stripe';
-import Stripe from 'stripe';
+import { z } from 'zod';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-08-27.basil',
+const extendBookingBodySchema = z.object({
+  extensionMinutes: z.number()
+    .int('Extension minutes must be a whole number')
+    .min(30, 'Extension must be at least 30 minutes')
+    .max(240, 'Extension must not exceed 240 minutes')
+    .refine(val => val % 30 === 0, 'Extension must be in 30-minute increments'),
+  reason: z.string().max(1000, 'Reason must not exceed 1000 characters').optional(),
 });
-
-interface ExtendBookingRequest {
-  extensionMinutes: number; // 30, 60, 90, 120, etc.
-  reason?: string;
-}
 
 // POST: Create a booking extension request
 export async function POST(
@@ -20,22 +22,26 @@ export async function POST(
   { params }: { params: Promise<{ bookingId: string }> }
 ) {
   try {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.BOOKING);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const { bookingId } = await params;
-    const body: ExtendBookingRequest = await request.json();
-    const { extensionMinutes, reason } = body;
-
-    // Validate extension duration (30 min increments, max 4 hours)
-    if (!extensionMinutes || extensionMinutes < 30 || extensionMinutes > 240 || extensionMinutes % 30 !== 0) {
-      return NextResponse.json(
-        { error: 'Extension must be in 30-minute increments (30-240 minutes)' },
-        { status: 400 }
-      );
+    const body = await request.json();
+    const parsed = extendBookingBodySchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
     }
+    const { extensionMinutes, reason } = parsed.data;
 
     // Get the booking
     const booking = await db.booking.findUnique({
@@ -66,23 +72,17 @@ export async function POST(
     });
 
     if (!booking) {
-      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+      return ApiErrors.notFound('Booking not found');
     }
 
     // Verify the requester is the caregiver for this booking
     if (booking.caregiverId !== session.user.id) {
-      return NextResponse.json(
-        { error: 'Only the caregiver can request a booking extension' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('Only the caregiver can request a booking extension');
     }
 
     // Booking must be IN_PROGRESS to extend
     if (booking.status !== 'IN_PROGRESS') {
-      return NextResponse.json(
-        { error: 'Booking must be in progress to request an extension' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Booking must be in progress to request an extension');
     }
 
     // Check for existing pending extensions
@@ -91,10 +91,7 @@ export async function POST(
         e => e.status === 'PENDING' || e.status === 'PAYMENT_PENDING'
       );
       if (pendingExtension) {
-        return NextResponse.json(
-          { error: 'There is already a pending extension request for this booking' },
-          { status: 400 }
-        );
+        return ApiErrors.badRequest('There is already a pending extension request for this booking');
       }
     }
 
@@ -118,10 +115,7 @@ export async function POST(
     // Get parent's payment method from original booking payment
     const originalPayment = booking.payments[0];
     if (!originalPayment?.stripePaymentIntentId) {
-      return NextResponse.json(
-        { error: 'No payment method found for this booking' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('No payment method found for this booking');
     }
 
     // Create the extension record
@@ -176,8 +170,7 @@ export async function POST(
 
     console.log(`[Extension] Extension ${extension.id} created as PENDING, awaiting admin approval.`);
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       extension: {
         id: extension.id,
         extensionMinutes,
@@ -185,15 +178,11 @@ export async function POST(
         newEndTime,
         status: 'PENDING',
       },
-      message: 'Extension request submitted. An admin will review and approve it.',
-    });
+    }, 'Extension request submitted. An admin will review and approve it.');
 
   } catch (error) {
     console.error('Error creating booking extension:', error);
-    return NextResponse.json(
-      { error: 'Failed to create booking extension' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to create booking extension');
   }
 }
 
@@ -205,7 +194,7 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const { bookingId } = await params;
@@ -221,15 +210,15 @@ export async function GET(
     });
 
     if (!booking) {
-      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+      return ApiErrors.notFound('Booking not found');
     }
 
     // Verify the requester is part of this booking
     if (booking.caregiverId !== session.user.id && booking.parentId !== session.user.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return ApiErrors.forbidden();
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       extensions: booking.extensions.map(ext => ({
         id: ext.id,
         extensionMinutes: ext.extensionMinutes,
@@ -245,9 +234,6 @@ export async function GET(
 
   } catch (error) {
     console.error('Error fetching booking extensions:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch booking extensions' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch booking extensions');
   }
 }

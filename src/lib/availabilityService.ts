@@ -32,6 +32,7 @@ export interface AvailabilityQuery {
   status?: SlotStatus;
   minAvailableSpots?: number;
   userTimezone?: string; // Optional: If provided, converts results to this timezone
+  includeExpired?: boolean; // If true, skip the endTime > now filter (for caregiver's own schedule view)
 }
 
 export class AvailabilityService {
@@ -178,10 +179,11 @@ export class AvailabilityService {
       endDate,
       status = SlotStatus.AVAILABLE,
       minAvailableSpots = 1,
-      userTimezone
+      userTimezone,
+      includeExpired = false
     } = query;
 
-    // Filter out expired slots (endTime must be in the future)
+    // Filter out expired slots (endTime must be in the future) unless includeExpired is set
     const now = new Date();
 
     const where: any = {
@@ -189,11 +191,12 @@ export class AvailabilityService {
       availableSpots: {
         gte: minAvailableSpots
       },
-      // Only return slots that haven't expired yet
-      endTime: {
-        gt: now
-      }
     };
+
+    // Only filter by expiry for parent-facing views (not caregiver's own schedule)
+    if (!includeExpired) {
+      where.endTime = { gt: now };
+    }
 
     if (caregiverId) {
       where.caregiverId = caregiverId;

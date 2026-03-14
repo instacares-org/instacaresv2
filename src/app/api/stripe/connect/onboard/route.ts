@@ -1,8 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { getStripeInstance } from '@/lib/stripe';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
 import { db } from '@/lib/db';
+import { z } from 'zod';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
+
+const stripeOnboardBodySchema = z.object({
+  caregiverName: z.string().max(200, 'Caregiver name too long').trim().optional(),
+  phone: z.string().max(30, 'Phone number too long').trim().optional(),
+  address: z.object({
+    line1: z.string().max(300).optional(),
+    city: z.string().max(100).optional(),
+    state: z.string().max(100).optional(),
+    postal_code: z.string().max(20).optional(),
+    country: z.string().max(10).optional(),
+  }).optional(),
+});
 
 // Prevent pre-rendering during build time
 export const runtime = 'nodejs';
@@ -10,6 +25,12 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    // --- RATE LIMITING ---
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.PROFILE_UPDATE);
+    if (!rateLimitResult.success) {
+      return ApiErrors.tooManyRequests('Too many requests. Please try again later.');
+    }
+
     // ✅ STEP 1: Require caregiver authentication
     const authResult = await withAuth(request, 'CAREGIVER');
     if (!authResult.isAuthorized) {
@@ -24,13 +45,15 @@ export async function POST(request: NextRequest) {
 
     const caregiverUser = authResult.user;
     if (!caregiverUser) {
-      return NextResponse.json(
-        { error: 'Authentication error: user data missing' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized('Authentication error: user data missing');
     }
 
-    const { caregiverName, phone, address } = await request.json();
+    const rawBody = await request.json();
+    const parsed = stripeOnboardBodySchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
+    }
+    const { caregiverName, phone, address } = parsed.data;
 
     // ✅ STEP 2: Verify caregiver profile exists and belongs to authenticated user
     const caregiverProfile = await db.caregiver.findFirst({
@@ -42,10 +65,7 @@ export async function POST(request: NextRequest) {
         userId: caregiverUser.id,
         email: caregiverUser.email
       });
-      return NextResponse.json(
-        { error: 'Caregiver profile not found. Please complete your profile first.' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Caregiver profile not found. Please complete your profile first.');
     }
 
     // ✅ STEP 3: Check if already has Stripe account - generate new account link for verification
@@ -71,7 +91,7 @@ export async function POST(request: NextRequest) {
           stripeAccountId: caregiverProfile.stripeAccountId
         });
 
-        return NextResponse.json({
+        return apiSuccess({
           accountId: caregiverProfile.stripeAccountId,
           mode: 'embedded',
         });
@@ -99,8 +119,8 @@ export async function POST(request: NextRequest) {
       });
 
       // Get the host and protocol from the request headers for dynamic URL
-      const host = request.headers.get('host') || 'localhost:3005';
-      const protocol = request.headers.get('x-forwarded-proto') || 'http';
+      const host = request.headers.get('host') || process.env.NEXT_PUBLIC_BASE_URL?.replace(/^https?:\/\//, '') || 'instacares.net';
+      const protocol = request.headers.get('x-forwarded-proto') || 'https';
       const baseUrl = `${protocol}://${host}`;
       const demoOnboardingUrl = `${baseUrl}/caregiver-dashboard?setup=success&demo=true`;
 
@@ -110,12 +130,11 @@ export async function POST(request: NextRequest) {
         demoAccountId
       });
 
-      return NextResponse.json({
+      return apiSuccess({
         accountId: demoAccountId,
         onboardingUrl: demoOnboardingUrl,
         demo: true,
-        message: 'Demo mode active. Set STRIPE_CONNECT_ENABLED=true to enable real payments.'
-      });
+      }, 'Demo mode active. Set STRIPE_CONNECT_ENABLED=true to enable real payments.');
     }
 
     // Real Stripe Connect mode (when enabled)
@@ -131,17 +150,16 @@ export async function POST(request: NextRequest) {
         data: { stripeAccountId: demoAccountId }
       });
 
-      const host = request.headers.get('host') || 'localhost:3005';
-      const protocol = request.headers.get('x-forwarded-proto') || 'http';
+      const host = request.headers.get('host') || process.env.NEXT_PUBLIC_BASE_URL?.replace(/^https?:\/\//, '') || 'instacares.net';
+      const protocol = request.headers.get('x-forwarded-proto') || 'https';
       const baseUrl = `${protocol}://${host}`;
       const demoOnboardingUrl = `${baseUrl}/caregiver-dashboard?setup=success&demo=true`;
 
-      return NextResponse.json({
+      return apiSuccess({
         accountId: demoAccountId,
         onboardingUrl: demoOnboardingUrl,
         demo: true,
-        message: 'Demo mode active. Configure STRIPE_SECRET_KEY to enable real payments.'
-      });
+      }, 'Demo mode active. Configure STRIPE_SECRET_KEY to enable real payments.');
     }
 
     // Fetch user profile data to pre-fill Stripe onboarding
@@ -192,6 +210,8 @@ export async function POST(request: NextRequest) {
         country: userCountry,
       };
     }
+    // Pre-fill job title for the onboarding form
+    individual.relationship = { title: 'Caregiver' };
 
     // ✅ Create Stripe account with pre-filled data from user profile
     const account = await stripe.accounts.create({
@@ -237,7 +257,7 @@ export async function POST(request: NextRequest) {
       email: caregiverUser.email
     });
 
-    return NextResponse.json({
+    return apiSuccess({
       accountId: account.id,
       mode: 'embedded',
     });
@@ -252,13 +272,6 @@ export async function POST(request: NextRequest) {
       code: errCode
     });
 
-    return NextResponse.json(
-      {
-        error: 'Failed to create Stripe Connect account',
-        details: errMessage,
-        type: errType
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to create Stripe Connect account');
   }
 }

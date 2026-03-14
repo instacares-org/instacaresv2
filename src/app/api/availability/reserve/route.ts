@@ -1,108 +1,59 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { NextRequest } from 'next/server';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+import { withAuth } from '@/lib/auth-middleware';
 import { AvailabilityService } from '@/lib/availabilityService';
 
 // POST /api/availability/reserve - Reserve spots temporarily
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    if (session.user.userType !== 'PARENT') {
-      return NextResponse.json(
-        { error: 'Only parents can reserve spots' },
-        { status: 403 }
-      );
+    const authResult = await withAuth(request, 'PARENT');
+    if (!authResult.isAuthorized || !authResult.user) {
+      return authResult.response;
     }
 
     const body = await request.json();
     const { slotId, childrenCount, reservedSpots } = body;
 
     if (!slotId || !childrenCount || !reservedSpots) {
-      return NextResponse.json(
-        { error: 'slotId, childrenCount, and reservedSpots are required' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('slotId, childrenCount, and reservedSpots are required');
     }
 
     const reservation = await AvailabilityService.reserveSpots({
       slotId,
-      parentId: session.user.id,
+      parentId: authResult.user.id,
       childrenCount,
       reservedSpots
     });
 
-    return NextResponse.json({
-      success: true,
-      data: reservation,
-      message: 'Spots reserved successfully for 15 minutes'
-    });
+    return apiSuccess(reservation, 'Spots reserved successfully for 15 minutes');
 
   } catch (error) {
     console.error('Error reserving spots:', error);
-    
-    if (error instanceof Error) {
-      return NextResponse.json({
-        success: false,
-        error: error.message
-      }, { status: 400 });
-    }
-
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to reserve spots'
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to process availability reservation');
   }
 }
 
 // DELETE /api/availability/reserve - Cancel reservation
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+    const authResult = await withAuth(request, 'ANY');
+    if (!authResult.isAuthorized || !authResult.user) {
+      return authResult.response;
     }
 
     const { searchParams } = new URL(request.url);
     const reservationId = searchParams.get('reservationId');
 
     if (!reservationId) {
-      return NextResponse.json(
-        { error: 'reservationId is required' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('reservationId is required');
     }
 
     const reservation = await AvailabilityService.cancelReservation(reservationId);
 
-    return NextResponse.json({
-      success: true,
-      data: reservation,
-      message: 'Reservation cancelled successfully'
-    });
+    return apiSuccess(reservation, 'Reservation cancelled successfully');
 
   } catch (error) {
     console.error('Error cancelling reservation:', error);
-    
-    if (error instanceof Error) {
-      return NextResponse.json({
-        success: false,
-        error: error.message
-      }, { status: 400 });
-    }
-
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to cancel reservation'
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to process availability reservation');
   }
 }

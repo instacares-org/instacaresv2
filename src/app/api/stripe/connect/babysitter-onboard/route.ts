@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { getStripeInstance } from '@/lib/stripe';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
 import { db } from '@/lib/db';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 
 // Prevent pre-rendering during build time
 export const runtime = 'nodejs';
@@ -10,6 +12,12 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    // --- RATE LIMITING ---
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.PROFILE_UPDATE);
+    if (!rateLimitResult.success) {
+      return ApiErrors.tooManyRequests('Too many requests. Please try again later.');
+    }
+
     // Require authentication (babysitters have userType=CAREGIVER)
     const authResult = await withAuth(request, 'CAREGIVER');
     if (!authResult.isAuthorized) {
@@ -24,10 +32,7 @@ export async function POST(request: NextRequest) {
 
     const user = authResult.user;
     if (!user) {
-      return NextResponse.json(
-        { error: 'Authentication error: user data missing' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized('Authentication error: user data missing');
     }
 
     // Verify babysitter profile exists
@@ -40,10 +45,7 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         email: user.email
       });
-      return NextResponse.json(
-        { error: 'Babysitter profile not found. Please complete your profile first.' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Babysitter profile not found. Please complete your profile first.');
     }
 
     // Check if already has Stripe account - generate new account link for verification
@@ -67,7 +69,7 @@ export async function POST(request: NextRequest) {
           stripeConnectId: babysitterProfile.stripeConnectId
         });
 
-        return NextResponse.json({
+        return apiSuccess({
           accountId: babysitterProfile.stripeConnectId,
           mode: 'embedded',
         });
@@ -92,8 +94,8 @@ export async function POST(request: NextRequest) {
         data: { stripeConnectId: demoAccountId }
       });
 
-      const host = request.headers.get('host') || 'localhost:3005';
-      const protocol = request.headers.get('x-forwarded-proto') || 'http';
+      const host = request.headers.get('host') || process.env.NEXT_PUBLIC_BASE_URL?.replace(/^https?:\/\//, '') || 'instacares.net';
+      const protocol = request.headers.get('x-forwarded-proto') || 'https';
       const baseUrl = `${protocol}://${host}`;
       const demoOnboardingUrl = `${baseUrl}/caregiver-dashboard?tab=payments&setup=success&demo=true`;
 
@@ -103,12 +105,11 @@ export async function POST(request: NextRequest) {
         demoAccountId
       });
 
-      return NextResponse.json({
+      return apiSuccess({
         accountId: demoAccountId,
         onboardingUrl: demoOnboardingUrl,
         demo: true,
-        message: 'Demo mode active. Set STRIPE_CONNECT_ENABLED=true to enable real payments.'
-      });
+      }, 'Demo mode active. Set STRIPE_CONNECT_ENABLED=true to enable real payments.');
     }
 
     // Real Stripe Connect mode
@@ -123,17 +124,16 @@ export async function POST(request: NextRequest) {
         data: { stripeConnectId: demoAccountId }
       });
 
-      const host = request.headers.get('host') || 'localhost:3005';
-      const protocol = request.headers.get('x-forwarded-proto') || 'http';
+      const host = request.headers.get('host') || process.env.NEXT_PUBLIC_BASE_URL?.replace(/^https?:\/\//, '') || 'instacares.net';
+      const protocol = request.headers.get('x-forwarded-proto') || 'https';
       const baseUrl = `${protocol}://${host}`;
       const demoOnboardingUrl = `${baseUrl}/caregiver-dashboard?tab=payments&setup=success&demo=true`;
 
-      return NextResponse.json({
+      return apiSuccess({
         accountId: demoAccountId,
         onboardingUrl: demoOnboardingUrl,
         demo: true,
-        message: 'Demo mode active. Configure STRIPE_SECRET_KEY to enable real payments.'
-      });
+      }, 'Demo mode active. Configure STRIPE_SECRET_KEY to enable real payments.');
     }
 
     // Fetch user profile data to pre-fill Stripe onboarding
@@ -229,7 +229,7 @@ export async function POST(request: NextRequest) {
       email: user.email
     });
 
-    return NextResponse.json({
+    return apiSuccess({
       accountId: account.id,
       mode: 'embedded',
     });
@@ -244,13 +244,6 @@ export async function POST(request: NextRequest) {
       code: errCode
     });
 
-    return NextResponse.json(
-      {
-        error: 'Failed to create Stripe Connect account',
-        details: errMessage,
-        type: errType
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to create Stripe Connect account');
   }
 }

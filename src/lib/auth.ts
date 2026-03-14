@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { UserType, ApprovalStatus } from '@prisma/client';
-import { prisma } from './database';
+import { prisma } from './db';
 import { logger } from './logger';
 import jwt, { JwtPayload } from 'jsonwebtoken';
 
@@ -102,10 +102,6 @@ export async function verifyUserStatus(userId: string): Promise<{ isValid: boole
 
     if (!user) {
       return { isValid: false, error: 'User not found' };
-    }
-
-    if (user.approvalStatus !== 'APPROVED') {
-      return { isValid: false, error: 'Account pending approval' };
     }
 
     if (!user.isActive) {

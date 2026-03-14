@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { AddressAutofill } from '@mapbox/search-js-react';
+import { AddressAutofill as _AddressAutofill } from '@mapbox/search-js-react';
+
+// Cast to work around React 19 ForwardRef JSX compatibility
+const AddressAutofill = _AddressAutofill as unknown as React.FC<any>;
 
 export interface AddressData {
   streetAddress: string;

@@ -12,11 +12,11 @@ export const getStripeInstance = (): Stripe | null => {
   
   const apiKey = process.env.STRIPE_SECRET_KEY;
   
-  // During build, return null to prevent initialization errors
-  const isBuildTime = process.env.SKIP_ENV_VALIDATION === 'true' || 
-                      process.env.NEXT_PHASE === 'phase-production-build';
-  
-  if (isBuildTime) {
+  // During build only, return null to prevent initialization errors
+  // NOTE: Only check NEXT_PHASE (set by Next.js during build).
+  // Do NOT check SKIP_ENV_VALIDATION here — it stays true in .env at runtime
+  // and would permanently disable Stripe when PM2 provides the real key.
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
     return null;
   }
   
@@ -66,7 +66,7 @@ export const getCommissionRate = async (): Promise<number> => {
 
   try {
     // Dynamic import to avoid circular dependencies
-    const { prisma } = await import('@/lib/database');
+    const { prisma } = await import('@/lib/db');
     const settings = await prisma.platformSettings.findFirst();
 
     if (settings && settings.platformCommissionRate !== null) {

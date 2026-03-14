@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
 import { z } from 'zod';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 // Validation schema for document upload
 const documentsSchema = z.object({
@@ -20,10 +21,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const userId = session.user.id;
@@ -38,10 +36,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!babysitter) {
-      return NextResponse.json(
-        { error: 'Babysitter profile not found. Please complete registration first.' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Babysitter profile not found. Please complete registration first.');
     }
 
     // Prepare update data
@@ -89,27 +84,19 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Documents uploaded successfully',
+    return apiSuccess({
       hasRequiredDocs,
       nextStep: hasRequiredDocs ? 'references' : 'documents'
-    });
+    }, 'Documents uploaded successfully');
 
   } catch (error) {
     console.error('Document upload error:', error);
 
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.issues },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Validation error', error.issues);
     }
 
-    return NextResponse.json(
-      { error: 'Failed to upload documents' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to upload documents');
   }
 }
 
@@ -119,10 +106,7 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const babysitter = await db.babysitter.findUnique({
@@ -140,10 +124,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!babysitter) {
-      return NextResponse.json(
-        { error: 'Babysitter profile not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Babysitter profile not found');
     }
 
     const documents = {
@@ -162,7 +143,7 @@ export async function GET(request: NextRequest) {
       documents.policeCheck &&
       documents.selfieForMatch;
 
-    return NextResponse.json({
+    return apiSuccess({
       documents,
       requiredComplete,
       status: babysitter.status,
@@ -170,9 +151,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Get documents error:', error);
-    return NextResponse.json(
-      { error: 'Failed to get document status' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to get document status');
   }
 }

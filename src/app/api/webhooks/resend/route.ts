@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { prisma } from '@/lib/prisma';
 
 export async function POST(request: NextRequest) {
@@ -10,10 +11,7 @@ export async function POST(request: NextRequest) {
 
     // Basic webhook data validation
     if (!body.type || !body.data) {
-      return NextResponse.json(
-        { error: 'Invalid webhook payload' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Invalid webhook payload');
     }
 
     // Log webhook event
@@ -177,9 +175,6 @@ export async function POST(request: NextRequest) {
       console.error('Failed to log webhook error:', dbError);
     }
 
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return ApiErrors.internal();
   }
 }

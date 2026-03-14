@@ -44,6 +44,7 @@ function MessagesContainerInner({
     sendMessage: socketSendMessage,
     onNewMessage,
     onUserTyping,
+    onUnreadCountUpdate,
     startTyping,
     stopTyping,
     markMessagesRead
@@ -84,7 +85,9 @@ function MessagesContainerInner({
 
       if (response.ok) {
         const result = await response.json();
-        setMessages(result.messages || []);
+        // Handle both apiSuccess format { success, data: { messages } } and legacy { messages }
+        const msgs = result.data?.messages || result.messages || [];
+        setMessages(msgs);
         setError(null);
       } else {
         const errorData = await response.text();
@@ -179,6 +182,37 @@ function MessagesContainerInner({
     };
   }, [onUserTyping, userId]);
 
+  // Listen for unread count updates (messages arriving in other rooms)
+  useEffect(() => {
+    const unsubscribe = onUnreadCountUpdate((data: any) => {
+      console.log('[Messages] Unread count update:', data);
+      // Refresh rooms list to show new message badge
+      fetchRooms(true);
+    });
+
+    return unsubscribe;
+  }, [onUnreadCountUpdate, fetchRooms]);
+
+  // Polling fallback: refresh rooms every 15 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchRooms(true); // silent refresh
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [fetchRooms]);
+
+  // Polling fallback: refresh active room messages every 8 seconds
+  useEffect(() => {
+    if (!selectedRoom) return;
+
+    const interval = setInterval(() => {
+      fetchMessages(selectedRoom);
+    }, 8000);
+
+    return () => clearInterval(interval);
+  }, [selectedRoom, fetchMessages]);
+
   // Handle sending messages
   const handleSendMessage = useCallback(async (content: string) => {
     if (!selectedRoom || !content.trim()) return;
@@ -211,8 +245,10 @@ function MessagesContainerInner({
 
         if (response.ok) {
           const result = await response.json();
-          if (result.id) {
-            setMessages(prev => [...prev, result]);
+          // Handle both apiSuccess format { success, data: {...} } and legacy {...}
+          const newMessage = result.data || result;
+          if (newMessage.id) {
+            setMessages(prev => [...prev, newMessage]);
             fetchRooms(true); // Silent refresh
             if (onRefreshCount) {
               onRefreshCount();

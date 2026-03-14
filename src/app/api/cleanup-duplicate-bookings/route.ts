@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { withAuth } from '@/lib/auth-middleware';
 
 // Enhanced cleanup endpoint to identify and remove duplicate bookings by patterns
@@ -122,16 +123,12 @@ export async function POST(request: NextRequest) {
       
       // Clear cache
       const { apiCache } = await import('@/lib/cache');
-      apiCache.clear();
+      await apiCache.clear();
       console.log('Cache cleared');
     }
     
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       dryRun,
-      message: dryRun 
-        ? 'Analysis complete - no bookings deleted' 
-        : 'Duplicate bookings cleaned up successfully',
       analysis: {
         totalBookings: allBookings.length,
         duplicateGroups: duplicateGroups.length,
@@ -152,14 +149,13 @@ export async function POST(request: NextRequest) {
       },
       deletedBookings: deletedBookings.length,
       deletedPayments: deletedPayments.length
-    });
+    }, dryRun
+      ? 'Analysis complete - no bookings deleted'
+      : 'Duplicate bookings cleaned up successfully');
     
   } catch (error) {
     console.error('Enhanced cleanup error:', error);
-    return NextResponse.json({ 
-      error: 'Failed to cleanup duplicate bookings',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to cleanup duplicate bookings');
   }
 }
 

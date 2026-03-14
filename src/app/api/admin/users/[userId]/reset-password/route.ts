@@ -1,10 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { emailService } from '@/lib/notifications/email.service';
+import { requirePermission } from '@/lib/adminAuth';
 import { logAuditEvent, AuditActions } from '@/lib/audit-log';
+import { z } from 'zod';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+
+const bodySchema = z.object({
+  newPassword: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(128, 'Password must be at most 128 characters')
+    .optional(),
+});
 
 // POST /api/admin/users/[userId]/reset-password - Reset user password
 export async function POST(
@@ -12,26 +20,9 @@ export async function POST(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    // Verify admin authentication
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    // Check if user is admin
-    const adminUser = await db.user.findUnique({
-      where: { id: session.user.id }
-    });
-
-    if (!adminUser || adminUser.userType !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Admin access required' },
-        { status: 403 }
-      );
-    }
+    // Verify admin authentication and permission
+    const permCheck = await requirePermission(request, 'canManageUsers');
+    if (!permCheck.authorized) return permCheck.response!;
 
     const { userId } = await params;
 
@@ -44,14 +35,24 @@ export async function POST(
     });
 
     if (!targetUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('User not found');
     }
 
-    // Generate a temporary password
-    const tempPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10).toUpperCase();
+    // Parse and validate optional request body
+    let newPassword: string | undefined;
+    try {
+      const body = await request.json();
+      const parsed = bodySchema.safeParse(body);
+      if (!parsed.success) {
+        return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
+      }
+      newPassword = parsed.data.newPassword;
+    } catch {
+      // No body provided, which is fine - we'll generate a password
+    }
+
+    // Use provided password or generate a temporary one
+    const tempPassword = newPassword || (Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10).toUpperCase());
 
     // Hash the password
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
@@ -61,6 +62,7 @@ export async function POST(
       where: { id: userId },
       data: {
         passwordHash: hashedPassword,
+        mustChangePassword: true,
       }
     });
 
@@ -124,8 +126,8 @@ export async function POST(
 
     // Persistent audit log
     logAuditEvent({
-      adminId: adminUser.id,
-      adminEmail: adminUser.email,
+      adminId: permCheck.user!.id,
+      adminEmail: permCheck.user!.email,
       action: AuditActions.USER_PASSWORD_RESET,
       resource: 'user',
       resourceId: userId,
@@ -133,18 +135,13 @@ export async function POST(
       request,
     });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Password reset successfully. Temporary password sent via email.',
+    return apiSuccess({
       emailSent: emailResult.success,
       email: targetUser.email,
-    });
+    }, 'Password reset successfully. Temporary password sent via email.');
 
   } catch (error) {
     console.error('Error resetting password:', error);
-    return NextResponse.json(
-      { error: 'Failed to reset password' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to reset password');
   }
 }

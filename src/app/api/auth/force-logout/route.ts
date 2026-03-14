@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
 // ✅ Changed from GET to POST to prevent CSRF attacks
 // SameSite=Lax cookies block cross-site POST requests
@@ -21,10 +22,7 @@ export async function POST(request: NextRequest) {
 
     const adminUser = authResult.user;
     if (!adminUser) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     // ✅ Log admin action for audit trail
@@ -42,26 +40,16 @@ export async function POST(request: NextRequest) {
     cookieStore.delete('__Host-next-auth.csrf-token');
     cookieStore.delete('next-auth.callback-url');
 
-    return NextResponse.json({
-      success: true,
-      message: 'All auth cookies cleared. Please log in again.',
-      redirect: '/login'
-    });
+    return apiSuccess({ redirect: '/login' }, 'All auth cookies cleared. Please log in again.');
   } catch (error) {
     logger.error('Failed to force logout', {
       error: error instanceof Error ? error.message : 'Unknown error'
     });
-    return NextResponse.json(
-      { success: false, error: 'Failed to force logout' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to force logout');
   }
 }
 
 // Explicitly reject GET requests with helpful error
 export async function GET() {
-  return NextResponse.json(
-    { error: 'Method not allowed. Use POST request.' },
-    { status: 405 }
-  );
+  return apiError('Method not allowed. Use POST request.', 405);
 }

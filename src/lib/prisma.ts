@@ -1,2 +1,2 @@
-// Re-export prisma client from database.ts for consistency
-export { prisma, withTransaction } from './database';
+// Re-export prisma client from db.ts for consistency
+export { prisma, withTransaction } from './db';

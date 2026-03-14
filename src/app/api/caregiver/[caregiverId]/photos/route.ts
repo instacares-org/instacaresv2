@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { db } from '@/lib/db';
 
 // GET /api/caregiver/[caregiverId]/photos - Get public daycare photos for a caregiver
@@ -12,10 +13,7 @@ export async function GET(
     console.log('📸 Caregiver ID:', caregiverId);
 
     if (!caregiverId) {
-      return NextResponse.json(
-        { error: 'Caregiver ID is required' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Caregiver ID is required');
     }
 
     // Verify caregiver exists and is verified
@@ -43,10 +41,7 @@ export async function GET(
     });
 
     if (!caregiver) {
-      return NextResponse.json(
-        { error: 'Caregiver not found or not verified' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Caregiver not found or not verified');
     }
 
     console.log('📸 Caregiver found:', caregiver?.id);
@@ -72,8 +67,7 @@ export async function GET(
 
     console.log(`📸 Found ${photos.length} photos for caregiver ${caregiverId}`);
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       caregiver: {
         name: `${caregiver.user.profile?.firstName} ${caregiver.user.profile?.lastName}`,
         photos: photos
@@ -83,13 +77,6 @@ export async function GET(
 
   } catch (error) {
     console.error('Error fetching caregiver photos:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to fetch photos',
-        message: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error',
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch photos');
   }
 }

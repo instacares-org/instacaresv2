@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Frequently Asked Questions | InstaCares',
+  title: 'Frequently Asked Questions',
   description: 'Get answers to common questions about InstaCares childcare services in Canada.',
 };
 

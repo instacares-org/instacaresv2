@@ -88,8 +88,9 @@ export function useAvailability() {
     console.log('🔍 useAvailability - fetching realtime availability:', { caregiverId, date });
 
     try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Toronto';
       const response = await fetch(
-        `/api/availability/realtime?caregiverId=${caregiverId}&date=${date}`
+        `/api/availability/realtime?caregiverId=${caregiverId}&date=${date}&userTimezone=${encodeURIComponent(tz)}`
       );
       const data = await response.json();
 

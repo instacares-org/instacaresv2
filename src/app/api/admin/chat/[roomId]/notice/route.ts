@@ -1,7 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { verifyAdminAuth } from '@/lib/adminAuth';
+import { requirePermission } from '@/lib/adminAuth';
 import { logAuditEvent, AuditActions } from '@/lib/audit-log';
+import { z } from 'zod';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+
+const noticeBodySchema = z.object({
+  content: z.string().min(1, 'Notice content is required').max(2000, 'Notice content too long').trim(),
+  type: z.string().max(50, 'Type too long').optional().default('admin_notice'),
+});
 
 // POST - Send an admin notice to a chat room
 export async function POST(
@@ -11,12 +18,10 @@ export async function POST(
   try {
     const { roomId } = await params;
 
-    // Verify admin authentication via session (not query params)
-    const authResult = await verifyAdminAuth(req);
-    if (!authResult.success) {
-      return NextResponse.json({ error: authResult.error || 'Admin authentication required' }, { status: 401 });
-    }
-    const adminUserId = authResult.user!.id;
+    // Require admin authentication with permission check
+    const permCheck = await requirePermission(req, 'canModerateChat');
+    if (!permCheck.authorized) return permCheck.response!;
+    const adminUserId = permCheck.user!.id;
 
     // Fetch admin profile for the notice
     const admin = await db.user.findUnique({
@@ -34,15 +39,16 @@ export async function POST(
     });
 
     if (!admin) {
-      return NextResponse.json({ error: 'Admin user not found' }, { status: 500 });
+      return ApiErrors.internal('Admin user not found');
     }
 
     const body = await req.json();
-    const { content, type = 'admin_notice' } = body;
-
-    if (!content || !content.trim()) {
-      return NextResponse.json({ error: 'Notice content is required' }, { status: 400 });
+    const parsed = noticeBodySchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
     }
+
+    const { content, type } = parsed.data;
 
     // Verify chat room exists
     const chatRoom = await db.chatRoom.findUnique({
@@ -59,7 +65,7 @@ export async function POST(
     });
 
     if (!chatRoom) {
-      return NextResponse.json({ error: 'Chat room not found' }, { status: 404 });
+      return ApiErrors.notFound('Chat room not found');
     }
 
     // Create a system message in the chat room for the admin notice
@@ -103,7 +109,7 @@ export async function POST(
     // Persistent audit log
     logAuditEvent({
       adminId: adminUserId,
-      adminEmail: authResult.user!.email,
+      adminEmail: permCheck.user!.email,
       action: AuditActions.CHAT_NOTICE_SENT,
       resource: 'chatRoom',
       resourceId: roomId,
@@ -111,18 +117,13 @@ export async function POST(
       request: req,
     });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Admin notice sent successfully',
+    return apiSuccess({
       roomId,
       notice: formattedMessage
-    });
+    }, 'Admin notice sent successfully');
 
   } catch (error) {
     console.error('Error sending admin notice:', error);
-    return NextResponse.json(
-      { error: 'Failed to send admin notice' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to send admin notice');
   }
 }

@@ -1,22 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { stripe } from '@/lib/stripe';
-import { prisma } from '@/lib/database';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+import { getStripeInstance } from '@/lib/stripe';
+import { prisma } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
   try {
     const { accountId } = await request.json();
 
     if (!accountId) {
-      return NextResponse.json(
-        { error: 'Account ID is required' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Account ID is required');
     }
 
     // Check if this is a demo account
     if (accountId.startsWith('acct_demo_')) {
       // Return demo status - NOT ready for real payments
-      return NextResponse.json({
+      return apiSuccess({
         accountId: accountId,
         canReceivePayments: false,
         chargesEnabled: false,
@@ -27,16 +25,13 @@ export async function POST(request: NextRequest) {
         },
         payoutsEnabled: false,
         isDemo: true,
-        message: 'This is a demo account. Please complete real Stripe Connect setup to receive payments.'
-      });
+      }, 'This is a demo account. Please complete real Stripe Connect setup to receive payments.');
     }
 
-    // Real Stripe account check
+    // Real Stripe account check — resolve at request time, not module load
+    const stripe = getStripeInstance();
     if (!stripe) {
-      return NextResponse.json(
-        { error: 'Stripe is not configured' },
-        { status: 500 }
-      );
+      return ApiErrors.internal('Stripe is not configured');
     }
     const account = await stripe.accounts.retrieve(accountId);
 
@@ -56,7 +51,7 @@ export async function POST(request: NextRequest) {
       // Don't fail the request if DB sync fails
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       accountId: account.id,
       canReceivePayments,
       chargesEnabled: account.charges_enabled,
@@ -66,9 +61,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Stripe account status error:', error);
-    return NextResponse.json(
-      { error: 'Failed to retrieve account status' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to retrieve account status');
   }
 }

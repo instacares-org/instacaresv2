@@ -191,21 +191,30 @@ export default function Home() {
         
         return filters.specialServices.some(service => {
           switch (service) {
-            case 'overnight':
-              return specialties.some(s => s.includes('overnight')) ||
-                     description.includes('overnight');
-            case 'tutoring':
-              return specialties.some(s => s.includes('tutor') || s.includes('homework')) ||
-                     description.includes('tutor') || description.includes('homework');
-            case 'cooking':
-              return specialties.some(s => s.includes('cook') || s.includes('meal')) ||
-                     description.includes('cook') || description.includes('meal');
-            case 'housekeeping':
-              return specialties.some(s => s.includes('clean') || s.includes('housekeep')) ||
-                     description.includes('clean') || description.includes('housekeep');
-            case 'pets':
-              return specialties.some(s => s.includes('pet')) ||
-                     description.includes('pet');
+            case 'potty-training':
+              return specialties.some(s => s.includes('potty training') || s.includes('potty')) ||
+                     description.includes('potty training');
+            case 'sleep-training':
+              return specialties.some(s => s.includes('sleep training') || s.includes('sleep')) ||
+                     description.includes('sleep training');
+            case 'special-needs':
+              return specialties.some(s => s.includes('special needs') || s.includes('special') || s.includes('medical')) ||
+                     description.includes('special needs') || description.includes('medical');
+            case 'bilingual':
+              return specialties.some(s => s.includes('bilingual') || s.includes('french') || s.includes('language')) ||
+                     description.includes('bilingual') || description.includes('french');
+            case 'meals':
+              return specialties.some(s => s.includes('meal') || s.includes('cooking') || s.includes('culinary')) ||
+                     description.includes('meal') || description.includes('cooking');
+            case 'educational':
+              return specialties.some(s => s.includes('educational') || s.includes('education') || s.includes('tutoring')) ||
+                     description.includes('educational') || description.includes('education');
+            case 'outdoor':
+              return specialties.some(s => s.includes('outdoor') || s.includes('outdoor play')) ||
+                     description.includes('outdoor');
+            case 'arts-crafts':
+              return specialties.some(s => s.includes('arts') || s.includes('crafts') || s.includes('arts & crafts')) ||
+                     description.includes('arts') || description.includes('crafts');
             default:
               return false;
           }
@@ -246,7 +255,9 @@ export default function Home() {
       const radiusToUse = radiusOverride !== undefined ? radiusOverride : selectedRadius;
       
       // Build query parameters - Remove _forceRefresh to reduce server load
-      let queryParams = `limit=12&_cacheBust=${Date.now()}`;
+      // Pass viewer's timezone so the API filters slots correctly for evening hours
+      const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Toronto';
+      let queryParams = `limit=12&_cacheBust=${Date.now()}&userTimezone=${encodeURIComponent(viewerTz)}`;
       if (location) {
         queryParams += `&lat=${location.lat}&lng=${location.lng}&radius=${radiusToUse}`;
       }
@@ -290,15 +301,17 @@ export default function Home() {
         throw new Error(`Failed to parse API response: ${parseError}`);
       }
       
+      const caregiversList = result.data?.caregivers || result.data;
+      const caregiversArray = Array.isArray(caregiversList) ? caregiversList : [];
       console.log(`📊 API Response for ${radiusToUse}km radius:`, {
         success: result.success,
-        count: result.data?.length || 0,
-        caregivers: result.data?.map((c: any) => `${c.name} (${c.distance?.toFixed(1)}km)`) || []
+        count: caregiversArray.length,
+        caregivers: caregiversArray.map((c: any) => `${c.name} (${c.distance?.toFixed(1)}km)`) || []
       });
-      
-      if (result.success && result.data) {
+
+      if (result.success && caregiversArray.length > 0) {
         // Transform API data to match CaregiverCard interface
-        const transformedCaregivers: Caregiver[] = result.data.map((caregiver: any) => {
+        const transformedCaregivers: Caregiver[] = caregiversArray.map((caregiver: any) => {
           
           // Use API-provided distance or calculate fallback
           let distanceText = caregiver.address?.city ? `${caregiver.address.city}, ${caregiver.address.province}` : 'Location not provided';
@@ -337,7 +350,9 @@ export default function Home() {
             description: caregiver.bio || 'Experienced childcare provider',
             bio: caregiver.bio, // Add bio field for CaregiverDetailModal
             experienceYears: caregiver.experienceYears || 0, // Add experience years
-            specialties: caregiver.services?.map((service: any) => service.type) || ['General Care'],
+            specialties: caregiver.specialties || [],
+            ageGroups: caregiver.ageGroups || [],
+            services: caregiver.services || [],
             location: {
               lat: caregiver.address?.latitude || 0,
               lng: caregiver.address?.longitude || 0,
@@ -358,8 +373,12 @@ export default function Home() {
         // Apply filters and sorting
         const filtered = filterAndSortCaregivers(transformedCaregivers, activeFilters);
         setCaregivers(filtered);
-      } else {
+      } else if (!result.success) {
         throw new Error(result.error || 'Failed to load caregivers');
+      } else {
+        // Success but 0 caregivers found (e.g. none within selected radius)
+        setAllCaregivers([]);
+        setCaregivers([]);
       }
     } catch (error) {
       console.error('Error fetching caregivers:', error);
@@ -383,8 +402,9 @@ export default function Home() {
       });
       if (response.ok) {
         const data = await response.json();
-        if (data.babysitters) {
-          const transformed: BabysitterCardData[] = data.babysitters.map((b: any) => ({
+        const babysitters = data.data?.babysitters || data.babysitters;
+        if (babysitters) {
+          const transformed: BabysitterCardData[] = babysitters.map((b: any) => ({
             ...b,
             type: 'babysitter' as const,
           }));
@@ -499,11 +519,7 @@ export default function Home() {
                   <div className="relative">
                     <select 
                       value={selectedRadius} 
-                      onChange={(e) => {
-                        const newRadius = Number(e.target.value);
-                        setSelectedRadius(newRadius);
-                        // Note: No location yet, so just update the state for when location is enabled
-                      }}
+                      onChange={(e) => handleRadiusChange(Number(e.target.value))}
                       className="appearance-none bg-gradient-to-r from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 border border-gray-200 dark:border-gray-700 hover:border-rose-300 dark:hover:border-rose-600 focus:border-rose-500 dark:focus:border-rose-400 focus:ring-2 focus:ring-rose-500/20 dark:focus:ring-rose-400/20 text-sm font-medium text-gray-900 dark:text-gray-100 rounded-xl px-4 py-2.5 pr-10 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md focus:shadow-lg min-w-[100px] backdrop-blur-sm transform hover:scale-[1.02] active:scale-[0.98]"
                     >
                       <option value={1} className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 py-2">📍 1 km</option>

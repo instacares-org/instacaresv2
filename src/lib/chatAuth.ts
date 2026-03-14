@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
-import { prisma } from './database';
+import { prisma } from './db';
 import { logger } from './logger';
 
 export interface AuthenticatedUser {

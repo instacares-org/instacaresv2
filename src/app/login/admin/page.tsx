@@ -54,8 +54,9 @@ export default function AdminLogin() {
         const response = await fetch('/api/auth/me');
         if (response.ok) {
           const data = await response.json();
-          if (data.user.userType === 'ADMIN') {
-            setSessionInfo(data.user);
+          const user = data.data?.user || data.user;
+          if (user?.userType === 'ADMIN') {
+            setSessionInfo(user);
             setSuccessMessage('Already authenticated. Redirecting...');
             setTimeout(() => router.push('/admin'), 1500);
           }

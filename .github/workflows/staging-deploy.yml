@@ -1,4 +1,4 @@
-name: 🧪 Staging Deployment
+name: Staging Deployment
 
 on:
   # Auto-deploy on push to develop branch
@@ -24,51 +24,61 @@ env:
 jobs:
   # Build and Test Job
   build-and-test:
-    name: 🏗️ Build & Test
+    name: Build & Test
     runs-on: ubuntu-latest
 
     outputs:
       build-success: ${{ steps.build.outputs.success }}
 
     steps:
-      - name: 📥 Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: 🔧 Setup Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
-      - name: 📦 Install Dependencies
+      - name: Install Dependencies
         run: npm ci --prefer-offline --no-audit
 
-      - name: 🔍 Type Check
-        run: npm run type-check || echo "Type check completed with warnings"
+      - name: Create minimal env file
+        run: |
+          echo "DATABASE_URL=file:./dev.db" > .env
+          echo "SKIP_ENV_VALIDATION=true" >> .env
 
-      - name: 🧹 Lint
-        run: npm run lint || echo "Lint completed with warnings"
+      - name: Generate Prisma Client
+        run: npx prisma generate
 
-      - name: 🏗️ Build Application
+      - name: Lint
+        run: npm run lint
+
+      - name: Type Check
+        run: npm run type-check
+
+      - name: Unit Tests
+        if: ${{ github.event.inputs.skip_tests != 'true' }}
+        run: npm test
+
+      - name: Build Application
         id: build
         run: |
           export NODE_ENV=production
           export SKIP_ENV_VALIDATION=true
-          npx prisma generate
           npm run build
           echo "success=true" >> $GITHUB_OUTPUT
-          echo "✅ Build completed successfully"
 
-      - name: 📊 Build Summary
+      - name: Build Summary
         run: |
-          echo "## 🧪 Staging Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Staging Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Status:** Success" >> $GITHUB_STEP_SUMMARY
 
   # Deploy to Ubuntu Staging Server
   deploy-staging:
-    name: 🚀 Deploy to Staging
+    name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: build-and-test
     if: ${{ needs.build-and-test.outputs.build-success == 'true' }}
@@ -78,15 +88,15 @@ jobs:
       url: http://10.0.0.56:3005
 
     steps:
-      - name: 📥 Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: 🔐 Setup SSH
+      - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.STAGING_SSH_KEY }}
 
-      - name: 📋 Prepare Deployment Info
+      - name: Prepare Deployment Info
         id: deploy-info
         run: |
           COMMIT_MSG="$(git log -1 --pretty=format:'%s')"
@@ -97,12 +107,12 @@ jobs:
           echo "commit-author=${COMMIT_AUTHOR}" >> $GITHUB_OUTPUT
           echo "deploy-time=${DEPLOY_TIME}" >> $GITHUB_OUTPUT
 
-      - name: 🚀 Deploy to Staging Server
+      - name: Deploy to Staging Server
         env:
           STAGING_HOST: ${{ secrets.STAGING_HOST || '10.0.0.56' }}
           STAGING_USER: ${{ secrets.STAGING_USER || 'faradyoo7' }}
         run: |
-          echo "🚀 Starting deployment to Staging..."
+          echo "Starting deployment to Staging..."
 
           # Add staging host to known hosts
           mkdir -p ~/.ssh
@@ -112,51 +122,51 @@ jobs:
           ssh -o StrictHostKeyChecking=no -o ConnectTimeout=60 ${STAGING_USER}@${STAGING_HOST} << 'DEPLOY_EOF'
           set -e
 
-          echo "🔄 Deployment started on $(date)"
+          echo "Deployment started on $(date)"
 
           cd ~/instacares_v2
 
           # Pull latest code
-          echo "📥 Pulling latest code from develop branch..."
+          echo "Pulling latest code from develop branch..."
           git fetch --all
           git checkout develop 2>/dev/null || git checkout -b develop origin/develop
           git reset --hard origin/develop
           git pull origin develop
 
           # Rebuild Docker containers
-          echo "🐳 Rebuilding Docker containers..."
+          echo "Rebuilding Docker containers..."
           docker compose down || true
           docker compose build --no-cache
           docker compose up -d
 
           # Wait for containers to be healthy
-          echo "⏳ Waiting for containers to be healthy..."
+          echo "Waiting for containers to be healthy..."
           sleep 15
 
           # Run Prisma migrations inside container
-          echo "🗄️ Running database migrations..."
-          docker compose exec -T app npx prisma db push --accept-data-loss || echo "DB push completed"
+          echo "Running database migrations..."
+          docker compose exec -T app npx prisma migrate deploy || echo "Migration completed"
 
           # Health check
-          echo "🏥 Performing health check..."
+          echo "Performing health check..."
           if docker compose ps | grep -q "Up"; then
-            echo "✅ Staging deployment successful!"
+            echo "Staging deployment successful!"
             docker compose ps
           else
-            echo "❌ Deployment may have issues"
+            echo "Deployment may have issues"
             docker compose logs --tail=50
             exit 1
           fi
 
-          echo "🎉 Staging deployment completed at $(date)"
+          echo "Staging deployment completed at $(date)"
           DEPLOY_EOF
 
-      - name: 🔍 Verify Deployment
+      - name: Verify Deployment
         env:
           STAGING_HOST: ${{ secrets.STAGING_HOST || '10.0.0.56' }}
           STAGING_USER: ${{ secrets.STAGING_USER || 'faradyoo7' }}
         run: |
-          echo "🔍 Verifying staging deployment..."
+          echo "Verifying staging deployment..."
 
           ssh -o StrictHostKeyChecking=no ${STAGING_USER}@${STAGING_HOST} << 'VERIFY_EOF'
           cd ~/instacares_v2
@@ -173,26 +183,16 @@ jobs:
           curl -s http://localhost:3005/api/health 2>/dev/null || echo "Health endpoint not available (this is OK)"
 
           echo ""
-          echo "✅ Verification completed"
+          echo "Verification completed"
           VERIFY_EOF
 
-      - name: 📊 Deployment Summary
+      - name: Deployment Summary
         run: |
-          echo "## 🧪 Staging Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
+          echo "## Staging Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** Success" >> $GITHUB_STEP_SUMMARY
           echo "- **Environment:** Staging (Ubuntu Docker)" >> $GITHUB_STEP_SUMMARY
           echo "- **Deployed At:** ${{ steps.deploy-info.outputs.deploy-time }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Author:** ${{ steps.deploy-info.outputs.commit-author }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Message:** ${{ steps.deploy-info.outputs.commit-msg }}" >> $GITHUB_STEP_SUMMARY
           echo "- **URL:** http://10.0.0.56:3005" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "1. Test the staging environment at http://10.0.0.56:3005" >> $GITHUB_STEP_SUMMARY
-          echo "2. If everything looks good, merge to main" >> $GITHUB_STEP_SUMMARY
-          echo "3. Manually trigger production deployment" >> $GITHUB_STEP_SUMMARY
-
-      - name: 🎉 Success Notification
-        run: |
-          echo "🎉 Staging deployment completed successfully!"
-          echo "Your staging environment is available at http://10.0.0.56:3005"

@@ -1,43 +1,30 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { withAuth } from '@/lib/auth-middleware';
+import { requirePermission } from '@/lib/adminAuth';
 import { logger, getClientInfo } from '@/lib/logger';
 import { logAuditEvent, AuditActions } from '@/lib/audit-log';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 export async function POST(request: NextRequest) {
   try {
-    // ✅ STEP 1: Require admin authentication (REMOVE adminUserId query param vulnerability)
-    const authResult = await withAuth(request, 'ADMIN');
-    if (!authResult.isAuthorized) {
-      const clientInfo = getClientInfo(request);
-      logger.security('Unauthorized admin chat bulk operation attempt', {
-        endpoint: '/api/admin/chat/bulk',
-        ip: clientInfo.ip,
-        userAgent: clientInfo.userAgent
-      });
-      return authResult.response;
-    }
+    // STEP 1: Require admin authentication with permission check
+    const permCheck = await requirePermission(request, 'canModerateChat');
+    if (!permCheck.authorized) return permCheck.response!;
 
-    const adminUser = authResult.user!;
+    const adminUser = permCheck.user!;
 
     const body = await request.json();
     const { action, roomIds, reason } = body;
 
     if (!action || !roomIds || !Array.isArray(roomIds)) {
-      return NextResponse.json(
-        { error: 'Missing required fields: action, roomIds' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Missing required fields: action, roomIds');
     }
 
     if (roomIds.length === 0) {
-      return NextResponse.json(
-        { error: 'No chat rooms selected' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('No chat rooms selected');
     }
 
-    // ✅ STEP 2: Log bulk operation (CRITICAL for audit trail)
+    // STEP 2: Log bulk operation (CRITICAL for audit trail)
     logger.security('Admin chat bulk operation initiated', {
       adminId: adminUser.id,
       adminEmail: adminUser.email,
@@ -96,12 +83,12 @@ export async function POST(request: NextRequest) {
             results.failed.push({ roomId, error: 'Unknown action' });
         }
 
-        // ✅ Log the admin action (use authenticated admin ID)
+        // Log the admin action (use authenticated admin ID)
         try {
           await db.message.create({
             data: {
               chatRoomId: roomId,
-              senderId: adminUser.id, // ✅ Use session admin ID, not query param
+              senderId: adminUser.id, // Use session admin ID, not query param
               content: `Admin bulk action: ${action}. Reason: ${reason || 'No reason provided'}.`,
               messageType: 'SYSTEM'
             }
@@ -115,7 +102,7 @@ export async function POST(request: NextRequest) {
         console.error(`Failed to ${action} room ${roomId}:`, error);
         results.failed.push({
           roomId,
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: 'Operation failed'
         });
       }
     }
@@ -136,7 +123,7 @@ export async function POST(request: NextRequest) {
       request,
     });
 
-    // ✅ STEP 3: Log completion
+    // STEP 3: Log completion
     logger.info('Admin chat bulk operation completed', {
       adminId: adminUser.id,
       action,
@@ -144,19 +131,14 @@ export async function POST(request: NextRequest) {
       failed: results.failed.length
     });
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       action,
       results,
-      message: `${action} operation completed. ${results.successful.length} successful, ${results.failed.length} failed.`
-    });
+    }, `${action} operation completed. ${results.successful.length} successful, ${results.failed.length} failed.`);
 
   } catch (error) {
     console.error('Error performing bulk operation:', error);
     logger.error('Admin chat bulk operation error', { error });
-    return NextResponse.json(
-      { error: 'Failed to perform bulk operation' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to perform bulk operation');
   }
 }

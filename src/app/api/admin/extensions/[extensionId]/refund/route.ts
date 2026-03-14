@@ -1,13 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import Stripe from 'stripe';
+import { getStripeInstance } from '@/lib/stripe';
+import { requirePermission } from '@/lib/adminAuth';
 import { logAuditEvent, AuditActions } from '@/lib/audit-log';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-08-27.basil',
-});
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 // POST - Refund an extension payment
 export async function POST(
@@ -15,21 +11,9 @@ export async function POST(
   { params }: { params: Promise<{ extensionId: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Verify admin role
-    const user = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: { userType: true }
-    });
-
-    if (user?.userType !== 'ADMIN') {
-      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 });
-    }
+    // Require admin authentication with permission check
+    const permCheck = await requirePermission(request, 'canManageExtensions');
+    if (!permCheck.authorized) return permCheck.response!;
 
     const { extensionId } = await params;
     const body = await request.json();
@@ -61,21 +45,21 @@ export async function POST(
     });
 
     if (!extension) {
-      return NextResponse.json({ error: 'Extension not found' }, { status: 404 });
+      return ApiErrors.notFound('Extension not found');
     }
 
     if (extension.status !== 'PAID') {
-      return NextResponse.json(
-        { error: 'Only paid extensions can be refunded' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Only paid extensions can be refunded');
     }
 
     if (!extension.stripePaymentIntentId) {
-      return NextResponse.json(
-        { error: 'No payment intent found for this extension' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('No payment intent found for this extension');
+    }
+
+    // Resolve Stripe at request time (not module load) for build-time safety
+    const stripe = getStripeInstance();
+    if (!stripe) {
+      return ApiErrors.internal('Stripe is not configured');
     }
 
     // Process refund via Stripe
@@ -87,7 +71,7 @@ export async function POST(
           extensionId: extension.id,
           bookingId: extension.bookingId,
           refundReason: reason || 'Admin initiated refund',
-          adminId: session.user.id
+          adminId: permCheck.user!.id
         }
       });
 
@@ -133,12 +117,12 @@ export async function POST(
         }
       });
 
-      console.log(`[Admin] Extension ${extensionId} refunded by admin ${session.user.id}. Stripe refund: ${refund.id}`);
+      console.log(`[Admin] Extension ${extensionId} refunded by admin ${permCheck.user!.id}. Stripe refund: ${refund.id}`);
 
       // Persistent audit log
       logAuditEvent({
-        adminId: session.user.id,
-        adminEmail: session.user.email!,
+        adminId: permCheck.user!.id,
+        adminEmail: permCheck.user!.email,
         action: AuditActions.EXTENSION_REFUNDED,
         resource: 'bookingExtension',
         resourceId: extensionId,
@@ -151,29 +135,21 @@ export async function POST(
         request,
       });
 
-      return NextResponse.json({
-        success: true,
-        message: 'Extension refunded successfully',
+      return apiSuccess({
         refund: {
           id: refund.id,
           amount: refund.amount,
           status: refund.status
         }
-      });
+      }, 'Extension refunded successfully');
 
     } catch (stripeError: any) {
       console.error('Stripe refund error:', stripeError);
-      return NextResponse.json(
-        { error: `Stripe refund failed: ${stripeError.message}` },
-        { status: 500 }
-      );
+      return ApiErrors.internal('Stripe refund failed');
     }
 
   } catch (error) {
     console.error('Error processing refund:', error);
-    return NextResponse.json(
-      { error: 'Failed to process refund' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to process refund');
   }
 }

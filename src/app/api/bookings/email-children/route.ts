@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { withAuth } from '@/lib/auth-middleware';
-import { prisma } from '@/lib/database';
+import { prisma } from '@/lib/db';
 import { emailService } from '@/lib/notifications/email.service';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
 interface Child {
   id: string;
@@ -37,10 +38,7 @@ export async function POST(request: NextRequest) {
     const { bookingId, parentName, children } = await request.json();
 
     if (!bookingId || !children || children.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Missing required fields' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Missing required fields');
     }
 
     // Get the booking to verify access
@@ -53,10 +51,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!booking) {
-      return NextResponse.json(
-        { success: false, error: 'Booking not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Booking not found');
     }
 
     // Security: Only allow the parent or caregiver of this booking
@@ -66,10 +61,7 @@ export async function POST(request: NextRequest) {
     const isAdmin = authUser.userType === 'ADMIN';
 
     if (!isParent && !isCaregiver && !isAdmin) {
-      return NextResponse.json(
-        { success: false, error: 'Access denied' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('Access denied');
     }
 
     // Get the user's email
@@ -79,10 +71,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user?.email) {
-      return NextResponse.json(
-        { success: false, error: 'User email not found' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('User email not found');
     }
 
     const formatDate = (dateString: string) => {
@@ -257,22 +246,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (!result.success) {
-      return NextResponse.json(
-        { success: false, error: result.error || 'Failed to send email' },
-        { status: 500 }
-      );
+      return ApiErrors.internal('Failed to send email');
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Email sent successfully',
-    });
+    return apiSuccess(undefined, 'Email sent successfully');
 
   } catch (error) {
     console.error('Error sending children email:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to send email' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to send email');
   }
 }

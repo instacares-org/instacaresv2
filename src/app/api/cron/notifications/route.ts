@@ -1,22 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { enhancedSmsService } from '@/lib/notifications/enhanced-sms.service';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 export async function POST(request: NextRequest) {
   try {
     // Verify this is a legitimate cron request
     const authHeader = request.headers.get('authorization');
     const expectedAuth = `Bearer ${process.env.CRON_SECRET}`;
-    
+
     if (authHeader !== expectedAuth) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     console.log('Starting notification maintenance cron job...');
-    
+
     const results = {
       retriesProcessed: 0,
       expiredCleaned: 0,
@@ -26,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     // 1. Process pending SMS retries
     await enhancedSmsService.processRetries();
-    
+
     // Count retries processed
     const retriesProcessed = await prisma.notificationRetry.count({
       where: {
@@ -43,7 +41,7 @@ export async function POST(request: NextRequest) {
     // 2. Clean up expired notifications (older than retention period)
     const retentionDays = 365; // Default retention period
     const expiredDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
-    
+
     const expiredNotifications = await prisma.notificationEvent.deleteMany({
       where: {
         createdAt: {
@@ -72,7 +70,7 @@ export async function POST(request: NextRequest) {
         // Try to match webhook to notification if not already linked
         if (!webhook.notificationId) {
           let notification = null;
-          
+
           if (webhook.provider === 'twilio' && webhook.providerId !== 'unknown') {
             notification = await prisma.notificationEvent.findFirst({
               where: {
@@ -88,24 +86,24 @@ export async function POST(request: NextRequest) {
               }
             });
           }
-          
+
           if (notification) {
             // Update notification status based on webhook event
             let updateData: any = {};
-            
+
             if (webhook.provider === 'twilio') {
               switch (webhook.eventType) {
                 case 'delivered':
-                  updateData = { 
-                    status: 'DELIVERED', 
+                  updateData = {
+                    status: 'DELIVERED',
                     deliveryStatus: 'DELIVERED',
                     deliveredAt: webhook.receivedAt
                   };
                   break;
                 case 'failed':
                 case 'undelivered':
-                  updateData = { 
-                    status: 'FAILED', 
+                  updateData = {
+                    status: 'FAILED',
                     deliveryStatus: 'FAILED',
                     failedAt: webhook.receivedAt
                   };
@@ -114,46 +112,46 @@ export async function POST(request: NextRequest) {
             } else if (webhook.provider === 'resend') {
               switch (webhook.eventType) {
                 case 'email.delivered':
-                  updateData = { 
-                    status: 'DELIVERED', 
+                  updateData = {
+                    status: 'DELIVERED',
                     deliveryStatus: 'DELIVERED',
                     deliveredAt: webhook.receivedAt
                   };
                   break;
                 case 'email.bounced':
-                  updateData = { 
-                    status: 'FAILED', 
+                  updateData = {
+                    status: 'FAILED',
                     deliveryStatus: 'BOUNCED',
                     failedAt: webhook.receivedAt
                   };
                   break;
                 case 'email.complained':
-                  updateData = { 
-                    deliveryStatus: 'SPAM' 
+                  updateData = {
+                    deliveryStatus: 'SPAM'
                   };
                   break;
                 case 'email.opened':
-                  updateData = { 
+                  updateData = {
                     deliveryStatus: 'OPENED',
                     openedAt: webhook.receivedAt
                   };
                   break;
                 case 'email.clicked':
-                  updateData = { 
+                  updateData = {
                     deliveryStatus: 'CLICKED',
                     clickedAt: webhook.receivedAt
                   };
                   break;
               }
             }
-            
+
             if (Object.keys(updateData).length > 0) {
               await prisma.notificationEvent.update({
                 where: { id: notification.id },
                 data: updateData as any
               });
             }
-            
+
             // Link webhook to notification
             await prisma.notificationWebhook.update({
               where: { id: webhook.id },
@@ -163,13 +161,13 @@ export async function POST(request: NextRequest) {
                 notificationId: notification.id
               }
             });
-            
+
             results.webhooksProcessed++;
           }
         }
       } catch (error) {
         console.error('Error processing webhook:', webhook.id, error);
-        
+
         // Mark as processed with error
         await prisma.notificationWebhook.update({
           where: { id: webhook.id },
@@ -182,7 +180,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Legal compliance checks
-    
+
     // Check for excessive bounce rates (>10% in last 24h)
     const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const [totalEmails, bouncedEmails] = await Promise.all([
@@ -203,11 +201,11 @@ export async function POST(request: NextRequest) {
     ]);
 
     const bounceRate = totalEmails > 0 ? (bouncedEmails / totalEmails) * 100 : 0;
-    
+
     if (bounceRate > 10) {
       console.warn(`High bounce rate detected: ${bounceRate.toFixed(2)}%`);
       results.complianceActions++;
-      
+
       // Log compliance alert
       await prisma.notificationEvent.create({
         data: {
@@ -244,11 +242,11 @@ export async function POST(request: NextRequest) {
     ]);
 
     const spamRate = totalEmailsWeek > 0 ? (spamComplaints / totalEmailsWeek) * 100 : 0;
-    
+
     if (spamRate > 1) {
       console.warn(`High spam complaint rate detected: ${spamRate.toFixed(2)}%`);
       results.complianceActions++;
-      
+
       // Log compliance alert
       await prisma.notificationEvent.create({
         data: {
@@ -276,21 +274,21 @@ export async function POST(request: NextRequest) {
 
     // 6. Update system health metrics
     const healthMetrics = await prisma.$queryRaw`
-      SELECT 
+      SELECT
         'EMAIL' as channel,
         COUNT(*) as total,
         COUNT(CASE WHEN status = 'DELIVERED' THEN 1 END) as delivered,
         COUNT(CASE WHEN status = 'FAILED' THEN 1 END) as failed
-      FROM "notification_events" 
+      FROM "notification_events"
       WHERE "createdAt" >= ${last24h}
         AND "channel" = 'EMAIL'
       UNION ALL
-      SELECT 
+      SELECT
         'SMS' as channel,
         COUNT(*) as total,
         COUNT(CASE WHEN status = 'DELIVERED' THEN 1 END) as delivered,
         COUNT(CASE WHEN status = 'FAILED' THEN 1 END) as failed
-      FROM "notification_events" 
+      FROM "notification_events"
       WHERE "createdAt" >= ${last24h}
         AND "channel" = 'SMS'
     ` as any[];
@@ -298,8 +296,7 @@ export async function POST(request: NextRequest) {
     console.log('Notification maintenance completed:', results);
     console.log('Health metrics:', healthMetrics);
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       results,
       healthMetrics,
       timestamp: new Date().toISOString()
@@ -307,12 +304,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Notification maintenance cron error:', error);
-    return NextResponse.json(
-      { 
-        error: 'Cron job failed',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Cron job failed');
   }
 }

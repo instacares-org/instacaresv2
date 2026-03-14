@@ -131,7 +131,17 @@ export default function SimpleScheduleBuilder({
   defaultRate = 25,
   onScheduleUpdate
 }: SimpleScheduleBuilderProps) {
-  const [currentWeek, setCurrentWeek] = useState(new Date());
+  const [currentWeek, setCurrentWeek] = useState(() => {
+    // Restore the last viewed week from sessionStorage so it survives page refresh
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('schedule-current-week');
+      if (saved) {
+        const date = new Date(saved);
+        if (!isNaN(date.getTime())) return date;
+      }
+    }
+    return new Date();
+  });
   const { timezone: userTimezone } = useUserTimezone();
   const [scheduleSlots, setScheduleSlots] = useState<ScheduleSlot[]>([]);
   const [globalSettings, setGlobalSettings] = useState({
@@ -180,7 +190,8 @@ export default function SimpleScheduleBuilder({
         const slots = await getAvailableSlots({
           caregiverId,
           startDate,
-          endDate
+          endDate,
+          includeExpired: 'true',  // Show all slots including past ones for caregiver's own schedule view
         } as any);
 
         setExistingSlots(slots || []);
@@ -233,6 +244,7 @@ export default function SimpleScheduleBuilder({
     const nextWeek = new Date(currentWeek);
     nextWeek.setDate(nextWeek.getDate() + 7);
     setCurrentWeek(nextWeek);
+    try { sessionStorage.setItem('schedule-current-week', nextWeek.toISOString()); } catch {}
   };
 
   // Submit schedule
@@ -348,6 +360,7 @@ export default function SimpleScheduleBuilder({
     const newWeek = new Date(currentWeek);
     newWeek.setDate(newWeek.getDate() + (direction === 'next' ? 7 : -7));
     setCurrentWeek(newWeek);
+    try { sessionStorage.setItem('schedule-current-week', newWeek.toISOString()); } catch {}
   };
 
   // Get existing slots for a specific day

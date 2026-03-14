@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { apiSuccess, apiError } from '@/lib/api-utils';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -24,18 +24,17 @@ export async function GET() {
       }
     };
 
-    return NextResponse.json(healthStatus, { status: 200 });
+    return apiSuccess(healthStatus);
   } catch (error) {
-    const errorStatus = {
+    // 503 Service Unavailable - use apiError directly since no helper for 503
+    return apiError('Database connection failed', 503, {
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV,
-      error: 'Database connection failed',
       services: {
         database: 'disconnected',
         api: 'degraded'
       }
-    };
-
-    return NextResponse.json(errorStatus, { status: 503 });
-}}
+    });
+  }
+}

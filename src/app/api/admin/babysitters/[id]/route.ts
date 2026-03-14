@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
+import { requirePermission } from '@/lib/adminAuth';
 import { z } from 'zod';
 import { logAuditEvent, AuditActions } from '@/lib/audit-log';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 // Validation schema for admin actions
 const adminActionSchema = z.object({
@@ -17,27 +17,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // Check if user is admin
-    const adminUser = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: { userType: true }
-    });
-
-    if (adminUser?.userType !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Admin access required' },
-        { status: 403 }
-      );
-    }
+    const permCheck = await requirePermission(request, 'canApproveUsers');
+    if (!permCheck.authorized) return permCheck.response!;
 
     const { id: babysitterId } = await params;
     const body = await request.json();
@@ -56,10 +37,7 @@ export async function PATCH(
     });
 
     if (!babysitter) {
-      return NextResponse.json(
-        { error: 'Babysitter not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Babysitter not found');
     }
 
     let updateData: Record<string, unknown> = {};
@@ -69,19 +47,13 @@ export async function PATCH(
     switch (validatedData.action) {
       case 'approve':
         if (!['PENDING_VERIFICATION', 'DOCUMENTS_SUBMITTED'].includes(babysitter.status)) {
-          return NextResponse.json(
-            { error: 'Can only approve pending or documents_submitted babysitters' },
-            { status: 400 }
-          );
+          return ApiErrors.badRequest('Can only approve pending or documents_submitted babysitters');
         }
 
         // Verify required documents are present
         if (!babysitter.governmentIdFront || !babysitter.governmentIdBack ||
             !babysitter.policeCheck || !babysitter.selfieForMatch) {
-          return NextResponse.json(
-            { error: 'Cannot approve: missing required documents (ID, police check, selfie)' },
-            { status: 400 }
-          );
+          return ApiErrors.badRequest('Cannot approve: missing required documents (ID, police check, selfie)');
         }
 
         updateData = {
@@ -96,10 +68,7 @@ export async function PATCH(
 
       case 'reject':
         if (babysitter.status === 'APPROVED') {
-          return NextResponse.json(
-            { error: 'Cannot reject an already approved babysitter. Use suspend instead.' },
-            { status: 400 }
-          );
+          return ApiErrors.badRequest('Cannot reject an already approved babysitter. Use suspend instead.');
         }
 
         updateData = {
@@ -113,10 +82,7 @@ export async function PATCH(
 
       case 'suspend':
         if (babysitter.status !== 'APPROVED') {
-          return NextResponse.json(
-            { error: 'Can only suspend approved babysitters' },
-            { status: 400 }
-          );
+          return ApiErrors.badRequest('Can only suspend approved babysitters');
         }
 
         updateData = {
@@ -131,10 +97,7 @@ export async function PATCH(
 
       case 'unsuspend':
         if (babysitter.status !== 'SUSPENDED') {
-          return NextResponse.json(
-            { error: 'Can only unsuspend suspended babysitters' },
-            { status: 400 }
-          );
+          return ApiErrors.badRequest('Can only unsuspend suspended babysitters');
         }
 
         updateData = {
@@ -148,10 +111,7 @@ export async function PATCH(
         break;
 
       default:
-        return NextResponse.json(
-          { error: 'Invalid action' },
-          { status: 400 }
-        );
+        return ApiErrors.badRequest('Invalid action');
     }
 
     // Update babysitter
@@ -170,8 +130,8 @@ export async function PATCH(
 
     // Persistent audit log
     logAuditEvent({
-      adminId: session.user.id,
-      adminEmail: session.user.email!,
+      adminId: permCheck.user!.id,
+      adminEmail: permCheck.user!.email,
       action: AuditActions.BABYSITTER_STATUS_CHANGED,
       resource: 'babysitter',
       resourceId: babysitterId,
@@ -186,30 +146,22 @@ export async function PATCH(
 
     // TODO: Send email notification to babysitter about status change
 
-    return NextResponse.json({
-      success: true,
-      message,
+    return apiSuccess({
       babysitter: {
         id: updatedBabysitter.id,
         status: updatedBabysitter.status,
         approvedAt: updatedBabysitter.approvedAt,
       }
-    });
+    }, message);
 
   } catch (error) {
     console.error('Admin babysitter action error:', error);
 
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.issues },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Validation error', error.issues);
     }
 
-    return NextResponse.json(
-      { error: 'Failed to update babysitter' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to update babysitter');
   }
 }
 
@@ -219,27 +171,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // Check if user is admin
-    const adminUser = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: { userType: true }
-    });
-
-    if (adminUser?.userType !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Admin access required' },
-        { status: 403 }
-      );
-    }
+    const permCheck = await requirePermission(request, 'canApproveUsers');
+    if (!permCheck.authorized) return permCheck.response!;
 
     const { id: babysitterId } = await params;
 
@@ -276,13 +209,10 @@ export async function GET(
     });
 
     if (!babysitter) {
-      return NextResponse.json(
-        { error: 'Babysitter not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Babysitter not found');
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       babysitter: {
         id: babysitter.id,
         userId: babysitter.userId,
@@ -331,9 +261,6 @@ export async function GET(
 
   } catch (error) {
     console.error('Admin get babysitter error:', error);
-    return NextResponse.json(
-      { error: 'Failed to get babysitter' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to get babysitter');
   }
 }

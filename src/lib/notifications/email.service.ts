@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { generateDownloadToken } from '@/lib/signed-url';
 
 // Initialize Resend client with fallback
 const getResendClient = () => {
@@ -256,7 +257,7 @@ export class EmailService {
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
                               <tr>
                                 <td align="center" bgcolor="#3D3D4D" style="border-radius: 8px;">
-                                  <a href="${baseUrl}/api/invoices/download/${booking.id}?type=parent"
+                                  <a href="${baseUrl}/api/invoices/download/${booking.id}?token=${generateDownloadToken(booking.id, 'parent')}"
                                      target="_blank"
                                      style="display: inline-block; padding: 14px 35px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 8px; background-color: #3D3D4D; border: 1px solid #3D3D4D;">
                                     &#128196; Download Invoice (PDF)
@@ -613,7 +614,7 @@ export class EmailService {
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
                               <tr>
                                 <td align="center" bgcolor="#3D3D4D" style="border-radius: 8px;">
-                                  <a href="${baseUrl}/api/invoices/download/${booking.id}?type=caregiver"
+                                  <a href="${baseUrl}/api/invoices/download/${booking.id}?token=${generateDownloadToken(booking.id, 'caregiver')}"
                                      target="_blank"
                                      style="display: inline-block; padding: 14px 35px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 8px; background-color: #3D3D4D; border: 1px solid #3D3D4D;">
                                     &#128196; Download Payout Statement (PDF)
@@ -1084,6 +1085,423 @@ export class EmailService {
     return this.send({
       to,
       subject: `Welcome to InstaCares, ${details.firstName}!`,
+      html,
+    });
+  }
+
+  /**
+   * Send account approval email
+   */
+  async sendAccountApprovalEmail(
+    to: string,
+    details: {
+      firstName: string;
+      userType: string;
+    }
+  ) {
+    const isCaregiver = details.userType === 'CAREGIVER';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.net';
+    const dashboardUrl = isCaregiver
+      ? `${baseUrl}/caregiver-dashboard`
+      : `${baseUrl}/parent-dashboard`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Account Approved - InstaCares</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f9fafb;">
+            <tr>
+              <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; width: 100%;">
+
+                  <!-- Header -->
+                  <tr>
+                    <td style="background: linear-gradient(135deg, #7dd3c7 0%, #fcd775 50%, #f4a89a 100%); border-radius: 20px 20px 0 0; padding: 40px 30px; text-align: center;">
+                      <img src="${baseUrl}/logo-optimized.png" alt="InstaCares" width="120" height="120" style="display: block; margin: 0 auto 15px; width: 120px; height: 120px; object-fit: contain; border-radius: 12px; background: white;" />
+                      <h1 style="margin: 0; color: #3D3D4D; font-size: 28px; font-weight: 700;">Account Approved!</h1>
+                      <p style="margin: 10px 0 0; color: #4a4a5a; font-size: 16px;">You're all set to get started</p>
+                    </td>
+                  </tr>
+
+                  <!-- Content -->
+                  <tr>
+                    <td style="background: white; padding: 40px 35px; border-radius: 0 0 20px 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+                      <p style="font-size: 20px; color: #3D3D4D; margin: 0 0 20px; font-weight: 600;">Hi ${details.firstName}!</p>
+
+                      <p style="font-size: 16px; color: #5a5a6a; line-height: 1.7; margin: 0 0 25px;">
+                        Great news! Your <strong style="color: #10b981;">InstaCares</strong> account has been reviewed and approved. You now have full access to the platform.
+                      </p>
+
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-radius: 16px; margin: 25px 0; border-left: 4px solid #10b981;">
+                        <tr>
+                          <td style="padding: 25px;">
+                            <h3 style="margin: 0 0 15px; color: #065f46; font-size: 17px; font-weight: 600;">What you can do now:</h3>
+                            ${isCaregiver ? `
+                            <ul style="margin: 0; padding-left: 20px; color: #047857; font-size: 15px; line-height: 1.8;">
+                              <li style="margin-bottom: 8px;">Complete your caregiver profile</li>
+                              <li style="margin-bottom: 8px;">Set your hourly rate and availability</li>
+                              <li style="margin-bottom: 8px;">Connect your Stripe account to receive payments</li>
+                              <li style="margin-bottom: 0;">Start accepting booking requests from families</li>
+                            </ul>
+                            ` : `
+                            <ul style="margin: 0; padding-left: 20px; color: #047857; font-size: 15px; line-height: 1.8;">
+                              <li style="margin-bottom: 8px;">Add your children's profiles</li>
+                              <li style="margin-bottom: 8px;">Browse verified caregivers in your area</li>
+                              <li style="margin-bottom: 8px;">Book trusted childcare with confidence</li>
+                              <li style="margin-bottom: 0;">Pay securely through our platform</li>
+                            </ul>
+                            `}
+                          </td>
+                        </tr>
+                      </table>
+
+                      <!-- CTA Button -->
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td align="center" style="padding: 30px 0;">
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
+                              <tr>
+                                <td align="center" bgcolor="#10b981" style="border-radius: 10px;">
+                                  <a href="${dashboardUrl}" target="_blank" style="display: inline-block; padding: 18px 45px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 10px; background-color: #10b981; border: 1px solid #10b981;">
+                                    Go to Your Dashboard
+                                  </a>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <!-- Divider -->
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                        <tr><td style="padding: 10px 0;"><div style="height: 1px; background: linear-gradient(to right, transparent, #e5e7eb, transparent);"></div></td></tr>
+                      </table>
+
+                      <!-- Support -->
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td style="padding: 20px 0 0; text-align: center;">
+                            <p style="font-size: 14px; color: #6b7280; margin: 0;">
+                              Need help? Contact us at <a href="mailto:support@instacares.net" style="color: #10b981; text-decoration: none; font-weight: 500;">support@instacares.net</a>
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <!-- Footer -->
+                  <tr>
+                    <td style="padding: 30px 20px; text-align: center;">
+                      <p style="color: #3D3D4D; font-size: 14px; font-weight: 600; margin: 0 0 8px;">InstaCares</p>
+                      <p style="color: #9ca3af; font-size: 12px; margin: 0 0 5px;">Trusted Childcare Platform</p>
+                      <p style="color: #b0b0b0; font-size: 11px; margin: 15px 0 0;">&copy; ${new Date().getFullYear()} InstaCares. All rights reserved.</p>
+                    </td>
+                  </tr>
+
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+    `;
+
+    return this.send({
+      to,
+      subject: `Your InstaCares Account Has Been Approved!`,
+      html,
+    });
+  }
+
+  /**
+   * Send account rejection email
+   */
+  async sendAccountRejectionEmail(
+    to: string,
+    details: {
+      firstName: string;
+      reason?: string;
+    }
+  ) {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.net';
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Registration Update - InstaCares</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f9fafb;">
+            <tr>
+              <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; width: 100%;">
+
+                  <!-- Header -->
+                  <tr>
+                    <td style="background: linear-gradient(135deg, #7dd3c7 0%, #fcd775 50%, #f4a89a 100%); border-radius: 20px 20px 0 0; padding: 40px 30px; text-align: center;">
+                      <img src="${baseUrl}/logo-optimized.png" alt="InstaCares" width="120" height="120" style="display: block; margin: 0 auto 15px; width: 120px; height: 120px; object-fit: contain; border-radius: 12px; background: white;" />
+                      <h1 style="margin: 0; color: #3D3D4D; font-size: 28px; font-weight: 700;">Registration Update</h1>
+                      <p style="margin: 10px 0 0; color: #4a4a5a; font-size: 16px;">An update on your application</p>
+                    </td>
+                  </tr>
+
+                  <!-- Content -->
+                  <tr>
+                    <td style="background: white; padding: 40px 35px; border-radius: 0 0 20px 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+                      <p style="font-size: 20px; color: #3D3D4D; margin: 0 0 20px; font-weight: 600;">Hi ${details.firstName},</p>
+
+                      <p style="font-size: 16px; color: #5a5a6a; line-height: 1.7; margin: 0 0 25px;">
+                        Thank you for your interest in joining InstaCares. After reviewing your registration, we were unable to approve your account at this time.
+                      </p>
+
+                      ${details.reason ? `
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background: #f8fafc; border-radius: 16px; margin: 25px 0; border-left: 4px solid #9ca3af;">
+                        <tr>
+                          <td style="padding: 25px;">
+                            <h3 style="margin: 0 0 10px; color: #374151; font-size: 15px; font-weight: 600;">Reason:</h3>
+                            <p style="margin: 0; color: #6b7280; font-size: 15px; line-height: 1.7;">${details.reason}</p>
+                          </td>
+                        </tr>
+                      </table>
+                      ` : ''}
+
+                      <p style="font-size: 16px; color: #5a5a6a; line-height: 1.7; margin: 0 0 25px;">
+                        If you believe this was a mistake or would like more information, please don't hesitate to reach out to our support team.
+                      </p>
+
+                      <!-- CTA Button -->
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td align="center" style="padding: 30px 0;">
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
+                              <tr>
+                                <td align="center" bgcolor="#6b7280" style="border-radius: 10px;">
+                                  <a href="mailto:support@instacares.net" target="_blank" style="display: inline-block; padding: 18px 45px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 10px; background-color: #6b7280; border: 1px solid #6b7280;">
+                                    Contact Support
+                                  </a>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <!-- Divider -->
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                        <tr><td style="padding: 10px 0;"><div style="height: 1px; background: linear-gradient(to right, transparent, #e5e7eb, transparent);"></div></td></tr>
+                      </table>
+
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td style="padding: 20px 0 0; text-align: center;">
+                            <p style="font-size: 14px; color: #6b7280; margin: 0;">
+                              Email us at <a href="mailto:support@instacares.net" style="color: #E8786B; text-decoration: none; font-weight: 500;">support@instacares.net</a>
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <!-- Footer -->
+                  <tr>
+                    <td style="padding: 30px 20px; text-align: center;">
+                      <p style="color: #3D3D4D; font-size: 14px; font-weight: 600; margin: 0 0 8px;">InstaCares</p>
+                      <p style="color: #9ca3af; font-size: 12px; margin: 0 0 5px;">Trusted Childcare Platform</p>
+                      <p style="color: #b0b0b0; font-size: 11px; margin: 15px 0 0;">&copy; ${new Date().getFullYear()} InstaCares. All rights reserved.</p>
+                    </td>
+                  </tr>
+
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+    `;
+
+    return this.send({
+      to,
+      subject: `InstaCares Registration Update`,
+      html,
+    });
+  }
+
+  /**
+   * Send supervisor welcome email with credentials
+   */
+  async sendSupervisorWelcomeEmail(
+    to: string,
+    details: {
+      firstName: string;
+      email: string;
+      tempPassword: string;
+      permissions: Record<string, boolean>;
+    }
+  ) {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.net';
+    const dashboardUrl = `${baseUrl}/admin/dashboard`;
+
+    const permissionLabels: Record<string, string> = {
+      canApproveUsers: 'Approve Users',
+      canManageUsers: 'Manage Users',
+      canModerateReviews: 'Moderate Reviews',
+      canModerateChat: 'Moderate Chat',
+      canViewFinancials: 'View Financials',
+      canProcessPayouts: 'Process Payouts',
+      canManageExtensions: 'Manage Extensions',
+      canViewAnalytics: 'View Analytics',
+      canViewAuditLogs: 'View Audit Logs',
+      canManageSupport: 'Manage Support',
+      canManageWarnings: 'Manage Warnings',
+      canManageNotifications: 'Manage Notifications',
+    };
+
+    const enabledPermissions = Object.entries(details.permissions)
+      .filter(([, enabled]) => enabled)
+      .map(([key]) => permissionLabels[key] || key);
+
+    const permissionsHtml = enabledPermissions.length > 0
+      ? enabledPermissions.map(p => `<li style="margin-bottom: 6px;">${p}</li>`).join('')
+      : '<li>No specific permissions assigned yet</li>';
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Welcome to InstaCares Team</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f9fafb;">
+            <tr>
+              <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; width: 100%;">
+
+                  <!-- Header -->
+                  <tr>
+                    <td style="background: linear-gradient(135deg, #7dd3c7 0%, #fcd775 50%, #f4a89a 100%); border-radius: 20px 20px 0 0; padding: 40px 30px; text-align: center;">
+                      <img src="${baseUrl}/logo-optimized.png" alt="InstaCares" width="120" height="120" style="display: block; margin: 0 auto 15px; width: 120px; height: 120px; object-fit: contain; border-radius: 12px; background: white;" />
+                      <h1 style="margin: 0; color: #3D3D4D; font-size: 28px; font-weight: 700;">Welcome to the Team!</h1>
+                      <p style="margin: 10px 0 0; color: #4a4a5a; font-size: 16px;">You've been added as a Supervisor</p>
+                    </td>
+                  </tr>
+
+                  <!-- Content -->
+                  <tr>
+                    <td style="background: white; padding: 40px 35px; border-radius: 0 0 20px 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+                      <p style="font-size: 20px; color: #3D3D4D; margin: 0 0 20px; font-weight: 600;">Hi ${details.firstName}!</p>
+
+                      <p style="font-size: 16px; color: #5a5a6a; line-height: 1.7; margin: 0 0 25px;">
+                        You've been added as a supervisor on <strong style="color: #F5C857;">InstaCares</strong>. Here are your login credentials:
+                      </p>
+
+                      <!-- Credentials Card -->
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background: linear-gradient(135deg, #fef7e0 0%, #fef3c7 100%); border-radius: 16px; margin: 25px 0; border-left: 4px solid #F5C857;">
+                        <tr>
+                          <td style="padding: 25px;">
+                            <h3 style="margin: 0 0 15px; color: #92400e; font-size: 17px; font-weight: 600;">Your Login Credentials</h3>
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="font-size: 15px; color: #78350f;">
+                              <tr>
+                                <td style="padding: 4px 15px 4px 0; font-weight: 600;">Email:</td>
+                                <td style="padding: 4px 0; font-family: monospace;">${details.email}</td>
+                              </tr>
+                              <tr>
+                                <td style="padding: 4px 15px 4px 0; font-weight: 600;">Password:</td>
+                                <td style="padding: 4px 0; font-family: monospace;">${details.tempPassword}</td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <!-- Security Warning -->
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background: #fef2f2; border-radius: 12px; margin: 20px 0;">
+                        <tr>
+                          <td style="padding: 15px 20px;">
+                            <p style="margin: 0; color: #991b1b; font-size: 14px; font-weight: 600;">
+                              Please change your password after your first login for security.
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <!-- Permissions -->
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background: #f8fafc; border-radius: 16px; margin: 25px 0;">
+                        <tr>
+                          <td style="padding: 25px;">
+                            <h3 style="margin: 0 0 15px; color: #3D3D4D; font-size: 15px; font-weight: 600;">Your Permissions:</h3>
+                            <ul style="margin: 0; padding-left: 20px; color: #6b7280; font-size: 14px; line-height: 1.8;">
+                              ${permissionsHtml}
+                            </ul>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <!-- CTA Button -->
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td align="center" style="padding: 30px 0;">
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
+                              <tr>
+                                <td align="center" bgcolor="#F5C857" style="border-radius: 10px;">
+                                  <a href="${dashboardUrl}" target="_blank" style="display: inline-block; padding: 18px 45px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px; font-weight: 600; color: #3D3D4D; text-decoration: none; border-radius: 10px; background-color: #F5C857; border: 1px solid #F5C857;">
+                                    Log In to Dashboard
+                                  </a>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <!-- Divider -->
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                        <tr><td style="padding: 10px 0;"><div style="height: 1px; background: linear-gradient(to right, transparent, #e5e7eb, transparent);"></div></td></tr>
+                      </table>
+
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td style="padding: 20px 0 0; text-align: center;">
+                            <p style="font-size: 14px; color: #6b7280; margin: 0;">
+                              Need help? Contact us at <a href="mailto:support@instacares.net" style="color: #F5C857; text-decoration: none; font-weight: 500;">support@instacares.net</a>
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <!-- Footer -->
+                  <tr>
+                    <td style="padding: 30px 20px; text-align: center;">
+                      <p style="color: #3D3D4D; font-size: 14px; font-weight: 600; margin: 0 0 8px;">InstaCares</p>
+                      <p style="color: #9ca3af; font-size: 12px; margin: 0 0 5px;">Trusted Childcare Platform</p>
+                      <p style="color: #b0b0b0; font-size: 11px; margin: 15px 0 0;">&copy; ${new Date().getFullYear()} InstaCares. All rights reserved.</p>
+                    </td>
+                  </tr>
+
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+      </html>
+    `;
+
+    return this.send({
+      to,
+      subject: `InstaCares - Your Supervisor Account is Ready`,
       html,
     });
   }

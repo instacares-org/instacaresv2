@@ -1,25 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withAuth } from '@/lib/auth-middleware';
+import { requirePermission } from '@/lib/adminAuth';
 import { logger, getClientInfo } from '@/lib/logger';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 export async function GET(request: NextRequest) {
   try {
-    // ✅ STEP 1: Require ADMIN authentication (NO client-provided auth needed)
-    const authResult = await withAuth(request, 'ADMIN');
-    if (!authResult.isAuthorized) {
-      const clientInfo = getClientInfo(request);
-      logger.security('Unauthorized admin analytics access attempt', {
-        endpoint: '/api/admin/notifications/analytics',
-        ip: clientInfo.ip,
-        userAgent: clientInfo.userAgent
-      });
-      return authResult.response;
-    }
+    // STEP 1: Require admin authentication with permission check
+    const permCheck = await requirePermission(request, 'canManageNotifications');
+    if (!permCheck.authorized) return permCheck.response!;
 
-    const adminUser = authResult.user!;
+    const adminUser = permCheck.user!;
 
-    // ✅ Log admin action for audit trail
+    // Log admin action for audit trail
     logger.admin('Admin accessed notification analytics', {
       adminId: adminUser.id,
       adminEmail: adminUser.email
@@ -220,89 +213,79 @@ export async function GET(request: NextRequest) {
     ]);
 
     // Format response
-    const response = {
-      success: true,
-      data: {
-        period,
-        dateRange: {
-          from: dateFrom.toISOString(),
-          to: now.toISOString()
+    const analyticsData = {
+      period,
+      dateRange: {
+        from: dateFrom.toISOString(),
+        to: now.toISOString()
+      },
+      volume: {
+        total: volumeData.reduce((sum, item) => sum + item._count.id, 0),
+        byStatus: volumeData.reduce((acc, item) => {
+          acc[item.status] = (acc[item.status] || 0) + item._count.id;
+          return acc;
+        }, {} as Record<string, number>),
+        byChannel: volumeData.reduce((acc, item) => {
+          acc[item.channel] = (acc[item.channel] || 0) + item._count.id;
+          return acc;
+        }, {} as Record<string, number>),
+        byType: volumeData.reduce((acc, item) => {
+          acc[item.type] = (acc[item.type] || 0) + item._count.id;
+          return acc;
+        }, {} as Record<string, number>)
+      },
+      hourlyBreakdown: hourlyData,
+      deliveryMetrics: {
+        successRate: {
+          overall: calculateSuccessRate(volumeData),
+          byChannel: calculateSuccessRateByChannel(volumeData)
         },
-        volume: {
-          total: volumeData.reduce((sum, item) => sum + item._count.id, 0),
-          byStatus: volumeData.reduce((acc, item) => {
-            acc[item.status] = (acc[item.status] || 0) + item._count.id;
-            return acc;
-          }, {} as Record<string, number>),
-          byChannel: volumeData.reduce((acc, item) => {
-            acc[item.channel] = (acc[item.channel] || 0) + item._count.id;
-            return acc;
-          }, {} as Record<string, number>),
-          byType: volumeData.reduce((acc, item) => {
-            acc[item.type] = (acc[item.type] || 0) + item._count.id;
-            return acc;
-          }, {} as Record<string, number>)
-        },
-        hourlyBreakdown: hourlyData,
-        deliveryMetrics: {
-          successRate: {
-            overall: calculateSuccessRate(volumeData),
-            byChannel: calculateSuccessRateByChannel(volumeData)
-          },
-          averageDeliveryTime: deliveryTimes.reduce((acc, item) => {
-            acc[item.channel] = {
-              average: Math.round(item.avg_delivery_time_seconds || 0),
-              median: Math.round(item.median_delivery_time_seconds || 0),
-              p95: Math.round(item.p95_delivery_time_seconds || 0)
-            };
-            return acc;
-          }, {} as Record<string, any>)
-        },
-        failureAnalysis: {
-          topErrorCodes: failureAnalysis,
-          topErrorMessages: topErrors,
-          retryStats: retryStats.reduce((acc, item) => {
-            if (!acc[item.attemptNumber]) acc[item.attemptNumber] = {};
-            acc[item.attemptNumber][item.status] = item._count.id;
-            return acc;
-          }, {} as Record<string, any>)
-        },
-        criticalAlerts: {
-          metrics: criticalMetrics,
-          totalFailed: criticalMetrics
-            .filter(item => item.status === 'FAILED')
-            .reduce((sum, item) => sum + item._count.id, 0)
-        },
-        systemHealth: {
-          webhookProcessing: webhookHealth.reduce((acc, item) => {
-            if (!acc[item.provider]) acc[item.provider] = {};
-            acc[item.provider][item.processed ? 'processed' : 'pending'] = item._count.id;
-            return acc;
-          }, {} as Record<string, any>)
-        },
-        compliance: {
-          unsubscribeRate: complianceMetrics[0],
-          bounceRate: complianceMetrics[1],
-          spamReports: complianceMetrics[2]
-        }
+        averageDeliveryTime: deliveryTimes.reduce((acc, item) => {
+          acc[item.channel] = {
+            average: Math.round(item.avg_delivery_time_seconds || 0),
+            median: Math.round(item.median_delivery_time_seconds || 0),
+            p95: Math.round(item.p95_delivery_time_seconds || 0)
+          };
+          return acc;
+        }, {} as Record<string, any>)
+      },
+      failureAnalysis: {
+        topErrorCodes: failureAnalysis,
+        topErrorMessages: topErrors,
+        retryStats: retryStats.reduce((acc, item) => {
+          if (!acc[item.attemptNumber]) acc[item.attemptNumber] = {};
+          acc[item.attemptNumber][item.status] = item._count.id;
+          return acc;
+        }, {} as Record<string, any>)
+      },
+      criticalAlerts: {
+        metrics: criticalMetrics,
+        totalFailed: criticalMetrics
+          .filter(item => item.status === 'FAILED')
+          .reduce((sum, item) => sum + item._count.id, 0)
+      },
+      systemHealth: {
+        webhookProcessing: webhookHealth.reduce((acc, item) => {
+          if (!acc[item.provider]) acc[item.provider] = {};
+          acc[item.provider][item.processed ? 'processed' : 'pending'] = item._count.id;
+          return acc;
+        }, {} as Record<string, any>)
+      },
+      compliance: {
+        unsubscribeRate: complianceMetrics[0],
+        bounceRate: complianceMetrics[1],
+        spamReports: complianceMetrics[2]
       }
     };
 
-    return NextResponse.json(response);
+    return apiSuccess(analyticsData);
 
   } catch (error) {
     console.error('Failed to fetch notification analytics:', error);
     logger.error('Failed to fetch admin notification analytics', {
       error: error instanceof Error ? error.message : 'Unknown error'
     });
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to fetch analytics data',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch analytics data');
   }
 }
 

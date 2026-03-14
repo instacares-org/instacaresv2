@@ -184,7 +184,7 @@ function AdminChatManagement({ adminUserId }: AdminChatManagementProps) {
       const response = await fetch(`/api/admin/chat/overview?${params}`);
       if (response.ok) {
         const data = await response.json();
-        setOverview(data);
+        setOverview(data.data || data);
         setLastUpdated(new Date());
       } else {
         console.error('Failed to fetch chat overview:', response.status);
@@ -202,7 +202,7 @@ function AdminChatManagement({ adminUserId }: AdminChatManagementProps) {
       const response = await fetch(`/api/admin/chat/${roomId}?adminUserId=${adminUserId}`);
       if (response.ok) {
         const data = await response.json();
-        setSelectedChatRoom(data);
+        setSelectedChatRoom(data.data || data);
       }
     } catch (error) {
       console.error('Error fetching chat details:', error);
@@ -284,7 +284,7 @@ function AdminChatManagement({ adminUserId }: AdminChatManagementProps) {
 
       if (response.ok) {
         const result = await response.json();
-        const { results } = result;
+        const results = result.data?.results || result.results;
         
         if (results.failed.length > 0) {
           console.warn('Some operations failed:', results.failed);

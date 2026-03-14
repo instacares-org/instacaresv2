@@ -39,9 +39,9 @@ export default function AccountStatusPage() {
       const data = await response.json();
 
       if (response.ok) {
-        setUserStatus(data.user);
+        setUserStatus(data.data?.user || data.user);
       } else {
-        setError(data.error || 'User not found');
+        setError(data.data?.error || data.error || 'User not found');
         setUserStatus(null);
       }
     } catch (error) {

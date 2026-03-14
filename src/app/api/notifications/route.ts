@@ -1,15 +1,25 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { z } from 'zod';
 import { db } from '@/lib/db';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '../auth/[...nextauth]/route';
+import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { logger, getClientInfo } from '@/lib/logger';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+
+const patchNotificationSchema = z.object({
+  notificationId: z.string().min(1, 'Notification ID is required').optional(),
+  markAllAsRead: z.boolean().optional(),
+}).refine(
+  (data) => data.markAllAsRead || data.notificationId,
+  { message: 'Either notificationId or markAllAsRead must be provided' }
+);
 
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const notifications = await db.notification.findMany({
@@ -22,8 +32,7 @@ export async function GET(request: NextRequest) {
       take: 50, // Limit to 50 recent notifications
     });
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       notifications: notifications.map(notification => ({
         id: notification.id,
         type: notification.type,
@@ -39,10 +48,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching notifications:', error);
     logger.error('Error fetching notifications', { error });
-    return NextResponse.json(
-      { error: 'Failed to fetch notifications' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch notifications');
   }
 }
 
@@ -51,11 +57,15 @@ export async function PATCH(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const body = await request.json();
-    const { notificationId, markAllAsRead } = body;
+    const parsed = patchNotificationSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
+    }
+    const { notificationId, markAllAsRead } = parsed.data;
 
     if (markAllAsRead) {
       // Mark all notifications as read for this user
@@ -74,7 +84,7 @@ export async function PATCH(request: NextRequest) {
         userId: session.user.id
       });
     } else if (notificationId) {
-      // 🔒 STEP 1: Verify the notification exists
+      // STEP 1: Verify the notification exists
       const notification = await db.notification.findUnique({
         where: {
           id: notificationId,
@@ -82,13 +92,10 @@ export async function PATCH(request: NextRequest) {
       });
 
       if (!notification) {
-        return NextResponse.json(
-          { error: 'Notification not found' },
-          { status: 404 }
-        );
+        return ApiErrors.notFound('Notification not found');
       }
 
-      // 🔒 STEP 2: Verify ownership - Only allow marking own notifications
+      // STEP 2: Verify ownership - Only allow marking own notifications
       if (notification.userId !== session.user.id) {
         const clientInfo = getClientInfo(request);
         logger.security('IDOR attempt on notification PATCH', {
@@ -98,10 +105,7 @@ export async function PATCH(request: NextRequest) {
           ip: clientInfo.ip,
           userAgent: clientInfo.userAgent
         });
-        return NextResponse.json(
-          { error: 'Unauthorized - You can only modify your own notifications' },
-          { status: 403 }
-        );
+        return ApiErrors.forbidden('Unauthorized - You can only modify your own notifications');
       }
 
       // Mark specific notification as read
@@ -120,17 +124,14 @@ export async function PATCH(request: NextRequest) {
         notificationId
       });
     } else {
-      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+      return ApiErrors.badRequest('Invalid request');
     }
 
-    return NextResponse.json({ success: true });
+    return apiSuccess();
   } catch (error) {
     console.error('Error updating notifications:', error);
     logger.error('Error updating notifications', { error });
-    return NextResponse.json(
-      { error: 'Failed to update notifications' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to update notifications');
   }
 }
 
@@ -139,7 +140,7 @@ export async function DELETE(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const url = new URL(request.url);
@@ -158,7 +159,7 @@ export async function DELETE(request: NextRequest) {
         userId: session.user.id
       });
     } else if (notificationId) {
-      // 🔒 STEP 1: Verify the notification exists
+      // STEP 1: Verify the notification exists
       const notification = await db.notification.findUnique({
         where: {
           id: notificationId,
@@ -166,13 +167,10 @@ export async function DELETE(request: NextRequest) {
       });
 
       if (!notification) {
-        return NextResponse.json(
-          { error: 'Notification not found' },
-          { status: 404 }
-        );
+        return ApiErrors.notFound('Notification not found');
       }
 
-      // 🔒 STEP 2: Verify ownership - Only allow deleting own notifications
+      // STEP 2: Verify ownership - Only allow deleting own notifications
       if (notification.userId !== session.user.id) {
         const clientInfo = getClientInfo(request);
         logger.security('IDOR attempt on notification DELETE', {
@@ -182,10 +180,7 @@ export async function DELETE(request: NextRequest) {
           ip: clientInfo.ip,
           userAgent: clientInfo.userAgent
         });
-        return NextResponse.json(
-          { error: 'Unauthorized - You can only delete your own notifications' },
-          { status: 403 }
-        );
+        return ApiErrors.forbidden('Unauthorized - You can only delete your own notifications');
       }
 
       // Delete specific notification
@@ -200,16 +195,13 @@ export async function DELETE(request: NextRequest) {
         notificationId
       });
     } else {
-      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+      return ApiErrors.badRequest('Invalid request');
     }
 
-    return NextResponse.json({ success: true });
+    return apiSuccess();
   } catch (error) {
     console.error('Error deleting notifications:', error);
     logger.error('Error deleting notifications', { error });
-    return NextResponse.json(
-      { error: 'Failed to delete notifications' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to delete notifications');
   }
 }

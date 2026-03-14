@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
@@ -12,7 +13,7 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const { ticketId } = await params;
@@ -76,24 +77,18 @@ export async function GET(
     });
 
     if (!ticket) {
-      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 });
+      return ApiErrors.notFound('Ticket not found');
     }
 
     // Non-admins can only view their own tickets
     if (!isAdmin && ticket.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+      return ApiErrors.forbidden('Not authorized');
     }
 
-    return NextResponse.json({
-      success: true,
-      data: ticket
-    });
+    return apiSuccess(ticket);
   } catch (error) {
     logger.error('Error fetching ticket:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch ticket' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch ticket');
   }
 }
 
@@ -105,7 +100,7 @@ export async function PATCH(
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const { ticketId } = await params;
@@ -125,12 +120,12 @@ export async function PATCH(
     });
 
     if (!ticket) {
-      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 });
+      return ApiErrors.notFound('Ticket not found');
     }
 
     // Non-admins can only update their own tickets and only certain fields
     if (!isAdmin && ticket.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+      return ApiErrors.forbidden('Not authorized');
     }
 
     const updateData: any = {};
@@ -154,10 +149,7 @@ export async function PATCH(
     }
 
     if (Object.keys(updateData).length === 0) {
-      return NextResponse.json(
-        { error: 'No valid fields to update' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('No valid fields to update');
     }
 
     const updatedTicket = await db.supportTicket.update({
@@ -180,15 +172,9 @@ export async function PATCH(
 
     logger.info(`Ticket ${ticket.ticketNumber} updated by ${session.user.id}`);
 
-    return NextResponse.json({
-      success: true,
-      data: updatedTicket
-    });
+    return apiSuccess(updatedTicket);
   } catch (error) {
     logger.error('Error updating ticket:', error);
-    return NextResponse.json(
-      { error: 'Failed to update ticket' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to update ticket');
   }
 }

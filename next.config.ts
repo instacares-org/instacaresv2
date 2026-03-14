@@ -12,15 +12,11 @@ const nextConfig: NextConfig = {
   },
   // Use standard output for better static file compatibility
   // output: 'standalone',
-  // Reduce hydration warnings from browser extensions
-  reactStrictMode: false,
+  reactStrictMode: true,
   typescript: {
-    // Ignore TypeScript errors during builds for now
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   images: {
-    // Disable optimization completely for Hostinger compatibility
-    unoptimized: true,
     // Removed deprecated domains configuration - using remotePatterns only
     remotePatterns: [
       {
@@ -37,6 +33,11 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'images.unsplash.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
         pathname: '/**',
       },
     ],

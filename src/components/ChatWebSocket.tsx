@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { 
-  PaperAirplaneIcon, 
+import Image from 'next/image';
+import {
+  PaperAirplaneIcon,
   ChatBubbleLeftRightIcon,
   WifiIcon,
   ExclamationTriangleIcon,
@@ -244,9 +245,11 @@ const ChatContent: React.FC<ChatWebSocketProps> = ({ userId, userType }) => {
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden">
                           {(otherUser as any)?.avatar || room.otherUser?.avatar ? (
-                            <img
+                            <Image
                               src={(otherUser as any)?.avatar || room.otherUser?.avatar}
                               alt={otherUserName}
+                              width={40}
+                              height={40}
                               className="w-full h-full object-cover"
                             />
                           ) : (
@@ -302,9 +305,11 @@ const ChatContent: React.FC<ChatWebSocketProps> = ({ userId, userType }) => {
                         {!isFromCurrentUser && (
                           <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0">
                             {senderAvatar ? (
-                              <img
+                              <Image
                                 src={senderAvatar}
                                 alt="Avatar"
+                                width={32}
+                                height={32}
                                 className="w-full h-full object-cover"
                               />
                             ) : (
@@ -329,9 +334,11 @@ const ChatContent: React.FC<ChatWebSocketProps> = ({ userId, userType }) => {
                         {isFromCurrentUser && (
                           <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0">
                             {senderAvatar ? (
-                              <img
+                              <Image
                                 src={senderAvatar}
                                 alt="Avatar"
+                                width={32}
+                                height={32}
                                 className="w-full h-full object-cover"
                               />
                             ) : (

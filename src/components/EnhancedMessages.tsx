@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import Image from 'next/image';
 import {
   MagnifyingGlassIcon,
   ChatBubbleLeftRightIcon,
@@ -226,9 +227,11 @@ export default function EnhancedMessages({
             <div className="relative flex-shrink-0">
               <div className="w-9 h-9 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center overflow-hidden ring-2 ring-white dark:ring-gray-800">
                 {userAvatar ? (
-                  <img
+                  <Image
                     src={userAvatar}
                     alt={userName || 'You'}
+                    width={36}
+                    height={36}
                     className="w-full h-full object-cover"
                   />
                 ) : (
@@ -408,9 +411,11 @@ export default function EnhancedMessages({
                     <div className="relative flex-shrink-0">
                       <div className="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center overflow-hidden">
                         {otherUser?.profile?.avatar ? (
-                          <img
+                          <Image
                             src={otherUser.profile.avatar}
                             alt={userName}
+                            width={40}
+                            height={40}
                             className="w-full h-full object-cover"
                           />
                         ) : (

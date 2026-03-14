@@ -1,25 +1,26 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withAuth } from '@/lib/auth-middleware';
+import { requirePermission } from '@/lib/adminAuth';
 import { logger, getClientInfo } from '@/lib/logger';
+import { z } from 'zod';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+
+const notificationActionSchema = z.object({
+  notificationId: z.string().min(1, 'Notification ID is required'),
+  action: z.enum(['retry'], {
+    message: 'Invalid action. Must be: retry',
+  }),
+});
 
 export async function GET(request: NextRequest) {
   try {
-    // ✅ STEP 1: Require ADMIN authentication (NO client-provided auth needed)
-    const authResult = await withAuth(request, 'ADMIN');
-    if (!authResult.isAuthorized) {
-      const clientInfo = getClientInfo(request);
-      logger.security('Unauthorized admin notifications access attempt', {
-        endpoint: '/api/admin/notifications',
-        ip: clientInfo.ip,
-        userAgent: clientInfo.userAgent
-      });
-      return authResult.response;
-    }
+    // STEP 1: Require admin authentication with permission check
+    const permCheck = await requirePermission(request, 'canManageNotifications');
+    if (!permCheck.authorized) return permCheck.response!;
 
-    const adminUser = authResult.user!;
+    const adminUser = permCheck.user!;
 
-    // ✅ Log admin action for audit trail
+    // Log admin action for audit trail
     logger.admin('Admin accessed notification history', {
       adminId: adminUser.id,
       adminEmail: adminUser.email
@@ -135,25 +136,22 @@ export async function GET(request: NextRequest) {
       return total > 0 ? ((successful / total) * 100).toFixed(1) : '0';
     };
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        notifications,
-        pagination: {
-          page,
-          limit,
-          totalCount,
-          totalPages: Math.ceil(totalCount / limit),
-          hasNextPage: page < Math.ceil(totalCount / limit),
-          hasPreviousPage: page > 1
-        },
-        stats: {
-          last24h: stats,
-          criticalAlerts,
-          successRates: {
-            email: formatSuccessRate(successRates[0]),
-            sms: formatSuccessRate(successRates[1])
-          }
+    return apiSuccess({
+      notifications,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+        hasNextPage: page < Math.ceil(totalCount / limit),
+        hasPreviousPage: page > 1
+      },
+      stats: {
+        last24h: stats,
+        criticalAlerts,
+        successRates: {
+          email: formatSuccessRate(successRates[0]),
+          sms: formatSuccessRate(successRates[1])
         }
       }
     });
@@ -163,34 +161,24 @@ export async function GET(request: NextRequest) {
     logger.error('Failed to fetch admin notifications', {
       error: error instanceof Error ? error.message : 'Unknown error'
     });
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to fetch notification history',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch notification history');
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // ✅ STEP 1: Require ADMIN authentication
-    const authResult = await withAuth(request, 'ADMIN');
-    if (!authResult.isAuthorized) {
-      const clientInfo = getClientInfo(request);
-      logger.security('Unauthorized admin notification action attempt', {
-        endpoint: '/api/admin/notifications',
-        ip: clientInfo.ip,
-        userAgent: clientInfo.userAgent
-      });
-      return authResult.response;
+    // STEP 1: Require admin authentication with permission check
+    const permCheck = await requirePermission(request, 'canManageNotifications');
+    if (!permCheck.authorized) return permCheck.response!;
+
+    const adminUser = permCheck.user!;
+    const body = await request.json();
+    const parsed = notificationActionSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
     }
 
-    const adminUser = authResult.user!;
-    const body = await request.json();
-    const { notificationId, action } = body;
+    const { notificationId, action } = parsed.data;
 
     logger.admin('Admin notification action', {
       adminId: adminUser.id,
@@ -205,24 +193,15 @@ export async function POST(request: NextRequest) {
       });
 
       if (!notification) {
-        return NextResponse.json(
-          { success: false, error: 'Notification not found' },
-          { status: 404 }
-        );
+        return ApiErrors.notFound('Notification not found');
       }
 
       if (notification.status !== 'FAILED') {
-        return NextResponse.json(
-          { success: false, error: 'Can only retry failed notifications' },
-          { status: 400 }
-        );
+        return ApiErrors.badRequest('Can only retry failed notifications');
       }
 
       if (notification.retryCount >= notification.maxRetries) {
-        return NextResponse.json(
-          { success: false, error: 'Maximum retry attempts reached' },
-          { status: 400 }
-        );
+        return ApiErrors.badRequest('Maximum retry attempts reached');
       }
 
       await prisma.notificationEvent.update({
@@ -244,29 +223,16 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      return NextResponse.json({
-        success: true,
-        message: 'Notification queued for retry'
-      });
+      return apiSuccess(undefined, 'Notification queued for retry');
     }
 
-    return NextResponse.json(
-      { success: false, error: 'Invalid action' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('Invalid action');
 
   } catch (error) {
     console.error('Failed to process notification action:', error);
     logger.error('Failed to process admin notification action', {
       error: error instanceof Error ? error.message : 'Unknown error'
     });
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to process request',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to process request');
   }
 }

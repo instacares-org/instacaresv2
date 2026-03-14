@@ -1,7 +1,15 @@
-import { NextRequest } from 'next/server';
-import { prisma } from '@/lib/database';
-import { getAuthenticatedUser, createApiResponse, formatUserInfo } from '@/lib/chatAuth';
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { prisma } from '@/lib/db';
+import { getAuthenticatedUser, formatUserInfo } from '@/lib/chatAuth';
 import { logger } from '@/lib/logger';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+
+const createConversationSchema = z.object({
+  bookingId: z.string().min(1, 'Booking ID is required'),
+  otherUserId: z.string().min(1, 'Other user ID is required'),
+});
 
 /**
  * GET /api/chat/conversations
@@ -10,15 +18,15 @@ import { logger } from '@/lib/logger';
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthenticatedUser(request);
-    
+
     if (!user) {
-      return createApiResponse(false, null, 'Authentication required', 401);
+      return ApiErrors.unauthorized();
     }
 
     logger.info('Fetching conversations for user', { userId: user.id, userType: user.userType });
 
     // Determine query based on user type
-    const whereClause = user.userType === 'PARENT' 
+    const whereClause = user.userType === 'PARENT'
       ? { parentId: user.id }
       : { caregiverId: user.id };
 
@@ -123,9 +131,9 @@ export async function GET(request: NextRequest) {
           id: otherUser.id,
           firstName: otherUser.profile?.firstName || '',
           lastName: otherUser.profile?.lastName || '',
-          profileImage: otherUser.profile?.avatar 
-            ? (otherUser.profile.avatar.startsWith('http') 
-                ? otherUser.profile.avatar 
+          profileImage: otherUser.profile?.avatar
+            ? (otherUser.profile.avatar.startsWith('http')
+                ? otherUser.profile.avatar
                 : `${process.env.NEXT_PUBLIC_BASE_URL || ''}/uploads/avatars/${otherUser.profile.avatar}`)
             : `https://ui-avatars.com/api/?name=${encodeURIComponent(
                 `${otherUser.profile?.firstName || ''} ${otherUser.profile?.lastName || ''}`.trim() || otherUser.id.slice(0, 2).toUpperCase()
@@ -155,16 +163,16 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    logger.info('Successfully fetched conversations', { 
-      userId: user.id, 
-      conversationCount: formattedConversations.length 
+    logger.info('Successfully fetched conversations', {
+      userId: user.id,
+      conversationCount: formattedConversations.length
     });
 
-    return createApiResponse(true, formattedConversations);
+    return apiSuccess(formattedConversations);
 
   } catch (error) {
     logger.error('Error fetching conversations', error);
-    return createApiResponse(false, null, 'Failed to fetch conversations', 500);
+    return ApiErrors.internal('Failed to fetch conversations');
   }
 }
 
@@ -174,23 +182,31 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.API_WRITE);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
     const user = await getAuthenticatedUser(request);
-    
+
     if (!user) {
-      return createApiResponse(false, null, 'Authentication required', 401);
+      return ApiErrors.unauthorized();
     }
 
     const body = await request.json();
-    const { bookingId, otherUserId } = body;
-
-    if (!bookingId || !otherUserId) {
-      return createApiResponse(false, null, 'Booking ID and other user ID are required', 400);
+    const parsed = createConversationSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input');
     }
+    const { bookingId, otherUserId } = parsed.data;
 
-    logger.info('Creating or getting conversation', { 
-      userId: user.id, 
-      otherUserId, 
-      bookingId 
+    logger.info('Creating or getting conversation', {
+      userId: user.id,
+      otherUserId,
+      bookingId
     });
 
     // Verify the booking exists and user has access to it
@@ -205,18 +221,18 @@ export async function POST(request: NextRequest) {
     });
 
     if (!booking) {
-      return createApiResponse(false, null, 'Booking not found', 404);
+      return ApiErrors.notFound('Booking not found');
     }
 
     // Verify user has access to this booking
     if (booking.parentId !== user.id && booking.caregiverId !== user.id) {
-      return createApiResponse(false, null, 'Access denied to this booking', 403);
+      return ApiErrors.forbidden('Access denied to this booking');
     }
 
     // Verify the other user is the correct participant
     const expectedOtherUserId = user.id === booking.parentId ? booking.caregiverId : booking.parentId;
     if (otherUserId !== expectedOtherUserId) {
-      return createApiResponse(false, null, 'Invalid participant for this booking', 400);
+      return ApiErrors.badRequest('Invalid participant for this booking');
     }
 
     // Check if conversation already exists
@@ -307,14 +323,14 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      logger.info('Created new conversation', { 
-        chatRoomId: chatRoom.id, 
-        bookingId 
+      logger.info('Created new conversation', {
+        chatRoomId: chatRoom.id,
+        bookingId
       });
     } else {
-      logger.info('Found existing conversation', { 
-        chatRoomId: chatRoom.id, 
-        bookingId 
+      logger.info('Found existing conversation', {
+        chatRoomId: chatRoom.id,
+        bookingId
       });
     }
 
@@ -328,9 +344,9 @@ export async function POST(request: NextRequest) {
         id: otherUser.id,
         firstName: otherUser.profile?.firstName || '',
         lastName: otherUser.profile?.lastName || '',
-        profileImage: otherUser.profile?.avatar 
-          ? (otherUser.profile.avatar.startsWith('http') 
-              ? otherUser.profile.avatar 
+        profileImage: otherUser.profile?.avatar
+          ? (otherUser.profile.avatar.startsWith('http')
+              ? otherUser.profile.avatar
               : `${process.env.NEXT_PUBLIC_BASE_URL || ''}/uploads/avatars/${otherUser.profile.avatar}`)
           : `https://ui-avatars.com/api/?name=${encodeURIComponent(
               `${otherUser.profile?.firstName || ''} ${otherUser.profile?.lastName || ''}`.trim() || otherUser.id.slice(0, 2).toUpperCase()
@@ -343,10 +359,10 @@ export async function POST(request: NextRequest) {
       isActive: chatRoom.isActive,
     };
 
-    return createApiResponse(true, formattedConversation);
+    return apiSuccess(formattedConversation);
 
   } catch (error) {
     logger.error('Error creating/getting conversation', error);
-    return createApiResponse(false, null, 'Failed to create/get conversation', 500);
+    return ApiErrors.internal('Failed to create/get conversation');
   }
 }

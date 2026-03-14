@@ -1,25 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { verifyAdminAuth } from '@/lib/adminAuth';
+import { requirePermission } from '@/lib/adminAuth';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
-
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
+    // Require admin authentication with permission check
+    const permCheck = await requirePermission(request, 'canViewAnalytics');
+    if (!permCheck.authorized) return permCheck.response!;
+
+    const adminUser = permCheck.user!;
+
     const { searchParams } = new URL(request.url);
     const timeRange = searchParams.get('timeRange') || '30d'; // 7d, 30d, 90d, 1y
-
-    // Verify admin authentication using the proper admin auth system
-    const authResult = await verifyAdminAuth(request);
-    
-    if (!authResult.success) {
-      return NextResponse.json(
-        { error: 'Admin authentication required' },
-        { status: 401 }
-      );
-    }
-
-    const adminUser = authResult.user!;
 
     // Calculate date range
     const now = new Date();
@@ -406,12 +401,9 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    return NextResponse.json(response);
+    return apiSuccess(response);
   } catch (error) {
     console.error('Error fetching analytics overview:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch analytics overview' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch analytics overview');
   }
 }

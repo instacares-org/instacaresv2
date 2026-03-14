@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { 
   Bars3BottomLeftIcon, 
@@ -70,8 +71,10 @@ const UserMenu: React.FC<UserMenuProps> = ({
         <Bars3BottomLeftIcon className="h-5 w-5 text-gray-600" />
         {isLoggedIn && userProfile ? (
           <div className="w-7 h-7 rounded-full overflow-hidden">
-            <img 
-              src={userProfile.image} 
+            <Image
+              src={userProfile.image}
+              width={28}
+              height={28}
               alt={userProfile.name}
               className="w-full h-full object-cover"
               onError={(e) => {
@@ -143,8 +146,10 @@ const UserMenu: React.FC<UserMenuProps> = ({
                 <div className="px-4 py-3 border-b border-gray-100">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 rounded-full overflow-hidden">
-                      <img 
-                        src={userProfile!.image} 
+                      <Image
+                        src={userProfile!.image}
+                        width={40}
+                        height={40}
                         alt={userProfile!.name}
                         className="w-full h-full object-cover"
                         onError={(e) => {
@@ -174,8 +179,8 @@ const UserMenu: React.FC<UserMenuProps> = ({
                   Dashboard
                 </Link>
                 
-                <Link 
-                  href="/bookings" 
+                <Link
+                  href="/bookings"
                   role="menuitem"
                   className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors focus:bg-gray-50 focus:outline-none"
                   onClick={closeMenu}
@@ -183,9 +188,9 @@ const UserMenu: React.FC<UserMenuProps> = ({
                   <CalendarDaysIcon className="h-4 w-4 mr-3" />
                   My Bookings
                 </Link>
-                
-                <Link 
-                  href="/settings" 
+
+                <Link
+                  href="/settings"
                   role="menuitem"
                   className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors focus:bg-gray-50 focus:outline-none"
                   onClick={closeMenu}
@@ -193,7 +198,7 @@ const UserMenu: React.FC<UserMenuProps> = ({
                   <Cog6ToothIcon className="h-4 w-4 mr-3" />
                   Settings
                 </Link>
-                
+
                 <div className="border-t border-gray-100 mt-2">
                   <button
                     onClick={() => {

@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
 import { z } from 'zod';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 // Validation schema for references
 const referenceSchema = z.object({
@@ -20,10 +21,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const userId = session.user.id;
@@ -35,10 +33,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!babysitter) {
-      return NextResponse.json(
-        { error: 'Babysitter profile not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Babysitter profile not found');
     }
 
     // Handle single reference or array
@@ -53,10 +48,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (existingCount + validatedRefs.length > 3) {
-      return NextResponse.json(
-        { error: `Cannot add more references. You have ${existingCount} and can only add ${3 - existingCount} more.` },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest(`Cannot add more references. You have ${existingCount} and can only add ${3 - existingCount} more.`);
     }
 
     // Create references
@@ -71,26 +63,18 @@ export async function POST(request: NextRequest) {
       }))
     });
 
-    return NextResponse.json({
-      success: true,
-      message: `${createdRefs.count} reference(s) added successfully`,
+    return apiSuccess({
       totalReferences: existingCount + createdRefs.count,
-    });
+    }, `${createdRefs.count} reference(s) added successfully`);
 
   } catch (error) {
     console.error('Add references error:', error);
 
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.issues },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Validation error', error.issues);
     }
 
-    return NextResponse.json(
-      { error: 'Failed to add references' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to add references');
   }
 }
 
@@ -100,10 +84,7 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const babysitter = await db.babysitter.findUnique({
@@ -116,13 +97,10 @@ export async function GET(request: NextRequest) {
     });
 
     if (!babysitter) {
-      return NextResponse.json(
-        { error: 'Babysitter profile not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Babysitter profile not found');
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       references: babysitter.references.map(ref => ({
         id: ref.id,
         name: ref.name,
@@ -138,10 +116,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Get references error:', error);
-    return NextResponse.json(
-      { error: 'Failed to get references' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to get references');
   }
 }
 
@@ -151,20 +126,14 @@ export async function DELETE(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const { searchParams } = new URL(request.url);
     const referenceId = searchParams.get('id');
 
     if (!referenceId) {
-      return NextResponse.json(
-        { error: 'Reference ID is required' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Reference ID is required');
     }
 
     const babysitter = await db.babysitter.findUnique({
@@ -172,10 +141,7 @@ export async function DELETE(request: NextRequest) {
     });
 
     if (!babysitter) {
-      return NextResponse.json(
-        { error: 'Babysitter profile not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Babysitter profile not found');
     }
 
     // Verify the reference belongs to this babysitter
@@ -187,26 +153,17 @@ export async function DELETE(request: NextRequest) {
     });
 
     if (!reference) {
-      return NextResponse.json(
-        { error: 'Reference not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Reference not found');
     }
 
     await db.babysitterReference.delete({
       where: { id: referenceId }
     });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Reference removed successfully'
-    });
+    return apiSuccess(undefined, 'Reference removed successfully');
 
   } catch (error) {
     console.error('Delete reference error:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete reference' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to delete reference');
   }
 }

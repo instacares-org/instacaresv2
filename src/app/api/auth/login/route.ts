@@ -1,7 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { z } from 'zod';
 import { signIn } from 'next-auth/react';
 import bcrypt from 'bcryptjs';
-import { prisma } from '@/lib/database';
+import { prisma } from '@/lib/db';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+
+const loginSchema = z.object({
+  email: z.string().min(1, 'Email is required').email('Must be a valid email address'),
+  password: z.string().min(1, 'Password is required'),
+  userType: z.string().optional(),
+});
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,20 +19,14 @@ export async function POST(request: NextRequest) {
       body = JSON.parse(text);
     } catch (parseError) {
       console.error('JSON parsing error:', parseError);
-      return NextResponse.json(
-        { error: 'Invalid JSON format in request body' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Invalid JSON format in request body');
     }
 
-    const { email, password, userType } = body;
-
-    if (!email || !password) {
-      return NextResponse.json(
-        { error: 'Email and password are required' },
-        { status: 400 }
-      );
+    const parsed = loginSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
     }
+    const { email, password, userType } = parsed.data;
 
     // Find user in database
     const user = await prisma.user.findUnique({
@@ -35,57 +37,31 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'Invalid credentials' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized('Invalid credentials');
     }
 
     // Check user type if specified
     if (userType === 'admin' && user.userType !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Access denied. Admin credentials required.' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('Access denied. Admin credentials required.');
     }
 
     // Verify password
     if (!user.passwordHash) {
-      return NextResponse.json(
-        { error: 'Password authentication not configured for this account' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized('Password authentication not configured for this account');
     }
 
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
     if (!isValidPassword) {
-      return NextResponse.json(
-        { error: 'Invalid credentials' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized('Invalid credentials');
     }
 
     // Check account status
     if (!user.isActive) {
-      return NextResponse.json(
-        { error: 'Account is deactivated. Please contact support.' },
-        { status: 403 }
-      );
-    }
-
-    // Allow PENDING caregivers to login and complete their profile
-    if (user.approvalStatus === 'PENDING' && user.userType !== 'CAREGIVER') {
-      return NextResponse.json(
-        { error: 'Account is pending approval.' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('Account is deactivated. Please contact support.');
     }
 
     if (user.approvalStatus === 'REJECTED') {
-      return NextResponse.json(
-        { error: 'Account has been rejected.' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('Account has been rejected.');
     }
 
     // Update last login
@@ -95,28 +71,20 @@ export async function POST(request: NextRequest) {
     });
 
     // Return success with user data
-    return NextResponse.json({
-      success: true,
+    // Note: Actual session creation should be handled by NextAuth
+    // This endpoint is for validation only
+    return apiSuccess({
       user: {
         id: user.id,
         email: user.email,
         userType: user.userType,
         profile: user.profile,
-      },
-      // Note: Actual session creation should be handled by NextAuth
-      // This endpoint is for validation only
-      message: 'Authentication successful. Use NextAuth for session management.'
-    });
+      }
+    }, 'Authentication successful. Use NextAuth for session management.');
 
   } catch (error) {
     console.error('Login error:', error);
     console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-    return NextResponse.json(
-      {
-        error: 'Authentication failed',
-        details: process.env.NODE_ENV === 'development' ? error instanceof Error ? error.message : String(error) : undefined
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Authentication failed');
   }
 }

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { prisma } from '@/lib/database';
+import { prisma } from '@/lib/db';
 import { getAuthenticatedUser, createApiResponse, formatUserInfo } from '@/lib/chatAuth';
 import { logger } from '@/lib/logger';
 

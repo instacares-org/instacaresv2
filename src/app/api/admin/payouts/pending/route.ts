@@ -1,24 +1,26 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { withAuth } from '@/lib/auth-middleware';
+import { requirePermission } from '@/lib/adminAuth';
 import { logger, getClientInfo } from '@/lib/logger';
+import { z } from 'zod';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+
+const manualPayoutSchema = z.object({
+  bookingIds: z.array(z.string().min(1, 'Booking ID cannot be empty')).min(1, 'At least one booking ID is required'),
+  caregiverId: z.string().min(1, 'Caregiver ID is required'),
+  method: z.string().max(50, 'Method too long').optional(),
+  notes: z.string().max(1000, 'Notes too long').optional(),
+  amount: z.number().positive('Amount must be a positive number'),
+});
 
 // API to track pending payouts for demo accounts
 export async function GET(request: NextRequest) {
   try {
-    // ✅ STEP 1: Require admin authentication
-    const authResult = await withAuth(request, 'ADMIN');
-    if (!authResult.isAuthorized) {
-      const clientInfo = getClientInfo(request);
-      logger.security('Unauthorized admin payouts access attempt', {
-        endpoint: '/api/admin/payouts/pending',
-        ip: clientInfo.ip,
-        userAgent: clientInfo.userAgent
-      });
-      return authResult.response;
-    }
+    // STEP 1: Require admin authentication with permission check
+    const permCheck = await requirePermission(request, 'canProcessPayouts');
+    if (!permCheck.authorized) return permCheck.response!;
 
-    const adminUser = authResult.user!;
+    const adminUser = permCheck.user!;
 
     // Get all bookings with demo caregiver accounts that have been paid but caregiver hasn't received money
     const pendingPayouts = await db.booking.findMany({
@@ -115,8 +117,7 @@ export async function GET(request: NextRequest) {
       totalOwed: totalOwed
     });
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       summary: {
         totalCaregivers: caregiverPayoutArray.length,
         totalBookings: pendingPayouts.length,
@@ -130,38 +131,26 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching pending payouts:', error);
     logger.error('Admin payouts fetch error', { error });
-    return NextResponse.json(
-      { error: 'Failed to fetch pending payouts' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch pending payouts');
   }
 }
 
 // Mark payout as manually sent
 export async function POST(request: NextRequest) {
   try {
-    // ✅ STEP 1: Require admin authentication
-    const authResult = await withAuth(request, 'ADMIN');
-    if (!authResult.isAuthorized) {
-      const clientInfo = getClientInfo(request);
-      logger.security('Unauthorized manual payout attempt', {
-        endpoint: '/api/admin/payouts/pending',
-        ip: clientInfo.ip,
-        userAgent: clientInfo.userAgent
-      });
-      return authResult.response;
+    // STEP 1: Require admin authentication with permission check
+    const permCheck = await requirePermission(request, 'canProcessPayouts');
+    if (!permCheck.authorized) return permCheck.response!;
+
+    const adminUser = permCheck.user!;
+
+    const body = await request.json();
+    const parsed = manualPayoutSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
     }
 
-    const adminUser = authResult.user!;
-
-    const { bookingIds, caregiverId, method, notes, amount } = await request.json();
-
-    if (!bookingIds || !caregiverId) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
-    }
+    const { bookingIds, caregiverId, method, notes, amount } = parsed.data;
 
     // ✅ STEP 2: Log manual payout creation (CRITICAL for audit trail)
     logger.security('Manual payout triggered', {
@@ -194,18 +183,13 @@ export async function POST(request: NextRequest) {
       amount
     });
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       payoutId: manualPayout.id,
-      message: `Manual payout of $${amount} recorded for caregiver`
-    });
+    }, `Manual payout of $${amount} recorded for caregiver`);
 
   } catch (error) {
     console.error('Error recording manual payout:', error);
     logger.error('Manual payout creation error', { error });
-    return NextResponse.json(
-      { error: 'Failed to record manual payout' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to record manual payout');
   }
 }

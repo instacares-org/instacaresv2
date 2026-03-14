@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
+import Image from 'next/image';
 import { useChat, ChatRoom, ChatMessage } from '../hooks/useChat';
 import {
   PaperAirplaneIcon,
@@ -153,9 +154,11 @@ const Chat: React.FC<ChatProps> = ({ userId, userType }) => {
                     {/* Avatar */}
                     <div className="flex-shrink-0">
                       {room.otherUser.avatar ? (
-                        <img
+                        <Image
                           src={room.otherUser.avatar}
                           alt={room.otherUser.name}
+                          width={48}
+                          height={48}
                           className="w-12 h-12 rounded-full object-cover"
                           onError={(e) => {
                             console.error('🚨 Image failed to load:', room.otherUser.avatar);
@@ -216,9 +219,11 @@ const Chat: React.FC<ChatProps> = ({ userId, userType }) => {
                 return (
                   <div className="flex items-center space-x-3">
                     {activeRoom.otherUser.avatar ? (
-                      <img
+                      <Image
                         src={activeRoom.otherUser.avatar}
                         alt={activeRoom.otherUser.name}
+                        width={40}
+                        height={40}
                         className="w-10 h-10 rounded-full object-cover"
                       />
                     ) : (
@@ -260,9 +265,11 @@ const Chat: React.FC<ChatProps> = ({ userId, userType }) => {
                     {!message.isFromMe && (
                       <div className="flex-shrink-0">
                         {message.senderAvatar ? (
-                          <img
+                          <Image
                             src={message.senderAvatar}
                             alt="Avatar"
+                            width={32}
+                            height={32}
                             className="w-8 h-8 rounded-full object-cover"
                           />
                         ) : (
@@ -300,9 +307,11 @@ const Chat: React.FC<ChatProps> = ({ userId, userType }) => {
                     {message.isFromMe && (
                       <div className="flex-shrink-0">
                         {message.senderAvatar ? (
-                          <img
+                          <Image
                             src={message.senderAvatar}
                             alt="Avatar"
+                            width={32}
+                            height={32}
                             className="w-8 h-8 rounded-full object-cover"
                           />
                         ) : (

@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import { z } from 'zod';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+
+const switchRoleSchema = z.object({
+  role: z.enum(['PARENT', 'CAREGIVER'], {
+    message: 'Invalid role. Must be PARENT or CAREGIVER.',
+  }),
+});
 
 /**
  * POST /api/user/switch-role
@@ -10,23 +19,28 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/options';
  */
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.API_WRITE);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
     // Verify authentication using NextAuth
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const userId = session.user.id;
     const body = await request.json();
-    const { role } = body;
-
-    // Validate the requested role
-    if (!role || !['PARENT', 'CAREGIVER'].includes(role)) {
-      return NextResponse.json(
-        { error: 'Invalid role. Must be PARENT or CAREGIVER.' },
-        { status: 400 }
-      );
+    const parsed = switchRoleSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
     }
+
+    const { role } = parsed.data;
 
     // Get current user to check their roles
     const user = await db.user.findUnique({
@@ -40,22 +54,16 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return ApiErrors.notFound('User not found');
     }
 
     // Check if user has the requested role
     if (role === 'PARENT' && !user.isParent) {
-      return NextResponse.json(
-        { error: 'You do not have a parent role. Please complete parent registration first.' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('You do not have a parent role. Please complete parent registration first.');
     }
 
     if (role === 'CAREGIVER' && !user.isCaregiver) {
-      return NextResponse.json(
-        { error: 'You do not have a caregiver role. Please complete caregiver registration first.' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('You do not have a caregiver role. Please complete caregiver registration first.');
     }
 
     // Update the active role
@@ -77,9 +85,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`[switch-role] User ${userId} switched to ${role} role`);
 
-    return NextResponse.json({
-      success: true,
-      message: `Successfully switched to ${role.toLowerCase()} role`,
+    return apiSuccess({
       user: {
         id: updatedUser.id,
         email: updatedUser.email,
@@ -87,13 +93,10 @@ export async function POST(request: NextRequest) {
         isCaregiver: updatedUser.isCaregiver,
         activeRole: updatedUser.activeRole,
       },
-    });
+    }, `Successfully switched to ${role.toLowerCase()} role`);
 
   } catch (error) {
     console.error('Error switching role:', error);
-    return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to switch role');
   }
 }

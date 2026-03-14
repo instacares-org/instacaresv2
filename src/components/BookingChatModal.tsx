@@ -204,9 +204,10 @@ export default function BookingChatModal({
       }
 
       const roomData = await roomResponse.json();
-      if (roomData.success && roomData.chatRoom) {
-        setChatRoomId(roomData.chatRoom.id);
-        await loadMessages(roomData.chatRoom.id);
+      const chatRoom = roomData.chatRoom || roomData.data?.chatRoom;
+      if (roomData.success && chatRoom) {
+        setChatRoomId(chatRoom.id);
+        await loadMessages(chatRoom.id);
       }
     } catch (error) {
       console.error('Error initializing chat:', error);
@@ -221,9 +222,10 @@ export default function BookingChatModal({
 
       if (response.ok) {
         const data = await response.json();
+        const msgPayload = data.data || data;
 
-        if (data.messages && Array.isArray(data.messages)) {
-          const formattedMessages = data.messages.map((m: any) => ({
+        if (msgPayload.messages && Array.isArray(msgPayload.messages)) {
+          const formattedMessages = msgPayload.messages.map((m: any) => ({
             id: m.id,
             content: m.content,
             senderId: m.sender?.id || m.senderId,

@@ -44,6 +44,7 @@
     "backup_dual_role_*",
     "prisma_backup_production",
     "src/app/api/admin/dashboard/route-complex.ts",
+    "orphan_files",
     "prisma"
   ]
 }

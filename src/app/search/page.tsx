@@ -453,7 +453,9 @@ function SearchPageContent() {
       setError(null);
       
       // Build query parameters - use searchLocation (from URL) or userLocation (from browser)  
-      let queryParams = `_cacheBust=${Date.now()}&fixVersion=3`;
+      // Pass viewer's timezone so the API filters slots correctly for evening hours
+      const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Toronto';
+      let queryParams = `_cacheBust=${Date.now()}&fixVersion=3&userTimezone=${encodeURIComponent(viewerTz)}`;
       const locationToUse = searchLocation || userLocation;
       if (locationToUse) {
         queryParams += `&lat=${locationToUse.lat}&lng=${locationToUse.lng}&radius=500`; // Use 500km radius for broader search
@@ -473,7 +475,8 @@ function SearchPageContent() {
       
       if (result.success && result.data) {
         // Transform API data to match Caregiver interface
-        const apiCaregivers: Caregiver[] = result.data.map((caregiver: any) => {
+        const caregiversList = result.data.caregivers || result.data;
+        const apiCaregivers: Caregiver[] = (Array.isArray(caregiversList) ? caregiversList : []).map((caregiver: any) => {
           // Always include caregivers - don't filter by location data
           const hasLocationData = caregiver.address?.city;
           
@@ -524,6 +527,7 @@ function SearchPageContent() {
             bio: caregiver.bio, // Add bio field for CaregiverDetailModal
             experienceYears: caregiver.experienceYears || 0, // Add experience years
             specialties: caregiver.specialties || [],
+            ageGroups: caregiver.ageGroups || [],
             location: {
               lat: parseFloat(caregiver.address?.latitude) || 43.6532, // Default to Toronto coordinates
               lng: parseFloat(caregiver.address?.longitude) || -79.3832,
@@ -537,7 +541,8 @@ function SearchPageContent() {
             stripeOnboarded: caregiver.stripeOnboarded,
             canReceivePayments: caregiver.canReceivePayments,
             experience: `${caregiver.experienceYears || 0}+ years experience`,
-            services: caregiver.services || [] // Services offered by caregiver
+            services: caregiver.services || [], // Services offered by caregiver
+            maxChildren: caregiver.maxChildren || 5 // Max children capacity (default 5)
           };
         }).filter(Boolean); // Remove null entries
         
@@ -568,8 +573,9 @@ function SearchPageContent() {
       });
       if (response.ok) {
         const data = await response.json();
-        if (data.babysitters) {
-          setAllBabysitters(data.babysitters.map((b: any) => ({ ...b, type: 'babysitter' as const })));
+        const babysitters = data.data?.babysitters || data.babysitters;
+        if (babysitters) {
+          setAllBabysitters(babysitters.map((b: any) => ({ ...b, type: 'babysitter' as const })));
         }
       }
     } catch (error) {
@@ -765,45 +771,39 @@ function SearchPageContent() {
 
     // 1. LOCATION FILTERING - Use geocoding with radius-based search
     if (criteria.location && criteria.location.trim()) {
-      console.log('🔍 Location search:', criteria.location);
-      console.log('🗺️ Geocoded coords:', searchLocation);
-      
       if (searchLocation && searchLocation.lat && searchLocation.lng) {
         const searchRadius = 20; // 20km radius
-        console.log();
-        
-        const beforeCount = filtered.length;
+
         filtered = filtered.filter(caregiver => {
-          // Get caregiver coordinates
           const caregiverLat = caregiver.location?.lat;
           const caregiverLng = caregiver.location?.lng;
-          
-          if (!caregiverLat || !caregiverLng) {
-            console.log();
-            return false;
-          }
-          
-          // Calculate distance using Haversine formula
+
+          if (!caregiverLat || !caregiverLng) return false;
+
           const distance = calculateDistance(
             searchLocation.lat,
             searchLocation.lng,
             caregiverLat,
             caregiverLng
           );
-          
-          const withinRadius = distance <= searchRadius;
-          console.log();
-          
-          return withinRadius;
+
+          return distance <= searchRadius;
         });
-        
-        console.log();
-      } else {
-        console.log('⚠️  No geocoded coordinates available, skipping location filter');
+        console.log('📍 After location filter:', filtered.length, 'caregivers');
       }
     }
 
-    // 2. PRICE RANGE FILTERING
+    // 2. CHILDREN COUNT / CAPACITY FILTERING
+    const totalChildrenRequested = criteria.infants + criteria.children;
+    if (totalChildrenRequested > 0) {
+      filtered = filtered.filter(caregiver => {
+        const maxCap = caregiver.maxChildren || 5;
+        return maxCap >= totalChildrenRequested;
+      });
+      console.log(`👶 After capacity filter (need ${totalChildrenRequested}):`, filtered.length, 'caregivers');
+    }
+
+    // 3. PRICE RANGE FILTERING
     if (filters.priceRange !== 'any') {
       filtered = filtered.filter(caregiver => {
         const rate = caregiver.hourlyRate;
@@ -818,138 +818,115 @@ function SearchPageContent() {
       console.log('💰 After price filter:', filtered.length, 'caregivers');
     }
 
-    // 3. AGE GROUP FILTERING
-    const hasInfants = criteria.infants > 0 || filters.ageGroups.includes('infants');
-    const hasToddlers = filters.ageGroups.includes('toddlers');
-    const hasSchoolAge = criteria.children > 0 || filters.ageGroups.includes('schoolage');
-    const hasTeens = filters.ageGroups.includes('teens');
+    // 4. AGE GROUP FILTERING - Use structured ageGroups data from API
+    const selectedAgeGroups = [...filters.ageGroups];
+    // Map infant/children search criteria to age groups
+    if (criteria.infants > 0 && !selectedAgeGroups.includes('infants')) {
+      selectedAgeGroups.push('infants');
+    }
 
-    if (hasInfants || hasToddlers || hasSchoolAge || hasTeens) {
+    if (selectedAgeGroups.length > 0) {
       filtered = filtered.filter(caregiver => {
+        // First try structured ageGroups data from API
+        const caregiverAgeGroups = caregiver.ageGroups || [];
+        if (caregiverAgeGroups.length > 0) {
+          const groupNames = caregiverAgeGroups.map(g =>
+            (typeof g === 'string' ? g : g.name || '').toLowerCase()
+          );
+          return selectedAgeGroups.some(requestedGroup => {
+            switch (requestedGroup) {
+              case 'infants':
+                return groupNames.some(g => g.includes('infant') || g.includes('baby') || g.includes('0-2') || g.includes('newborn'));
+              case 'toddlers':
+                return groupNames.some(g => g.includes('toddler') || g.includes('2-4') || g.includes('preschool'));
+              case 'schoolage':
+                return groupNames.some(g => g.includes('school') || g.includes('5-12') || g.includes('elementary'));
+              case 'teens':
+                return groupNames.some(g => g.includes('teen') || g.includes('13') || g.includes('adolescent'));
+              default:
+                return false;
+            }
+          });
+        }
+
+        // Fallback: check specialties and description text
         const specialties = caregiver.specialties.map(s => s.toLowerCase());
         const description = caregiver.description.toLowerCase();
-        
-        // Check if caregiver works with requested age groups
-        let ageMatch = false;
-        
-        if (hasInfants) {
-          ageMatch = ageMatch || specialties.some(s => 
-            s.includes('infant') || s.includes('baby') || s.includes('newborn') || s.includes('0-2')
-          ) || description.includes('infant') || description.includes('baby');
-        }
-        
-        if (hasToddlers) {
-          ageMatch = ageMatch || specialties.some(s => 
-            s.includes('toddler') || s.includes('2-4') || s.includes('early childhood')
-          ) || description.includes('toddler');
-        }
-        
-        if (hasSchoolAge) {
-          ageMatch = ageMatch || specialties.some(s => 
-            s.includes('school') || s.includes('5-12') || s.includes('homework') || s.includes('education')
-          ) || description.includes('school');
-        }
-        
-        if (hasTeens) {
-          ageMatch = ageMatch || specialties.some(s => 
-            s.includes('teen') || s.includes('13+') || s.includes('adolescent')
-          ) || description.includes('teen');
-        }
-        
-        // If no specific age requirements, include all caregivers
-        if (!hasInfants && !hasToddlers && !hasSchoolAge && !hasTeens) {
-          ageMatch = true;
-        }
-        
-        return ageMatch;
+        const allText = [...specialties, description].join(' ');
+
+        return selectedAgeGroups.some(requestedGroup => {
+          switch (requestedGroup) {
+            case 'infants':
+              return allText.includes('infant') || allText.includes('baby') || allText.includes('newborn') || allText.includes('0-2');
+            case 'toddlers':
+              return allText.includes('toddler') || allText.includes('2-4') || allText.includes('early childhood') || allText.includes('preschool');
+            case 'schoolage':
+              return allText.includes('school') || allText.includes('5-12') || allText.includes('homework') || allText.includes('education');
+            case 'teens':
+              return allText.includes('teen') || allText.includes('13+') || allText.includes('adolescent');
+            default:
+              return false;
+          }
+        });
       });
       console.log('👶 After age group filter:', filtered.length, 'caregivers');
     }
 
-    // 4. DATE/AVAILABILITY FILTERING - Filter by actual availability slots
+    // 5. DATE/AVAILABILITY FILTERING - Filter by actual availability slots
     if (criteria.startDate && criteria.endDate) {
       const requestStart = new Date(criteria.startDate);
       const requestEnd = new Date(criteria.endDate);
 
-      console.log(`📅 Filtering by dates: ${requestStart.toLocaleDateString()} - ${requestEnd.toLocaleDateString()}`);
-
-      const beforeCount = filtered.length;
       filtered = filtered.filter(caregiver => {
-        if (!caregiver.availabilitySlots || caregiver.availabilitySlots.length === 0) {
-          console.log(`  ❌ ${caregiver.name}: No availability slots posted`);
-          return false;
-        }
+        if (!caregiver.availabilitySlots || caregiver.availabilitySlots.length === 0) return false;
 
-        // Debug logging for all caregivers
-        console.log(`  🔍 ${caregiver.name}: Checking ${caregiver.availabilitySlots.length} slots`);
-
-        const hasMatchingSlots = caregiver.availabilitySlots.some(slot => {
-          // Parse slot date - handles both ISO strings and Date objects
+        return caregiver.availabilitySlots.some(slot => {
           let slotDate: Date;
           if (typeof slot.date === 'string') {
-            // If it's a numeric string (Unix timestamp), parse as number
-            if (/^\d+$/.test(slot.date)) {
-              slotDate = new Date(parseInt(slot.date));
-            } else {
-              // Otherwise treat as ISO date string
-              slotDate = new Date(slot.date);
-            }
+            slotDate = /^\d+$/.test(slot.date) ? new Date(parseInt(slot.date)) : new Date(slot.date);
           } else {
-            console.log(`  ⚠️ ${caregiver.name}: Invalid slot date format:`, slot.date);
             return false;
           }
 
-          const dateMatches = slotDate >= requestStart && slotDate <= requestEnd;
-          const hasCapacity = slot.availableSpots > 0;
-          const isAvailable = slot.status === 'AVAILABLE';
-
-          const matches = dateMatches && hasCapacity && isAvailable;
-
-          if (dateMatches) {
-            console.log(`    ${matches ? '✅' : '⚠️'} Slot ${slotDate.toLocaleDateString()}: spots=${slot.availableSpots}, status=${slot.status}`);
-          }
-
-          return matches;
+          return slotDate >= requestStart && slotDate <= requestEnd &&
+                 slot.availableSpots > 0 && slot.status === 'AVAILABLE';
         });
-
-        if (!hasMatchingSlots) {
-          console.log(`  ❌ ${caregiver.name}: No matching availability slots`);
-        } else {
-          console.log(`  ✅ ${caregiver.name}: Has matching slots!`);
-        }
-
-        return hasMatchingSlots;
       });
-
-      console.log(`📅 After date/availability filter: ${beforeCount} → ${filtered.length} caregivers`);
+      console.log('📅 After date filter:', filtered.length, 'caregivers');
     }
 
-    // 5. SPECIAL SERVICES FILTERING
+    // 6. SPECIAL SERVICES FILTERING
     if (filters.specialServices.length > 0) {
       filtered = filtered.filter(caregiver => {
         const specialties = caregiver.specialties.map(s => s.toLowerCase());
         const description = caregiver.description.toLowerCase();
-        
+
         return filters.specialServices.some(service => {
           switch (service) {
+            case 'potty-training':
+              return specialties.some(s => s.includes('potty training') || s.includes('potty')) ||
+                     description.includes('potty training');
+            case 'sleep-training':
+              return specialties.some(s => s.includes('sleep training') || s.includes('sleep')) ||
+                     description.includes('sleep training');
             case 'special-needs':
               return specialties.some(s => s.includes('special needs') || s.includes('special') || s.includes('medical')) ||
                      description.includes('special needs') || description.includes('medical');
             case 'bilingual':
               return specialties.some(s => s.includes('bilingual') || s.includes('french') || s.includes('language')) ||
                      description.includes('bilingual') || description.includes('french');
-            case 'homework':
-              return specialties.some(s => s.includes('homework') || s.includes('education') || s.includes('tutoring')) ||
-                     description.includes('homework') || description.includes('education');
             case 'meals':
               return specialties.some(s => s.includes('meal') || s.includes('cooking') || s.includes('culinary')) ||
                      description.includes('meal') || description.includes('cooking');
-            case 'housekeeping':
-              return specialties.some(s => s.includes('housekeeping') || s.includes('cleaning')) ||
-                     description.includes('housekeeping') || description.includes('cleaning');
-            case 'transportation':
-              return specialties.some(s => s.includes('transportation') || s.includes('driving')) ||
-                     description.includes('transportation') || description.includes('driving');
+            case 'educational':
+              return specialties.some(s => s.includes('educational') || s.includes('education') || s.includes('tutoring')) ||
+                     description.includes('educational') || description.includes('education');
+            case 'outdoor':
+              return specialties.some(s => s.includes('outdoor') || s.includes('outdoor play')) ||
+                     description.includes('outdoor');
+            case 'arts-crafts':
+              return specialties.some(s => s.includes('arts') || s.includes('crafts') || s.includes('arts & crafts')) ||
+                     description.includes('arts') || description.includes('crafts');
             default:
               return false;
           }
@@ -958,49 +935,92 @@ function SearchPageContent() {
       console.log('⭐ After special services filter:', filtered.length, 'caregivers');
     }
 
-    // 5. EXPERIENCE LEVEL FILTERING
+    // 7. EXPERIENCE LEVEL FILTERING
     if (filters.experience !== 'any') {
       filtered = filtered.filter(caregiver => {
-        const experienceText = caregiver.experience || '';
-        const experienceYears = parseInt(experienceText.match(/\d+/)?.[0] || '0');
-        
+        // Prefer structured experienceYears, fallback to parsing text
+        const years = caregiver.experienceYears ?? parseInt(caregiver.experience?.match(/\d+/)?.[0] || '0');
+
         switch (filters.experience) {
-          case 'new': return experienceYears >= 0 && experienceYears <= 2;
-          case 'experienced': return experienceYears >= 3 && experienceYears <= 7;
-          case 'expert': return experienceYears >= 8;
+          case 'new': return years >= 0 && years <= 2;
+          case 'experienced': return years >= 3 && years <= 7;
+          case 'expert': return years >= 8;
           default: return true;
         }
       });
       console.log('🌟 After experience filter:', filtered.length, 'caregivers');
     }
 
-    // 6. HIGHLY RATED FILTERING
+    // 8. HIGHLY RATED FILTERING
     if (filters.highlyRated) {
       filtered = filtered.filter(caregiver => caregiver.rating >= 4.5);
       console.log('⭐ After highly rated filter:', filtered.length, 'caregivers');
     }
 
-    // 7. AVAILABILITY FILTERING (simulated for now)
+    // 9. AVAILABILITY QUICK FILTERS - Use actual slot data
     if (filters.availability.length > 0) {
-      // In a real implementation, this would check actual availability
-      // For now, we'll use a simple heuristic based on availability text
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      const endOfWeek = new Date(now);
+      endOfWeek.setDate(now.getDate() + (7 - now.getDay())); // End of this week (Sunday)
+
       filtered = filtered.filter(caregiver => {
-        const availability = caregiver.availability?.toLowerCase() || '';
-        
+        const slots = caregiver.availabilitySlots || [];
+        const availText = caregiver.availability?.toLowerCase() || '';
+
         return filters.availability.some(availType => {
           switch (availType) {
-            case 'available-today':
-              return availability.includes('available today') || availability.includes('available now');
-            case 'this-week':
-              return availability.includes('week') || availability.includes('available');
-            case 'weekdays':
-              return availability.includes('weekday') || availability.includes('monday') || availability.includes('full-time');
-            case 'weekends':
-              return availability.includes('weekend') || availability.includes('saturday') || availability.includes('sunday');
-            case 'evenings':
-              return availability.includes('evening') || availability.includes('afternoon');
+            case 'available-today': {
+              // Check actual slots for today
+              if (slots.length > 0) {
+                return slots.some(slot => {
+                  const slotDateStr = typeof slot.date === 'string' ? slot.date.split('T')[0] : '';
+                  return slotDateStr === todayStr && slot.availableSpots > 0 && slot.status === 'AVAILABLE';
+                });
+              }
+              return availText.includes('available today');
+            }
+            case 'this-week': {
+              // Check slots within this week
+              if (slots.length > 0) {
+                return slots.some(slot => {
+                  const slotDate = new Date(typeof slot.date === 'string' ? slot.date : '');
+                  return slotDate >= now && slotDate <= endOfWeek && slot.availableSpots > 0 && slot.status === 'AVAILABLE';
+                });
+              }
+              return availText.includes('week') || availText.includes('available');
+            }
+            case 'weekdays': {
+              if (slots.length > 0) {
+                return slots.some(slot => {
+                  const slotDate = new Date(typeof slot.date === 'string' ? slot.date : '');
+                  const day = slotDate.getDay();
+                  return day >= 1 && day <= 5 && slot.availableSpots > 0 && slot.status === 'AVAILABLE';
+                });
+              }
+              return availText.includes('weekday') || availText.includes('monday') || availText.includes('full-time');
+            }
+            case 'weekends': {
+              if (slots.length > 0) {
+                return slots.some(slot => {
+                  const slotDate = new Date(typeof slot.date === 'string' ? slot.date : '');
+                  const day = slotDate.getDay();
+                  return (day === 0 || day === 6) && slot.availableSpots > 0 && slot.status === 'AVAILABLE';
+                });
+              }
+              return availText.includes('weekend') || availText.includes('saturday') || availText.includes('sunday');
+            }
+            case 'evenings': {
+              if (slots.length > 0) {
+                return slots.some(slot => {
+                  const startHour = new Date(typeof slot.startTime === 'string' ? slot.startTime : '').getUTCHours();
+                  return startHour >= 17 && slot.availableSpots > 0 && slot.status === 'AVAILABLE';
+                });
+              }
+              return availText.includes('evening') || availText.includes('afternoon');
+            }
             case 'overnight':
-              return availability.includes('overnight') || availability.includes('night');
+              return availText.includes('overnight') || availText.includes('night');
             default:
               return true;
           }

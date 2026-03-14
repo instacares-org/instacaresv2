@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminAuth } from '@/lib/adminAuth';
-import { prisma } from '@/lib/database';
+import { prisma } from '@/lib/db';
 
 // GET /api/admin/dashboard - Get admin dashboard data (simplified version)
 export async function GET(request: NextRequest) {

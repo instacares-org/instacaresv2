@@ -5,13 +5,23 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { geocodeAddress, validateCanadianCoordinates } from '@/lib/geocoding';
 import { UpdateAddressSchema, validateRequest } from '@/lib/api-validation';
 import { getTimezoneFromLocation } from '@/lib/timezone';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
 export async function PATCH(request: NextRequest) {
   try {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.PROFILE_UPDATE);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
     // Verify authentication using NextAuth
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const userId = session.user.id;
@@ -29,13 +39,7 @@ export async function PATCH(request: NextRequest) {
         ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip')
       });
 
-      return NextResponse.json(
-        {
-          error: 'Invalid address data',
-          details: validation.errors
-        },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Invalid address data', validation.errors);
     }
 
     const { streetAddress, apartment, city, state, zipCode, country, phone } = validation.data;
@@ -68,7 +72,7 @@ export async function PATCH(request: NextRequest) {
           console.log(`❌ Geocoding returned invalid coordinates for Canada: ${geocodeResult.lat}, ${geocodeResult.lng}`);
         }
       } else {
-        console.log(`⚠️ Could not geocode address: ${streetAddress}, ${city}, ${state}`);
+        console.log(`⚠️ Could not geocode address (geocoder returned no results)`);
       }
     } catch (error) {
       console.error(`❌ Geocoding error:`, error);
@@ -111,8 +115,7 @@ export async function PATCH(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       profile: {
         streetAddress: updatedProfile.streetAddress,
         apartment: updatedProfile.apartment,
@@ -141,9 +144,6 @@ export async function PATCH(request: NextRequest) {
         name: error.name
       });
     }
-    return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to update address');
 }
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
 import { db } from '@/lib/db';
@@ -81,10 +82,20 @@ function calculateAvailabilityStatus(availabilitySlots: any[], userTimezone: str
   const nowInZone = DateTime.now().setZone(userTimezone);
   const todayInZone = nowInZone.startOf('day');
   const tomorrowInZone = todayInZone.plus({ days: 1 });
-  const nextWeekInZone = todayInZone.plus({ days: 7 });
+
+  // Helper to get calendar date from slot.date (stored as UTC but represents local date)
+  const getSlotCalendarDate = (slotDate: Date | string) => {
+    const dateObj = typeof slotDate === 'string' ? new Date(slotDate) : slotDate;
+    const year = dateObj.getUTCFullYear();
+    const month = dateObj.getUTCMonth() + 1;
+    const day = dateObj.getUTCDate();
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  };
+
+  const todayDate = nowInZone.toFormat('yyyy-MM-dd');
+  const tomorrowDate = tomorrowInZone.toFormat('yyyy-MM-dd');
 
   // Filter slots to only include future time slots (not just future dates)
-  // Convert slot endTime from UTC to caregiver's timezone for comparison
   const futureSlots = availabilitySlots.filter(slot => {
     const slotEndTimeUTC = DateTime.fromJSDate(new Date(slot.endTime), { zone: 'UTC' });
     const slotEndTimeInZone = slotEndTimeUTC.setZone(userTimezone);
@@ -95,66 +106,42 @@ function calculateAvailabilityStatus(availabilitySlots: any[], userTimezone: str
     return "No upcoming availability";
   }
 
-  // Helper to get calendar date from slot.date (stored as UTC but represents local date)
-  const getSlotCalendarDate = (slotDate: Date | string) => {
-    // slot.date is stored as UTC midnight (e.g., 2025-11-14T00:00:00Z)
-    // but it represents Nov 14 in the caregiver's timezone
-    // Extract just the year-month-day components without timezone conversion
-    const dateObj = typeof slotDate === 'string' ? new Date(slotDate) : slotDate;
-    const year = dateObj.getUTCFullYear();
-    const month = dateObj.getUTCMonth() + 1; // 0-indexed
-    const day = dateObj.getUTCDate();
-    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  };
+  // For "today" slots, check that there's at least 30 minutes of bookable time remaining.
+  // This matches the booking modal's 30-min buffer, preventing the card from saying
+  // "Available today" when no start times are actually bookable.
+  const BOOKING_BUFFER_MINUTES = 30;
+  const nowPlus30 = nowInZone.plus({ minutes: BOOKING_BUFFER_MINUTES });
 
-  // Get current date components in caregiver's timezone
-  const getTodayCalendarDate = () => {
-    const year = nowInZone.year;
-    const month = nowInZone.month;
-    const day = nowInZone.day;
-    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  };
-
-  const getTomorrowCalendarDate = () => {
-    const year = tomorrowInZone.year;
-    const month = tomorrowInZone.month;
-    const day = tomorrowInZone.day;
-    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  };
-
-  const todayDate = getTodayCalendarDate();
-  const tomorrowDate = getTomorrowCalendarDate();
-
-  // Check for availability today (in caregiver's timezone)
-  const todaySlots = futureSlots.filter(slot => {
-    return getSlotCalendarDate(slot.date) === todayDate;
+  const bookableSlots = futureSlots.filter(slot => {
+    const slotCalendar = getSlotCalendarDate(slot.date);
+    if (slotCalendar !== todayDate) {
+      return true; // Future-day slots are always bookable
+    }
+    // For today's slots, check there's time remaining after the 30-min buffer
+    const slotStartInZone = DateTime.fromJSDate(new Date(slot.startTime), { zone: 'UTC' }).setZone(userTimezone);
+    const slotEndInZone = DateTime.fromJSDate(new Date(slot.endTime), { zone: 'UTC' }).setZone(userTimezone);
+    const earliestStart = slotStartInZone > nowPlus30 ? slotStartInZone : nowPlus30;
+    return earliestStart < slotEndInZone;
   });
 
+  if (bookableSlots.length === 0) {
+    return "No upcoming availability";
+  }
+
+  // Check for availability today
+  const todaySlots = bookableSlots.filter(slot => getSlotCalendarDate(slot.date) === todayDate);
   if (todaySlots.length > 0) {
     return "Available today";
   }
 
-  // Check for availability tomorrow (in caregiver's timezone)
-  const tomorrowSlots = futureSlots.filter(slot => {
-    return getSlotCalendarDate(slot.date) === tomorrowDate;
-  });
-
+  // Check for availability tomorrow
+  const tomorrowSlots = bookableSlots.filter(slot => getSlotCalendarDate(slot.date) === tomorrowDate);
   if (tomorrowSlots.length > 0) {
     return "Available tomorrow";
   }
 
-  // Check for availability this week (in caregiver's timezone)
-  const thisWeekSlots = futureSlots.filter(slot => {
-    const slotCalendarDate = getSlotCalendarDate(slot.date);
-    return slotCalendarDate >= todayDate && slotCalendarDate < getTodayCalendarDate(); // Will implement properly
-  });
-
-  if (thisWeekSlots.length > 0 && thisWeekSlots.length !== futureSlots.length) {
-    return "Available this week";
-  }
-
   // Show next available date
-  const nextSlot = futureSlots[0];
+  const nextSlot = bookableSlots[0];
   const nextDateStr = getSlotCalendarDate(nextSlot.date);
   const [year, month, day] = nextDateStr.split('-').map(Number);
   const nextDate = DateTime.fromObject({ year, month, day }, { zone: userTimezone });
@@ -177,6 +164,7 @@ export async function GET(request: NextRequest) {
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 20;
     const offset = searchParams.get('offset') ? parseInt(searchParams.get('offset')!) : 0;
     const allowedCountries = searchParams.get('countries')?.split(',') || ['CA']; // Default to Canada only
+    const viewerTimezone = searchParams.get('userTimezone') || 'America/Toronto'; // Viewer's timezone for slot filtering
 
     // Debug logging
     console.log(`\n🔍 API Request - Radius: ${radius}km, Location: ${latitude || 'none'}, ${longitude || 'none'}`);
@@ -207,7 +195,7 @@ export async function GET(request: NextRequest) {
     const cacheKey = cacheKeys.caregivers(searchQuery);
     
     // Try to get from cache first
-    let caregivers = apiCache.get<CaregiverData[]>(cacheKey);
+    let caregivers = await apiCache.get<CaregiverData[]>(cacheKey);
     
     if (!caregivers) {
       console.log(`💾 Cache miss for key: ${cacheKey}`);
@@ -318,32 +306,30 @@ export async function GET(request: NextRequest) {
           where: { caregiverId: { in: caregiverIds } }
         });
         
-        // Fetch approved review counts for each caregiver
+        // Fetch approved review counts for all caregivers in a single query
         const userIds = caregivers.map(c => c.userId);
-        const reviewCounts = await Promise.all(
-          userIds.map(async (userId) => {
-            const count = await db.review.count({
-              where: {
-                revieweeId: userId,
-                isApproved: true
-              }
-            });
-            return { userId, count };
-          })
-        );
-        const reviewCountMap = new Map(reviewCounts.map(r => [r.userId, r.count]));
-        
+        const reviewCounts = await db.review.groupBy({
+          by: ['revieweeId'],
+          where: {
+            revieweeId: { in: userIds },
+            isApproved: true
+          },
+          _count: { id: true }
+        });
+        const reviewCountMap = new Map(reviewCounts.map(r => [r.revieweeId, r._count.id]));
+
         // Fetch availability slots
-        // CRITICAL: Use UTC start of today to match database storage
+        // Use start of today in viewer's timezone so evening slots aren't filtered out
         const now = new Date();
-        const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
-        
+        const todayInViewerTZ = DateTime.now().setZone(viewerTimezone).startOf('day');
+        const startOfTodayET = todayInViewerTZ.toJSDate();
+
         const slots = await db.availabilitySlot.findMany({
           where: {
             caregiverId: { in: caregiverIds },
             status: 'AVAILABLE',
             availableSpots: { gt: 0 },
-            date: { gte: startOfToday },
+            date: { gte: startOfTodayET },
             endTime: { gt: now }  // Filter out expired slots (past endTime)
           },
           orderBy: { startTime: 'asc' }
@@ -361,86 +347,9 @@ export async function GET(request: NextRequest) {
       console.log(`🗄️ Database returned ${caregivers?.length || 0} caregivers`);
       
       // Cache the results for 5 minutes
-      apiCache.set(cacheKey, caregivers, cacheTTL.caregivers);
+      await apiCache.set(cacheKey, caregivers, cacheTTL.caregivers);
     } else {
       console.log(`🎯 Cache hit for key: ${cacheKey} - ${caregivers?.length || 0} caregivers`);
-      
-      // For cached data, we need to refresh reviewCount as it may have changed
-      if (caregivers.length > 0) {
-        const userIds = caregivers.map(c => c.userId);
-        const reviewCounts = await Promise.all(
-          userIds.map(async (userId) => {
-            const count = await db.review.count({
-              where: {
-                revieweeId: userId,
-                isApproved: true
-              }
-            });
-            return { userId, count };
-          })
-        );
-        const reviewCountMap = new Map(reviewCounts.map(r => [r.userId, r.count]));
-        
-        // Update reviewCount for cached caregivers
-        caregivers.forEach(caregiver => {
-          caregiver.reviewCount = reviewCountMap.get(caregiver.userId) || 0;
-        });
-        
-        console.log('📊 Updated review counts for cached caregivers');
-
-        // Also refresh availability slots as they change frequently
-        const caregiverIds = caregivers.map(c => c.id);
-        const now = new Date();
-        const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
-
-        const freshSlots = await db.availabilitySlot.findMany({
-          where: {
-            caregiverId: { in: caregiverIds },
-            status: 'AVAILABLE',
-            availableSpots: { gt: 0 },
-            date: { gte: startOfToday },
-            endTime: { gt: now }  // Filter out expired slots (past endTime)
-          },
-          orderBy: { startTime: 'asc' }
-        });
-
-        // Update availability slots for cached caregivers
-        caregivers.forEach(caregiver => {
-          caregiver.availabilitySlots = freshSlots.filter(s => s.caregiverId === caregiver.id);
-        });
-
-        console.log('📅 Updated availability slots for cached caregivers');
-
-        // Also refresh services as they may have been updated
-        const freshServices = await db.caregiverService.findMany({
-          where: { caregiverId: { in: caregiverIds } }
-        });
-
-        // Update services for cached caregivers
-        caregivers.forEach(caregiver => {
-          caregiver.services = freshServices.filter(s => s.caregiverId === caregiver.id);
-        });
-
-        console.log('🛠️ Updated services for cached caregivers');
-
-        // Also refresh ageGroups as they may have been updated (stored on Caregiver model)
-        const freshCaregiverData = await db.caregiver.findMany({
-          where: { id: { in: caregiverIds } },
-          select: { id: true, ageGroups: true, specialties: true, languages: true }
-        });
-
-        // Update ageGroups, specialties, languages for cached caregivers
-        caregivers.forEach(caregiver => {
-          const freshData = freshCaregiverData.find(c => c.id === caregiver.id);
-          if (freshData) {
-            caregiver.ageGroups = freshData.ageGroups;
-            caregiver.specialties = freshData.specialties;
-            caregiver.languages = freshData.languages;
-          }
-        });
-
-        console.log('👶 Updated ageGroups, specialties, languages for cached caregivers');
-      }
     }
 
     // Calculate distances and filter by radius if location is provided
@@ -463,12 +372,12 @@ export async function GET(request: NextRequest) {
         })
         .filter(caregiver => {
           if (caregiver.distance === null) {
-            console.log(`  ⚠️ ${caregiver.user?.profile?.firstName} ${caregiver.user?.profile?.lastName}: No coordinates, excluding`);
+            console.log(`  ⚠️ Caregiver ${caregiver.id}: No coordinates, excluding`);
             return false;
           }
           const withinRadius = caregiver.distance <= radius;
           if (!withinRadius) {
-            console.log(`  ❌ ${caregiver.user?.profile?.firstName} ${caregiver.user?.profile?.lastName}: ${caregiver.distance.toFixed(1)}km > ${radius}km radius`);
+            console.log(`  ❌ Caregiver ${caregiver.id}: ${caregiver.distance.toFixed(1)}km > ${radius}km radius`);
           }
           return withinRadius;
         })
@@ -481,22 +390,6 @@ export async function GET(request: NextRequest) {
     const formattedCaregivers = caregivers.map(caregiver => {
       // Check if this is fallback data (already formatted) or database data
       if ('user' in caregiver) {
-        // Debug logging for Isabella specifically
-        if (caregiver.user.profile?.firstName === 'Isabella') {
-          console.log('🔍 Isabella Debug - Raw Data:', {
-            caregiverRecordId: caregiver.id,
-            userId: caregiver.userId,
-            name: `${caregiver.user.profile?.firstName} ${caregiver.user.profile?.lastName}`,
-            availabilitySlots: caregiver.availabilitySlots?.length || 0,
-            slotsData: caregiver.availabilitySlots?.map(slot => ({
-              id: slot.id,
-              date: slot.date,
-              availableSpots: slot.availableSpots,
-              caregiverId: slot.caregiverId
-            }))
-          });
-        }
-        
         // Database format — strip PII from public response
         // Only include contact info when admin setting allows it
         const result: any = {
@@ -550,17 +443,6 @@ export async function GET(request: NextRequest) {
           availability: (() => {
             const userTimezone = caregiver.user?.profile?.timezone || 'America/Toronto';
             const avail = calculateAvailabilityStatus(caregiver.availabilitySlots, userTimezone);
-            if (caregiver.user?.profile?.firstName === 'Fazila') {
-              console.log('🔍 Fazila Availability Debug:', {
-                slotsCount: caregiver.availabilitySlots?.length || 0,
-                availability: avail,
-                slots: caregiver.availabilitySlots?.map(s => ({
-                  date: s.date,
-                  availableSpots: s.availableSpots,
-                  status: s.status
-                }))
-              });
-            }
             return avail;
           })(),
           availabilitySlots: caregiver.availabilitySlots?.map(slot => ({
@@ -591,9 +473,8 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({
-      success: true,
-      data: formattedCaregivers,
+    return apiSuccess({
+      caregivers: formattedCaregivers,
       pagination: {
         limit,
         offset,
@@ -605,15 +486,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Error fetching caregivers:', error);
-    
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to fetch caregivers',
-        message: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error',
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch caregivers');
   }
 }
 
@@ -634,17 +507,14 @@ export async function POST(request: NextRequest) {
 
     const user = authResult.user;
     if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     // ✅ STEP 2: Use authenticated user ID, not client-provided userId
     const userId = user.id;
 
     const body = await request.json();
-    
+
     const {
       hourlyRate,
       experienceYears,
@@ -658,14 +528,7 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!userId || !hourlyRate) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Missing required fields',
-          required: ['hourlyRate'],
-        },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Missing required fields');
     }
 
     // Create caregiver profile
@@ -694,29 +557,18 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        id: caregiver.id,
-        userId: caregiver.userId,
-        hourlyRate: caregiver.hourlyRate,
-        experienceYears: caregiver.experienceYears,
-        bio: caregiver.bio,
-        services: caregiver.services,
-        createdAt: caregiver.createdAt,
-      },
-    }, { status: 201 });
+    return apiSuccess({
+      id: caregiver.id,
+      userId: caregiver.userId,
+      hourlyRate: caregiver.hourlyRate,
+      experienceYears: caregiver.experienceYears,
+      bio: caregiver.bio,
+      services: caregiver.services,
+      createdAt: caregiver.createdAt,
+    }, 'Caregiver profile created successfully', 201);
 
   } catch (error) {
     console.error('Error creating caregiver:', error);
-    
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to create caregiver profile',
-        message: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error',
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to create caregiver profile');
   }
 }

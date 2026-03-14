@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
+import { z } from 'zod';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
+
+const createReviewBodySchema = z.object({
+  bookingId: z.string().min(1, 'Booking ID is required').max(50, 'Invalid booking ID'),
+  caregiverId: z.string().min(1, 'Caregiver ID is required').max(50, 'Invalid caregiver ID'),
+  parentId: z.string().min(1, 'Parent ID is required').max(50, 'Invalid parent ID'),
+  rating: z.number().int('Rating must be a whole number').min(1, 'Rating must be at least 1').max(5, 'Rating must be at most 5'),
+  comment: z.string().max(5000, 'Comment must not exceed 5000 characters').optional().default(''),
+});
 
 // GET /api/reviews - Get reviews with authentication and authorization
 export async function GET(request: NextRequest) {
@@ -21,10 +32,7 @@ export async function GET(request: NextRequest) {
 
     const authenticatedUser = authResult.user;
     if (!authenticatedUser) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const { searchParams } = new URL(request.url);
@@ -50,10 +58,7 @@ export async function GET(request: NextRequest) {
           requestedUserId: userId,
           ip: getClientInfo(request).ip
         });
-        return NextResponse.json(
-          { error: 'Unauthorized - You can only view your own reviews' },
-          { status: 403 }
-        );
+        return ApiErrors.forbidden('You can only view your own reviews');
       }
 
       if (type === 'given' || !type) {
@@ -66,10 +71,7 @@ export async function GET(request: NextRequest) {
       });
 
       if (!caregiver) {
-        return NextResponse.json(
-          { error: 'Caregiver profile not found' },
-          { status: 404 }
-        );
+        return ApiErrors.notFound('Caregiver profile not found');
       }
 
       if (userId && userId !== authenticatedUser.id) {
@@ -78,10 +80,7 @@ export async function GET(request: NextRequest) {
           requestedUserId: userId,
           ip: getClientInfo(request).ip
         });
-        return NextResponse.json(
-          { error: 'Unauthorized - You can only view reviews about you' },
-          { status: 403 }
-        );
+        return ApiErrors.forbidden('You can only view reviews about you');
       }
 
       where.revieweeId = authenticatedUser.id;
@@ -167,7 +166,7 @@ export async function GET(request: NextRequest) {
       reviewCount: formattedReviews.length
     });
 
-    return NextResponse.json({
+    return apiSuccess({
       reviews: formattedReviews,
       pagination: {
         page,
@@ -180,16 +179,18 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching reviews:', error);
     logger.error('Error fetching reviews', { error });
-    return NextResponse.json(
-      { error: 'Failed to fetch reviews' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch reviews');
   }
 }
 
 // POST /api/reviews - Create a new review (requires authentication)
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.API_WRITE);
+    if (!rateLimitResult.success) {
+      return ApiErrors.tooManyRequests('Too many requests. Please try again later.');
+    }
+
     // STEP 1: Verify authentication
     const authResult = await withAuth(request, 'PARENT');
     if (!authResult.isAuthorized) {
@@ -203,21 +204,15 @@ export async function POST(request: NextRequest) {
 
     const authenticatedUser = authResult.user;
     if (!authenticatedUser) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const body = await request.json();
-    const { bookingId, caregiverId, parentId, rating, comment } = body;
-
-    if (!bookingId || !caregiverId || !parentId || !rating) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
+    const parsed = createReviewBodySchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
     }
+    const { bookingId, caregiverId, parentId, rating, comment } = parsed.data;
 
     // STEP 2: Authorization - Ensure user can only create reviews for themselves
     if (parentId !== authenticatedUser.id) {
@@ -226,10 +221,7 @@ export async function POST(request: NextRequest) {
         targetParentId: parentId,
         ip: getClientInfo(request).ip
       });
-      return NextResponse.json(
-        { error: 'Unauthorized - You can only create reviews for yourself' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('You can only create reviews for yourself');
     }
 
     // Verify the booking exists and belongs to the parent
@@ -239,10 +231,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!booking) {
-      return NextResponse.json(
-        { error: 'Booking not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Booking not found');
     }
 
     if (booking.parentId !== parentId) {
@@ -252,10 +241,7 @@ export async function POST(request: NextRequest) {
         bookingParentId: booking.parentId,
         ip: getClientInfo(request).ip
       });
-      return NextResponse.json(
-        { error: 'Unauthorized to review this booking' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('Unauthorized to review this booking');
     }
 
     // Check if review already exists for this booking
@@ -268,18 +254,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (existingReview) {
-      return NextResponse.json(
-        { error: 'Review already exists for this booking' },
-        { status: 400 }
-      );
-    }
-
-    // Validate rating range
-    if (rating < 1 || rating > 5) {
-      return NextResponse.json(
-        { error: 'Rating must be between 1 and 5' },
-        { status: 400 }
-      );
+      return ApiErrors.conflict('Review already exists for this booking');
     }
 
     // Create the review
@@ -337,8 +312,7 @@ export async function POST(request: NextRequest) {
       rating
     });
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       review: {
         id: review.id,
         rating: review.rating,
@@ -351,9 +325,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error creating review:', error);
     logger.error('Error creating review', { error });
-    return NextResponse.json(
-      { error: 'Failed to create review' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to create review');
   }
 }

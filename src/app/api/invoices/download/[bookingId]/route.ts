@@ -4,11 +4,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
-import { prisma } from '@/lib/database';
+import { prisma } from '@/lib/db';
 import { createInvoiceData, generateInvoiceHTML } from '@/lib/notifications/invoice.service';
 import { generatePdfFromHtml } from '@/lib/notifications/pdf.service';
+import { verifyDownloadToken } from '@/lib/signed-url';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,25 +19,61 @@ export async function GET(
   { params }: { params: Promise<{ bookingId: string }> }
 ) {
   try {
-    // --- AUTHENTICATION ---
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
     const { bookingId } = await params;
     const { searchParams } = new URL(request.url);
-    const type = searchParams.get('type') as 'parent' | 'caregiver' || 'parent';
+    const token = searchParams.get('token');
+
+    let type: 'parent' | 'caregiver';
+
+    if (token) {
+      // --- SIGNED TOKEN AUTH (from email links) ---
+      const tokenData = verifyDownloadToken(token);
+      if (!tokenData) {
+        return ApiErrors.unauthorized('Download link has expired or is invalid. Please log in to download.');
+      }
+      if (tokenData.bookingId !== bookingId) {
+        return ApiErrors.forbidden('Invalid download link');
+      }
+      type = tokenData.type;
+    } else {
+      // --- SESSION AUTH (from dashboard) ---
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return ApiErrors.unauthorized();
+      }
+
+      type = searchParams.get('type') as 'parent' | 'caregiver' || 'parent';
+
+      if (!['parent', 'caregiver'].includes(type)) {
+        return ApiErrors.badRequest('Invalid invoice type. Must be "parent" or "caregiver"');
+      }
+
+      // Fetch booking to check authorization
+      const bookingForAuth = await prisma.booking.findUnique({
+        where: { id: bookingId },
+        select: { parentId: true, caregiverId: true },
+      });
+
+      if (!bookingForAuth) {
+        return ApiErrors.notFound('Booking not found');
+      }
+
+      const isParent = bookingForAuth.parentId === session.user.id;
+      const isCaregiver = bookingForAuth.caregiverId === session.user.id;
+      const adminUser = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { userType: true }
+      });
+      const isAdmin = adminUser?.userType === 'ADMIN';
+
+      if (!isParent && !isCaregiver && !isAdmin) {
+        return ApiErrors.forbidden('You do not have permission to download this invoice');
+      }
+    }
 
     // Validate type
     if (!['parent', 'caregiver'].includes(type)) {
-      return NextResponse.json(
-        { error: 'Invalid invoice type. Must be "parent" or "caregiver"' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Invalid invoice type');
     }
 
     // Fetch booking with related data
@@ -52,26 +90,7 @@ export async function GET(
     });
 
     if (!booking) {
-      return NextResponse.json(
-        { error: 'Booking not found' },
-        { status: 404 }
-      );
-    }
-
-    // --- AUTHORIZATION: Only parent, caregiver, or admin can download ---
-    const isParent = booking.parentId === session.user.id;
-    const isCaregiver = booking.caregiverId === session.user.id;
-    const adminUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { userType: true }
-    });
-    const isAdmin = adminUser?.userType === 'ADMIN';
-
-    if (!isParent && !isCaregiver && !isAdmin) {
-      return NextResponse.json(
-        { error: 'You do not have permission to download this invoice' },
-        { status: 403 }
-      );
+      return ApiErrors.notFound('Booking not found');
     }
 
     // Calculate duration from DateTime fields
@@ -160,9 +179,6 @@ export async function GET(
     }
   } catch (error) {
     console.error('Invoice download error:', error);
-    return NextResponse.json(
-      { error: 'Failed to generate invoice' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to generate invoice');
   }
 }

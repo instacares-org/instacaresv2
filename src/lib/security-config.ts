@@ -57,12 +57,12 @@ export const SECURITY_CONFIG = {
   HEADERS: {
     CSP: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://js.stripe.com https://api.mapbox.com",
+      "script-src 'self' 'unsafe-inline' https://js.stripe.com https://connect-js.stripe.com https://api.mapbox.com https://maps.googleapis.com https://static.cloudflareinsights.com blob:",
       "style-src 'self' 'unsafe-inline' https://api.mapbox.com",
       "img-src 'self' data: https: blob:",
       "font-src 'self' https:",
-      "connect-src 'self' https://api.stripe.com https://api.mapbox.com https://*.tiles.mapbox.com https://events.mapbox.com https://*.ingest.us.sentry.io wss: ws:",
-      "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
+      "connect-src 'self' https://api.stripe.com https://connect-js.stripe.com https://connect.stripe.com https://api.mapbox.com https://*.mapbox.com https://*.tiles.mapbox.com https://events.mapbox.com https://*.ingest.us.sentry.io https://*.sentry.io wss: ws:",
+      "frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://connect-js.stripe.com",
       "worker-src 'self' blob:",
       "object-src 'none'",
       "base-uri 'self'",

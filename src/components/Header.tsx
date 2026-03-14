@@ -6,6 +6,7 @@ import { MagnifyingGlassIcon, UserCircleIcon, Bars3BottomLeftIcon, CalendarDaysI
 import { useState, useCallback, useMemo, useEffect } from "react";
 import Calendar from "./Calendar";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import SignupModal from "./SignupModal";
 import LoginModal from "./LoginModal";
 import AddCaregiverRoleModal from "./AddCaregiverRoleModal";
@@ -31,6 +32,7 @@ interface HeaderProps {
 }
 
 function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
+  const router = useRouter();
   const { user, isAuthenticated, logout, refreshUser, hasDualRole, switchRole } = useAuth();
   const { t, locale } = useLanguage();
   const [showOAuthCompletionModal, setShowOAuthCompletionModal] = useState(false);
@@ -38,7 +40,7 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
   const [profileCompletedInSession, setProfileCompletedInSession] = useState(false);
 
   // State to track OAuth signup user type from localStorage
-  const [oauthUserTypeFromStorage, setOauthUserTypeFromStorage] = useState<'parent' | 'caregiver' | null>(null);
+  const [oauthUserTypeFromStorage, setOauthUserTypeFromStorage] = useState<'parent' | 'caregiver' | 'babysitter' | null>(null);
 
   // Show OAuth profile completion modal when user needs to complete their profile
   // BUT NOT on dashboard pages - those pages handle their own OAuth modals with proper userType context
@@ -50,7 +52,8 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
       const isDashboardPage = typeof window !== 'undefined' &&
         (window.location.pathname.includes('/caregiver-dashboard') ||
          window.location.pathname.includes('/parent-dashboard') ||
-         window.location.pathname.includes('/babysitter-dashboard'));
+         window.location.pathname.includes('/babysitter-dashboard') ||
+         window.location.pathname.startsWith('/admin'));
 
       // Also check for OAuth callback URL parameters - dashboards handle these
       const isOAuthCallback = typeof window !== 'undefined' &&
@@ -58,7 +61,7 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
          window.location.search.includes('userType='));
 
       // Check localStorage for OAuth signup user type (stored before OAuth redirect)
-      let storedUserType: 'parent' | 'caregiver' | null = null;
+      let storedUserType: 'parent' | 'caregiver' | 'babysitter' | null = null;
       if (typeof window !== 'undefined') {
         const storedType = localStorage.getItem('oauthSignupUserType');
         const storedTimestamp = localStorage.getItem('oauthSignupTimestamp');
@@ -67,7 +70,7 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
         if (storedType && storedTimestamp) {
           const elapsed = Date.now() - parseInt(storedTimestamp);
           if (elapsed < 5 * 60 * 1000) { // 5 minutes
-            storedUserType = storedType as 'parent' | 'caregiver';
+            storedUserType = storedType as 'parent' | 'caregiver' | 'babysitter';
             console.log('Header: Found valid oauthSignupUserType in localStorage:', storedUserType);
           } else {
             // Clear expired values
@@ -88,8 +91,6 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
       console.log('Header OAuth check:', {
         isAuthenticated,
         needsProfileCompletion: user?.needsProfileCompletion,
-        userId: user?.id,
-        userEmail: user?.email,
         profileCompletedInSession,
         isDashboardPage,
         isOAuthCallback,
@@ -104,7 +105,20 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
         console.log('Header: User authenticated with complete profile, clearing OAuth signup localStorage');
         localStorage.removeItem('oauthSignupUserType');
         localStorage.removeItem('oauthSignupTimestamp');
-        // Don't proceed with caregiver redirect - user already has a profile
+        // Redirect existing user to the correct dashboard if they're not already there
+        const currentPath = window.location.pathname;
+        if (storedUserType === 'babysitter' && !currentPath.includes('babysitter-dashboard')) {
+          window.location.href = '/babysitter-dashboard';
+          return;
+        }
+        if (storedUserType === 'caregiver' && !currentPath.includes('caregiver-dashboard')) {
+          window.location.href = '/caregiver-dashboard';
+          return;
+        }
+        if (storedUserType === 'parent' && !currentPath.includes('parent-dashboard')) {
+          window.location.href = '/parent-dashboard';
+          return;
+        }
         return;
       }
 
@@ -166,6 +180,7 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAddCaregiverModal, setShowAddCaregiverModal] = useState(false);
   const [loginUserType, setLoginUserType] = useState<'parent' | 'caregiver' | 'babysitter' | null>(null);
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
@@ -418,17 +433,16 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
           <span className="text-sm font-medium">{t('header.filters')}</span>
         </button>
 
-        {/* Mobile Search Bar - Compact */}
-        <Link
-          href={buildSearchUrl()}
+        {/* Mobile Search Bar - Opens full-screen search */}
+        <button
+          onClick={() => setShowMobileSearch(true)}
           className="md:hidden flex items-center gap-2 border border-gray-300 dark:border-gray-600 rounded-full py-2 px-4 shadow-sm active:shadow-md transition bg-white dark:bg-gray-800"
-          onClick={closeAllOverlays}
         >
           <MagnifyingGlassIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-          <span className="text-sm text-gray-600 dark:text-gray-300">
+          <span className="text-sm text-gray-600 dark:text-gray-300 truncate">
             {location || t('header.searchPlaceholder')}
           </span>
-        </Link>
+        </button>
       </div>
 
 
@@ -712,12 +726,14 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { label: "Special needs", short: "Special needs", icon: "🤗", premium: true, value: "special-needs" },
-                    { label: "Bilingual", short: "Bilingual", icon: "🌍", value: "bilingual" },
-                    { label: "Homework help", short: "Homework", icon: "📚", value: "homework" },
-                    { label: "Meal prep", short: "Meals", icon: "🍎", value: "meals" },
-                    { label: "Housekeeping", short: "Cleaning", icon: "🧹", value: "housekeeping" },
-                    { label: "Transportation", short: "Transport", icon: "🚗", value: "transportation" }
+                    { label: "Potty Training", short: "Potty", icon: "🚽", value: "potty-training" },
+                    { label: "Sleep Training", short: "Sleep", icon: "😴", value: "sleep-training" },
+                    { label: "Special Needs", short: "Special", icon: "🤗", premium: true, value: "special-needs" },
+                    { label: "Bilingual Care", short: "Bilingual", icon: "🌍", value: "bilingual" },
+                    { label: "Meal Prep", short: "Meals", icon: "🍎", value: "meals" },
+                    { label: "Educational", short: "Education", icon: "📚", value: "educational" },
+                    { label: "Outdoor Play", short: "Outdoor", icon: "🌳", value: "outdoor" },
+                    { label: "Arts & Crafts", short: "Arts", icon: "🎨", value: "arts-crafts" }
                   ].map((service) => (
                     <label key={service.label} className="cursor-pointer group">
                       <input 
@@ -1113,6 +1129,10 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
                 </button>
               </div>
 
+              <div className="px-4 py-2 border-t dark:border-gray-700">
+                <ThemeToggle showLabel={true} className="w-full justify-start" />
+              </div>
+
               <div className="px-5 py-3 border-t dark:border-gray-700">
                 <p className="text-xs text-center text-gray-500 dark:text-gray-400">
                   {t('userMenu.newToInstaCares')}
@@ -1204,7 +1224,7 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
               <Link href="/bookings" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
                 My Bookings
               </Link>
-              
+
               <Link href="/settings" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
                 Settings
               </Link>
@@ -1251,6 +1271,377 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
         />
       )}
     </div>
+
+    {/* Mobile Full-Screen Search & Filters (Airbnb-style) */}
+    {showMobileSearch && (
+      <div className="fixed inset-0 z-[60] bg-white dark:bg-gray-900 flex flex-col">
+        {/* Top bar */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <button
+            onClick={() => setShowMobileSearch(false)}
+            className="w-9 h-9 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+          >
+            <svg className="w-4 h-4 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">Search & Filters</h2>
+          <button
+            onClick={() => {
+              setLocation('');
+              setStartDate(null);
+              setEndDate(null);
+              setInfantCount(0);
+              setChildrenCount(0);
+              updateFilters({
+                providerType: 'all',
+                priceRange: 'any',
+                ageGroups: [],
+                specialServices: [],
+                experience: 'any',
+                availability: [],
+                highlyRated: false,
+                sortBy: 'recommended'
+              });
+            }}
+            className="text-sm font-semibold text-rose-500 hover:text-rose-600"
+          >
+            Clear all
+          </button>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6 pb-28">
+
+          {/* Where */}
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-gray-900 dark:text-gray-100">Where</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search a city or province..."
+                value={location}
+                onChange={(e) => handleLocationChange(e.target.value)}
+                className="w-full p-3.5 pl-11 border-2 border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:border-rose-500 dark:focus:border-rose-400 focus:ring-2 focus:ring-rose-500/20 outline-none transition text-sm"
+              />
+              <MagnifyingGlassIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+            </div>
+            {filteredSuggestions.length > 0 && (
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden shadow-lg">
+                {filteredSuggestions.slice(0, 5).map((suggestion, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => { handleLocationSelect(suggestion); setFilteredSuggestions([]); }}
+                    className="w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-rose-50 dark:hover:bg-rose-900/20 border-b border-gray-100 dark:border-gray-700 last:border-b-0 flex items-center gap-3"
+                  >
+                    <span className="text-base">📍</span>
+                    <span>{suggestion}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* Popular destinations (shown when no input) */}
+            {!location && filteredSuggestions.length === 0 && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {["Toronto, ON", "Montreal, QC", "Vancouver, BC", "Calgary, AB", "Ottawa, ON"].map((city) => (
+                  <button
+                    key={city}
+                    onClick={() => handleLocationSelect(city)}
+                    className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-full text-xs font-medium text-gray-700 dark:text-gray-300 hover:border-rose-300 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition"
+                  >
+                    {city}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* When */}
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-gray-900 dark:text-gray-100">When</label>
+            <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden">
+              <Calendar onDateSelect={handleDateSelect} />
+            </div>
+          </div>
+
+          {/* Children */}
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-gray-900 dark:text-gray-100">Children</label>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Infants</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Under 2 years</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setInfantCount(Math.max(0, infantCount - 1))}
+                    disabled={infantCount === 0}
+                    className="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 disabled:opacity-30 hover:border-rose-400 transition"
+                  >−</button>
+                  <span className="w-6 text-center font-semibold text-gray-900 dark:text-gray-100">{infantCount}</span>
+                  <button
+                    onClick={() => setInfantCount(infantCount + 1)}
+                    className="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:border-rose-400 transition"
+                  >+</button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Children</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Ages 2-12</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setChildrenCount(Math.max(0, childrenCount - 1))}
+                    disabled={childrenCount === 0}
+                    className="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 disabled:opacity-30 hover:border-rose-400 transition"
+                  >−</button>
+                  <span className="w-6 text-center font-semibold text-gray-900 dark:text-gray-100">{childrenCount}</span>
+                  <button
+                    onClick={() => setChildrenCount(childrenCount + 1)}
+                    className="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:border-rose-400 transition"
+                  >+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <hr className="border-gray-200 dark:border-gray-700" />
+
+          {/* Provider Type */}
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-gray-900 dark:text-gray-100">Provider Type</label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: "All", value: "all" },
+                { label: "Caregivers", value: "caregivers" },
+                { label: "Babysitters", value: "babysitters" }
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => updateFilters({ ...currentFilters, providerType: option.value })}
+                  className={`py-2.5 rounded-xl border-2 text-sm font-medium transition-all
+                    ${currentFilters.providerType === option.value
+                      ? 'border-rose-500 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300'
+                      : 'border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-rose-300'
+                    }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Price Range */}
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-gray-900 dark:text-gray-100">Price Range</label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: "Any price", value: "any" },
+                { label: "$15-25/hr", value: "15-25" },
+                { label: "$25-35/hr", value: "25-35" },
+                { label: "$35-45/hr", value: "35-45" },
+                { label: "$45+/hr", value: "45+" }
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => updateFilters({ ...currentFilters, priceRange: option.value })}
+                  className={`px-4 py-2 rounded-full border-2 text-sm font-medium transition-all
+                    ${currentFilters.priceRange === option.value
+                      ? 'border-rose-500 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300'
+                      : 'border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-rose-300'
+                    }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Age Groups */}
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-gray-900 dark:text-gray-100">Age Groups</label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: "Infants (0-2)", value: "infants" },
+                { label: "Toddlers (2-4)", value: "toddlers" },
+                { label: "School age (5-12)", value: "schoolage" },
+                { label: "Teens (13+)", value: "teens" }
+              ].map((age) => (
+                <button
+                  key={age.value}
+                  onClick={() => {
+                    const newAgeGroups = currentFilters.ageGroups.includes(age.value)
+                      ? currentFilters.ageGroups.filter(a => a !== age.value)
+                      : [...currentFilters.ageGroups, age.value];
+                    updateFilters({ ...currentFilters, ageGroups: newAgeGroups });
+                  }}
+                  className={`px-4 py-2 rounded-full border-2 text-sm font-medium transition-all
+                    ${currentFilters.ageGroups.includes(age.value)
+                      ? 'border-rose-500 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300'
+                      : 'border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-rose-300'
+                    }`}
+                >
+                  {age.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Special Services */}
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-gray-900 dark:text-gray-100">Special Services</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: "Potty Training", icon: "🚽", value: "potty-training" },
+                { label: "Sleep Training", icon: "😴", value: "sleep-training" },
+                { label: "Special Needs", icon: "🤗", value: "special-needs" },
+                { label: "Bilingual", icon: "🌍", value: "bilingual" },
+                { label: "Meal Prep", icon: "🍎", value: "meals" },
+                { label: "Educational", icon: "📚", value: "educational" },
+                { label: "Outdoor Play", icon: "🌳", value: "outdoor" },
+                { label: "Arts & Crafts", icon: "🎨", value: "arts-crafts" }
+              ].map((service) => (
+                <button
+                  key={service.value}
+                  onClick={() => {
+                    const newServices = currentFilters.specialServices.includes(service.value)
+                      ? currentFilters.specialServices.filter(s => s !== service.value)
+                      : [...currentFilters.specialServices, service.value];
+                    updateFilters({ ...currentFilters, specialServices: newServices });
+                  }}
+                  className={`flex items-center gap-2 p-3 rounded-xl border-2 text-sm font-medium transition-all
+                    ${currentFilters.specialServices.includes(service.value)
+                      ? 'border-rose-500 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300'
+                      : 'border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-rose-300'
+                    }`}
+                >
+                  <span>{service.icon}</span>
+                  <span>{service.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Experience Level */}
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-gray-900 dark:text-gray-100">Experience Level</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: "Any", value: "any" },
+                { label: "New (0-2 yrs)", value: "new" },
+                { label: "Experienced (3-7 yrs)", value: "experienced" },
+                { label: "Expert (8+ yrs)", value: "expert" }
+              ].map((exp) => (
+                <button
+                  key={exp.value}
+                  onClick={() => updateFilters({ ...currentFilters, experience: exp.value })}
+                  className={`py-2.5 rounded-xl border-2 text-sm font-medium transition-all
+                    ${currentFilters.experience === exp.value
+                      ? 'border-rose-500 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300'
+                      : 'border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-rose-300'
+                    }`}
+                >
+                  {exp.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Availability */}
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-gray-900 dark:text-gray-100">Availability</label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: "Available today", value: "available-today" },
+                { label: "This week", value: "this-week" },
+                { label: "Weekdays", value: "weekdays" },
+                { label: "Weekends", value: "weekends" },
+                { label: "Evenings", value: "evenings" },
+                { label: "Overnight", value: "overnight" }
+              ].map((avail) => (
+                <button
+                  key={avail.value}
+                  onClick={() => {
+                    const newAvail = currentFilters.availability.includes(avail.value)
+                      ? currentFilters.availability.filter(a => a !== avail.value)
+                      : [...currentFilters.availability, avail.value];
+                    updateFilters({ ...currentFilters, availability: newAvail });
+                  }}
+                  className={`px-3 py-2 rounded-full border-2 text-sm font-medium transition-all
+                    ${currentFilters.availability.includes(avail.value)
+                      ? 'border-rose-500 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300'
+                      : 'border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-rose-300'
+                    }`}
+                >
+                  {avail.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Sort By */}
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-gray-900 dark:text-gray-100">Sort By</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: "Recommended", value: "recommended" },
+                { label: "Price: Low-High", value: "price-low" },
+                { label: "Price: High-Low", value: "price-high" },
+                { label: "Highest Rated", value: "rating-high" },
+                { label: "Most Reviews", value: "reviews-most" },
+                { label: "Newest", value: "newest" }
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => updateFilters({ ...currentFilters, sortBy: option.value })}
+                  className={`py-2.5 rounded-xl border-2 text-sm font-medium transition-all
+                    ${currentFilters.sortBy === option.value
+                      ? 'border-rose-500 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-300'
+                      : 'border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-rose-300'
+                    }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Highly Rated Toggle */}
+          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl">
+            <div>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Highly rated only</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">4.5 stars and above</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={currentFilters.highlyRated}
+                onChange={(e) => updateFilters({ ...currentFilters, highlyRated: e.target.checked })}
+              />
+              <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:bg-rose-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+            </label>
+          </div>
+        </div>
+
+        {/* Fixed bottom search button */}
+        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-5 py-4 z-[61]">
+          <button
+            onClick={() => {
+              setShowMobileSearch(false);
+              router.push(buildSearchUrl());
+            }}
+            className="w-full py-3.5 bg-gradient-to-r from-rose-500 to-pink-600 text-white font-bold rounded-xl shadow-lg hover:from-rose-600 hover:to-pink-700 transition-all flex items-center justify-center gap-2 text-base"
+          >
+            <MagnifyingGlassIcon className="h-5 w-5" />
+            Search
+          </button>
+        </div>
+      </div>
+    )}
 
     {/* Signup Modal */}
     <SignupModal

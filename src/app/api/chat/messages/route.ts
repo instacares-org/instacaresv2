@@ -1,7 +1,16 @@
-import { NextRequest } from 'next/server';
-import { prisma } from '@/lib/database';
-import { getAuthenticatedUser, createApiResponse, formatUserInfo } from '@/lib/chatAuth';
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { prisma } from '@/lib/db';
+import { getAuthenticatedUser, formatUserInfo } from '@/lib/chatAuth';
 import { logger } from '@/lib/logger';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+
+const sendMessageSchema = z.object({
+  conversationId: z.string().min(1, 'Conversation ID is required'),
+  content: z.string().min(1, 'Message content is required').max(2000, 'Message content too long (max 2000 characters)'),
+  messageType: z.enum(['TEXT', 'SYSTEM']).default('TEXT'),
+});
 
 /**
  * POST /api/chat/messages
@@ -9,35 +18,32 @@ import { logger } from '@/lib/logger';
  */
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.API_WRITE);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
     const user = await getAuthenticatedUser(request);
-    
+
     if (!user) {
-      return createApiResponse(false, null, 'Authentication required', 401);
+      return ApiErrors.unauthorized();
     }
 
     const body = await request.json();
-    const { conversationId, content, messageType = 'TEXT' } = body;
-
-    // Validate required fields
-    if (!conversationId || !content?.trim()) {
-      return createApiResponse(false, null, 'Conversation ID and message content are required', 400);
+    const parsed = sendMessageSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input');
     }
+    const { conversationId, content, messageType } = parsed.data;
 
-    // Validate message type
-    if (!['TEXT', 'SYSTEM'].includes(messageType)) {
-      return createApiResponse(false, null, 'Invalid message type', 400);
-    }
-
-    // Validate content length (max 2000 characters)
-    if (content.trim().length > 2000) {
-      return createApiResponse(false, null, 'Message content too long (max 2000 characters)', 400);
-    }
-
-    logger.info('Sending new message', { 
-      userId: user.id, 
-      conversationId, 
+    logger.info('Sending new message', {
+      userId: user.id,
+      conversationId,
       messageType,
-      contentLength: content.trim().length 
+      contentLength: content.trim().length
     });
 
     // Verify the conversation exists and user has access
@@ -59,21 +65,21 @@ export async function POST(request: NextRequest) {
     });
 
     if (!chatRoom) {
-      return createApiResponse(false, null, 'Conversation not found', 404);
+      return ApiErrors.notFound('Conversation not found');
     }
 
     // Verify user has access to this conversation
     if (chatRoom.parentId !== user.id && chatRoom.caregiverId !== user.id) {
-      return createApiResponse(false, null, 'Access denied to this conversation', 403);
+      return ApiErrors.forbidden('Access denied to this conversation');
     }
 
     if (!chatRoom.isActive) {
-      return createApiResponse(false, null, 'Cannot send message to inactive conversation', 410);
+      return apiError('Cannot send message to inactive conversation', 410);
     }
 
     // Only allow SYSTEM messages from ADMIN users
     if (messageType === 'SYSTEM' && user.userType !== 'ADMIN') {
-      return createApiResponse(false, null, 'Only administrators can send system messages', 403);
+      return ApiErrors.forbidden('Only administrators can send system messages');
     }
 
     // Create the message within a transaction to ensure data consistency
@@ -137,28 +143,28 @@ export async function POST(request: NextRequest) {
       conversationId: conversationId,
     };
 
-    logger.info('Message sent successfully', { 
-      userId: user.id, 
+    logger.info('Message sent successfully', {
+      userId: user.id,
       messageId: result.id,
-      conversationId 
+      conversationId
     });
 
-    return createApiResponse(true, formattedMessage, undefined, 201);
+    return apiSuccess(formattedMessage, 'Created', 201);
 
   } catch (error) {
     logger.error('Error sending message', error);
-    
+
     // Handle specific database errors
     if (error instanceof Error) {
       if (error.message.includes('Foreign key constraint')) {
-        return createApiResponse(false, null, 'Invalid conversation or user reference', 400);
+        return ApiErrors.badRequest('Invalid conversation or user reference');
       }
-      
+
       if (error.message.includes('Unique constraint')) {
-        return createApiResponse(false, null, 'Message already exists', 409);
+        return ApiErrors.conflict('Message already exists');
       }
     }
 
-    return createApiResponse(false, null, 'Failed to send message', 500);
+    return ApiErrors.internal('Failed to send message');
   }
 }

@@ -1,26 +1,40 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { db } from '@/lib/db';
 import sharp from 'sharp';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/route';
+import { getToken } from 'next-auth/jwt';
 
 async function authenticateCaregiver(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+      secureCookie: process.env.NODE_ENV === 'production',
+    });
 
-    if (!session?.user?.id || session.user.userType !== 'CAREGIVER') {
+    if (!token) {
+      return null;
+    }
+
+    const userId = (token.userId as string) || token.sub;
+    if (!userId) {
       return null;
     }
 
     const user = await db.user.findUnique({
-      where: { id: session.user.id },
+      where: { id: userId },
       include: { caregiver: true }
     });
 
-    return user?.caregiver || null;
-  } catch {
+    if (!user || (!user.isCaregiver && user.userType !== 'CAREGIVER')) {
+      return null;
+    }
+
+    return user.caregiver || null;
+  } catch (error) {
+    console.error('[Photos API] Auth error:', error);
     return null;
   }
 }
@@ -29,7 +43,7 @@ export async function POST(request: NextRequest) {
   try {
     const caregiver = await authenticateCaregiver(request);
     if (!caregiver) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const formData = await request.formData();
@@ -38,18 +52,18 @@ export async function POST(request: NextRequest) {
     const isProfile = formData.get('isProfile') === 'true';
 
     if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+      return ApiErrors.badRequest('No file provided');
     }
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      return NextResponse.json({ error: 'File must be an image' }, { status: 400 });
+      return ApiErrors.badRequest('File must be an image');
     }
 
-    // Validate file size (max 10MB)
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    // Validate file size (max 50MB - modern phone photos can be very large)
+    const maxSize = 50 * 1024 * 1024; // 50MB
     if (file.size > maxSize) {
-      return NextResponse.json({ error: 'File size must be less than 10MB' }, { status: 400 });
+      return ApiErrors.badRequest('File size must be less than 50MB');
     }
 
     // Create uploads directory if it doesn't exist
@@ -60,10 +74,9 @@ export async function POST(request: NextRequest) {
       // Directory might already exist
     }
 
-    // Generate unique filename
+    // Generate unique filename (always .jpg since Sharp converts to JPEG)
     const timestamp = Date.now();
-    const fileExtension = file.name.split('.').pop() || 'jpg';
-    const filename = `daycare-${caregiver.id}-${timestamp}.${fileExtension}`;
+    const filename = `daycare-${caregiver.id}-${timestamp}.jpg`;
     const filepath = join(uploadsDir, filename);
 
     // Process and optimize image with Sharp
@@ -112,8 +125,7 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       photo: {
         id: photo.id,
         url: photo.url,
@@ -125,9 +137,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Photo upload error:', error);
-    return NextResponse.json({ 
-      error: 'Failed to upload photo' 
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to upload photo');
   }
 }
 
@@ -135,7 +145,7 @@ export async function GET(request: NextRequest) {
   try {
     const caregiver = await authenticateCaregiver(request);
     if (!caregiver) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const photos = await db.caregiverPhoto.findMany({
@@ -143,13 +153,11 @@ export async function GET(request: NextRequest) {
       orderBy: { sortOrder: 'asc' }
     });
 
-    return NextResponse.json({ photos });
+    return apiSuccess({ photos });
 
   } catch (error) {
     console.error('Failed to fetch photos:', error);
-    return NextResponse.json({ 
-      error: 'Failed to fetch photos' 
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to fetch photos');
   }
 }
 
@@ -157,14 +165,14 @@ export async function DELETE(request: NextRequest) {
   try {
     const caregiver = await authenticateCaregiver(request);
     if (!caregiver) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const { searchParams } = new URL(request.url);
     const photoId = searchParams.get('id');
 
     if (!photoId) {
-      return NextResponse.json({ error: 'Photo ID required' }, { status: 400 });
+      return ApiErrors.badRequest('Photo ID required');
     }
 
     // Verify photo belongs to caregiver
@@ -176,7 +184,7 @@ export async function DELETE(request: NextRequest) {
     });
 
     if (!photo) {
-      return NextResponse.json({ error: 'Photo not found' }, { status: 404 });
+      return ApiErrors.notFound('Photo not found');
     }
 
     // Delete from database
@@ -193,12 +201,10 @@ export async function DELETE(request: NextRequest) {
       console.warn('Could not delete file:', fileError);
     }
 
-    return NextResponse.json({ success: true });
+    return apiSuccess();
 
   } catch (error) {
     console.error('Failed to delete photo:', error);
-    return NextResponse.json({ 
-      error: 'Failed to delete photo' 
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to delete photo');
   }
 }

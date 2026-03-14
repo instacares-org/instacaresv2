@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
@@ -8,10 +9,7 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
     
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const user = await db.user.findUnique({
@@ -28,11 +26,8 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    if (!user || user.userType !== 'CAREGIVER') {
-      return NextResponse.json(
-        { error: 'Not a caregiver account' },
-        { status: 403 }
-      );
+    if (!user || (!user.isCaregiver && user.userType !== 'CAREGIVER')) {
+      return ApiErrors.forbidden('Not a caregiver account');
     }
 
     const completedItems: string[] = [];
@@ -102,7 +97,7 @@ export async function GET(request: NextRequest) {
 
     const isComplete = missingItems.length === 0 && completionPercentage >= 80;
 
-    return NextResponse.json({
+    return apiSuccess({
       isComplete,
       approvalStatus: user.approvalStatus,
       completionPercentage,
@@ -112,9 +107,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Error checking profile completion:', error);
-    return NextResponse.json(
-      { error: 'Failed to check profile completion' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to check profile completion');
   }
 }

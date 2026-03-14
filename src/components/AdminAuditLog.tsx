@@ -86,8 +86,8 @@ export default function AdminAuditLog() {
       if (!response.ok) throw new Error("Failed to fetch audit logs");
 
       const data = await response.json();
-      setLogs(data.logs);
-      setPagination(data.pagination);
+      setLogs(data.data?.logs || data.logs || []);
+      setPagination(data.data?.pagination || data.pagination);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load audit logs");
     } finally {

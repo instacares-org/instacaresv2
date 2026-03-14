@@ -217,19 +217,20 @@ const TaxReports: React.FC<TaxReportsProps> = ({ period }) => {
   };
 
   // Elegant color palette - soft, muted tones inspired by professional documents
-  const colors = {
-    primary: [103, 126, 167],      // Soft steel blue
-    primaryLight: [236, 240, 247], // Very light blue-gray
-    secondary: [134, 160, 134],    // Soft sage green
-    secondaryLight: [240, 247, 240], // Very light green
-    accent: [180, 142, 142],       // Muted rose
-    accentLight: [250, 245, 245],  // Very light rose
-    warning: [199, 171, 118],      // Soft gold/amber
-    warningLight: [253, 250, 243], // Very light cream
-    text: [64, 64, 64],            // Dark gray (not pure black)
-    textLight: [128, 128, 128],    // Medium gray
-    border: [220, 220, 220],       // Light gray border
-    background: [250, 251, 252],   // Off-white background
+  type RGB = [number, number, number];
+  const colors: Record<string, RGB> = {
+    primary: [103, 126, 167],
+    primaryLight: [236, 240, 247],
+    secondary: [134, 160, 134],
+    secondaryLight: [240, 247, 240],
+    accent: [180, 142, 142],
+    accentLight: [250, 245, 245],
+    warning: [199, 171, 118],
+    warningLight: [253, 250, 243],
+    text: [64, 64, 64],
+    textLight: [128, 128, 128],
+    border: [220, 220, 220],
+    background: [250, 251, 252],
   };
 
   const generateT2125PDF = async () => {

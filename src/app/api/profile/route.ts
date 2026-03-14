@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
 /**
  * GET /api/profile
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
     // Verify authentication using NextAuth
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const userId = session.user.id;
@@ -46,22 +47,13 @@ export async function GET(request: NextRequest) {
     });
 
     if (!profile) {
-      return NextResponse.json({
-        error: 'Profile not found',
-        profile: null
-      }, { status: 404 });
+      return ApiErrors.notFound('Profile not found');
     }
 
-    return NextResponse.json({
-      success: true,
-      profile,
-    });
+    return apiSuccess({ profile });
 
   } catch (error) {
     console.error('Error fetching profile:', error);
-    return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch profile');
   }
 }

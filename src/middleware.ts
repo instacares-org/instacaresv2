@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyCSRFProtection, setCSRFToken } from './lib/csrf';
 import { getToken } from 'next-auth/jwt';
 import { SECURITY_CONFIG } from './lib/security-config';
+import { getRedisClient } from './lib/redis';
+import { Ratelimit } from '@upstash/ratelimit';
 
 // Rate limiting storage (in-memory for simplicity, use Redis in production)
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
@@ -22,26 +24,93 @@ function getClientIP(request: NextRequest): string {
   return clientIP;
 }
 
-// Rate limiting function
-function rateLimit(request: NextRequest, limit: { requests: number; window: number }): boolean {
+// Upstash Ratelimit instances keyed by "requests:windowMs"
+const ratelimitInstances = new Map<string, Ratelimit>();
+
+function getUpstashRatelimit(limit: { requests: number; window: number }): Ratelimit | null {
+  const redis = getRedisClient();
+  if (!redis) return null;
+
+  const cacheKey = `${limit.requests}:${limit.window}`;
+  let instance = ratelimitInstances.get(cacheKey);
+  if (instance) return instance;
+
+  // Upstash slidingWindow expects duration as a formatted string (e.g. "60 s")
+  const windowSeconds = Math.ceil(limit.window / 1000);
+  instance = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(limit.requests, `${windowSeconds} s`),
+    prefix: 'ratelimit:middleware',
+  });
+
+  ratelimitInstances.set(cacheKey, instance);
+  return instance;
+}
+
+// Rate limiting result type
+type RateLimitResult = {
+  allowed: boolean;
+  remaining: number;
+  limit: number;
+  reset: number; // Unix timestamp in seconds
+};
+
+// Rate limiting function — uses Upstash Redis when available, falls back to in-memory Map
+async function rateLimit(
+  request: NextRequest,
+  limitConfig: { requests: number; window: number }
+): Promise<RateLimitResult> {
   const clientIP = getClientIP(request);
   const key = `${clientIP}:${request.nextUrl.pathname}`;
+
+  // --- Try Upstash Redis first ---
+  const upstash = getUpstashRatelimit(limitConfig);
+  if (upstash) {
+    try {
+      const { success, remaining, reset } = await upstash.limit(key);
+      return {
+        allowed: success,
+        remaining,
+        limit: limitConfig.requests,
+        reset: Math.ceil(reset / 1000), // convert ms → seconds
+      };
+    } catch (error) {
+      // Redis network / timeout error — fall through to in-memory fallback
+      console.warn('[RateLimit] Upstash Redis error, falling back to in-memory:', error);
+    }
+  }
+
+  // --- In-memory fallback ---
   const now = Date.now();
-  
   const record = rateLimitStore.get(key);
-  
+
   if (!record || now > record.resetTime) {
-    // Reset or create new record
-    rateLimitStore.set(key, { count: 1, resetTime: now + limit.window });
-    return true;
+    const resetTime = now + limitConfig.window;
+    rateLimitStore.set(key, { count: 1, resetTime });
+    return {
+      allowed: true,
+      remaining: limitConfig.requests - 1,
+      limit: limitConfig.requests,
+      reset: Math.ceil(resetTime / 1000),
+    };
   }
-  
-  if (record.count >= limit.requests) {
-    return false; // Rate limit exceeded
+
+  if (record.count >= limitConfig.requests) {
+    return {
+      allowed: false,
+      remaining: 0,
+      limit: limitConfig.requests,
+      reset: Math.ceil(record.resetTime / 1000),
+    };
   }
-  
+
   record.count += 1;
-  return true;
+  return {
+    allowed: true,
+    remaining: limitConfig.requests - record.count,
+    limit: limitConfig.requests,
+    reset: Math.ceil(record.resetTime / 1000),
+  };
 }
 
 // Note: CSRF validation functions now imported from lib/csrf.ts
@@ -68,17 +137,36 @@ export async function middleware(request: NextRequest) {
     try {
       const token = await getToken({
         req: request,
-        secret: process.env.NEXTAUTH_SECRET
+        secret: process.env.NEXTAUTH_SECRET,
+        secureCookie: process.env.NODE_ENV === 'production',
       });
 
-      // If user is authenticated as ADMIN, redirect to admin dashboard
-      if (token && token.userType === 'ADMIN') {
+      // If user is authenticated as ADMIN or SUPERVISOR, redirect to admin dashboard
+      if (token && (token.userType === 'ADMIN' || token.userType === 'SUPERVISOR')) {
         const adminUrl = new URL('/admin', request.url);
         return NextResponse.redirect(adminUrl);
       }
     } catch (error) {
       // If token parsing fails, continue normally (user might not be logged in)
       console.error('Error checking admin token in middleware:', error);
+    }
+  }
+
+  // Force password change redirect for users with mustChangePassword flag
+  if (!pathname.startsWith('/change-password') && !pathname.startsWith('/api/change-password') && !pathname.startsWith('/api/auth') && !pathname.startsWith('/_next') && !pathname.startsWith('/favicon')) {
+    try {
+      const token = await getToken({
+        req: request,
+        secret: process.env.NEXTAUTH_SECRET,
+        secureCookie: process.env.NODE_ENV === 'production',
+      });
+
+      if (token && token.mustChangePassword === true) {
+        const changePasswordUrl = new URL('/change-password', request.url);
+        return NextResponse.redirect(changePasswordUrl);
+      }
+    } catch (error) {
+      // If token parsing fails, continue normally
     }
   }
 
@@ -124,16 +212,18 @@ export async function middleware(request: NextRequest) {
     }
   }
   
-  if (!rateLimit(request, rateLimitConfig)) {
+  const rateLimitResult = await rateLimit(request, rateLimitConfig);
+
+  if (!rateLimitResult.allowed) {
     return NextResponse.json(
       { error: 'Too many requests, please try again later.' },
-      { 
+      {
         status: 429,
         headers: {
           'Retry-After': Math.ceil(rateLimitConfig.window / 1000).toString(),
-          'X-RateLimit-Limit': rateLimitConfig.requests.toString(),
+          'X-RateLimit-Limit': rateLimitResult.limit.toString(),
           'X-RateLimit-Remaining': '0',
-          'X-RateLimit-Reset': Math.ceil((Date.now() + rateLimitConfig.window) / 1000).toString(),
+          'X-RateLimit-Reset': rateLimitResult.reset.toString(),
         }
       }
     );
@@ -179,16 +269,10 @@ export async function middleware(request: NextRequest) {
     await setCSRFToken(response);
   }
   
-  // Add security headers for rate limiting info
-  const clientIP = getClientIP(request);
-  const key = `${clientIP}:${pathname}`;
-  const record = rateLimitStore.get(key);
-  
-  if (record) {
-    response.headers.set('X-RateLimit-Limit', rateLimitConfig.requests.toString());
-    response.headers.set('X-RateLimit-Remaining', Math.max(0, rateLimitConfig.requests - record.count).toString());
-    response.headers.set('X-RateLimit-Reset', Math.ceil(record.resetTime / 1000).toString());
-  }
+  // Add rate limiting info headers to the response
+  response.headers.set('X-RateLimit-Limit', rateLimitResult.limit.toString());
+  response.headers.set('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
+  response.headers.set('X-RateLimit-Reset', rateLimitResult.reset.toString());
   
   return response;
 }

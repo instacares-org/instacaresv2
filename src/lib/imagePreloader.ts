@@ -35,21 +35,8 @@ export class ImagePreloader {
   }
 
   static preloadCriticalImages(): void {
-    // Preload logo and essential UI images
-    this.preload('/logo.png', 'high');
-    
-    // Preload common icons (if they exist)
-    const commonIcons = [
-      '/icons/heart.svg',
-      '/icons/star.svg',
-      '/icons/location.svg'
-    ];
-    
-    commonIcons.forEach(icon => {
-      this.preload(icon, 'low').catch(() => {
-        // Silently ignore missing icons
-      });
-    });
+    // Preload logo
+    this.preload('/logo.webp', 'high');
   }
 
   static isPreloaded(src: string): boolean {

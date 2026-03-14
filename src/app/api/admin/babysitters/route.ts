@@ -1,32 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
+import { requirePermission } from '@/lib/adminAuth';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 // GET - List all babysitters for admin review
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // Check if user is admin
-    const user = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: { userType: true }
-    });
-
-    if (user?.userType !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Admin access required' },
-        { status: 403 }
-      );
-    }
+    const permCheck = await requirePermission(request, 'canApproveUsers');
+    if (!permCheck.authorized) return permCheck.response!;
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status'); // Filter by status
@@ -45,6 +26,10 @@ export async function GET(request: NextRequest) {
           }
         },
         references: true,
+        availabilitySlots: {
+          where: { isActive: true },
+          orderBy: { dayOfWeek: 'asc' },
+        },
         _count: {
           select: {
             bookings: true,
@@ -55,7 +40,7 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' }
     });
 
-    return NextResponse.json({
+    return apiSuccess({
       babysitters: babysitters.map(b => ({
         id: b.id,
         userId: b.userId,
@@ -105,6 +90,17 @@ export async function GET(request: NextRequest) {
         })),
         stripeOnboarded: b.stripeOnboarded,
         acceptsOnsitePayment: b.acceptsOnsitePayment,
+        availability: b.availabilitySlots.map(slot => ({
+          id: slot.id,
+          recurrenceType: slot.recurrenceType,
+          dayOfWeek: slot.dayOfWeek,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          specificDate: slot.specificDate,
+          dayOfMonth: slot.dayOfMonth,
+          repeatInterval: slot.repeatInterval,
+          isRecurring: slot.isRecurring,
+        })),
         stats: {
           totalBookings: b._count.bookings,
           totalReviews: b._count.reviews,
@@ -126,9 +122,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Admin get babysitters error:', error);
-    return NextResponse.json(
-      { error: 'Failed to get babysitters' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to get babysitters');
   }
 }

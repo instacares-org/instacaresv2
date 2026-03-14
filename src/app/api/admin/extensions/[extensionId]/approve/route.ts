@@ -1,13 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import Stripe from 'stripe';
+import { getStripeInstance } from '@/lib/stripe';
+import { requirePermission } from '@/lib/adminAuth';
 import { logAuditEvent, AuditActions } from '@/lib/audit-log';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-08-27.basil',
-});
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
 // POST - Admin approves or declines a booking extension
 export async function POST(
@@ -15,29 +11,16 @@ export async function POST(
   { params }: { params: Promise<{ extensionId: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Verify admin role
-    const adminUser = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: { userType: true }
-    });
-    if (adminUser?.userType !== 'ADMIN') {
-      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 });
-    }
+    // Require admin authentication with permission check
+    const permCheck = await requirePermission(request, 'canManageExtensions');
+    if (!permCheck.authorized) return permCheck.response!;
 
     const { extensionId } = await params;
     const body = await request.json();
     const { action, reason } = body; // action: 'approve' | 'decline'
 
     if (!action || !['approve', 'decline'].includes(action)) {
-      return NextResponse.json(
-        { error: 'Action must be "approve" or "decline"' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Action must be "approve" or "decline"');
     }
 
     // Get the extension with booking and payment data
@@ -71,14 +54,11 @@ export async function POST(
     });
 
     if (!extension) {
-      return NextResponse.json({ error: 'Extension not found' }, { status: 404 });
+      return ApiErrors.notFound('Extension not found');
     }
 
     if (extension.status !== 'PENDING') {
-      return NextResponse.json(
-        { error: `Extension is already ${extension.status}, cannot ${action}` },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest(`Extension is already ${extension.status}, cannot ${action}`);
     }
 
     // --- DECLINE ---
@@ -115,12 +95,12 @@ export async function POST(
         }
       });
 
-      console.log(`[Admin] Extension ${extensionId} declined by admin ${session.user.id}`);
+      console.log(`[Admin] Extension ${extensionId} declined by admin ${permCheck.user!.id}`);
 
       // Persistent audit log
       logAuditEvent({
-        adminId: session.user.id,
-        adminEmail: session.user.email!,
+        adminId: permCheck.user!.id,
+        adminEmail: permCheck.user!.email,
         action: AuditActions.EXTENSION_APPROVED,
         resource: 'bookingExtension',
         resourceId: extensionId,
@@ -128,61 +108,89 @@ export async function POST(
         request,
       });
 
-      return NextResponse.json({
-        success: true,
-        message: 'Extension declined successfully',
+      return apiSuccess({
         status: 'DECLINED',
-      });
+      }, 'Extension declined successfully');
     }
 
     // --- APPROVE ---
     const originalPayment = extension.booking.payments[0];
     if (!originalPayment?.stripePaymentIntentId) {
-      return NextResponse.json(
-        { error: 'No payment method found for this booking. Cannot charge for extension.' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('No payment method found for this booking. Cannot charge for extension.');
     }
 
-    // Get the original payment intent to find customer and payment method
-    const originalPaymentIntent = await stripe.paymentIntents.retrieve(
-      originalPayment.stripePaymentIntentId
-    );
-
-    if (!originalPaymentIntent.payment_method) {
-      return NextResponse.json(
-        { error: 'No payment method on original payment. Parent must pay manually.' },
-        { status: 400 }
-      );
-    }
-
-    let customerId = originalPaymentIntent.customer as string | null;
-    const paymentMethodId = originalPaymentIntent.payment_method as string;
-
-    // Create customer if needed
-    if (!customerId) {
-      const parentEmail = extension.booking.parent?.email;
-      const parentName = extension.booking.parent?.profile
-        ? `${extension.booking.parent.profile.firstName || ''} ${extension.booking.parent.profile.lastName || ''}`.trim()
-        : undefined;
-
-      const customer = await stripe.customers.create({
-        email: parentEmail,
-        name: parentName || undefined,
-        metadata: {
-          userId: extension.booking.parentId,
-          source: 'booking_extension_admin_approved'
-        }
-      });
-      customerId = customer.id;
-
-      await stripe.paymentMethods.attach(paymentMethodId, {
-        customer: customerId,
-      });
+    // Resolve Stripe at request time (not module load) for build-time safety
+    const stripe = getStripeInstance();
+    if (!stripe) {
+      return ApiErrors.internal('Stripe is not configured');
     }
 
     // Charge the parent's card
     try {
+      // Get the original payment intent to find customer and payment method
+      const originalPaymentIntent = await stripe.paymentIntents.retrieve(
+        originalPayment.stripePaymentIntentId
+      );
+
+      let customerId = originalPaymentIntent.customer as string | null;
+      let paymentMethodId = originalPaymentIntent.payment_method as string | null;
+
+      // If no customer on the original PI, check if the parent has a saved Stripe customer
+      if (!customerId) {
+        const parentUser = await db.user.findUnique({
+          where: { id: extension.booking.parentId },
+          select: { stripeCustomerId: true },
+        });
+        customerId = parentUser?.stripeCustomerId || null;
+      }
+
+      // If we have a customer, try to find a usable payment method on that customer
+      if (customerId) {
+        const paymentMethods = await stripe.paymentMethods.list({
+          customer: customerId,
+          type: 'card',
+          limit: 1,
+        });
+        if (paymentMethods.data.length > 0) {
+          paymentMethodId = paymentMethods.data[0].id;
+        }
+      }
+
+      // If we still have no customer or no usable payment method, we can't charge off-session
+      if (!customerId || !paymentMethodId) {
+        await db.bookingExtension.update({
+          where: { id: extensionId },
+          data: { status: 'PAYMENT_PENDING' },
+        });
+
+        await db.notification.create({
+          data: {
+            userId: extension.booking.parentId,
+            type: 'PAYMENT_FAILED',
+            title: 'Extension Approved — Payment Required',
+            message: `The ${extension.extensionMinutes}-minute extension has been approved. Please visit your dashboard to complete the payment of $${(extension.extensionAmount / 100).toFixed(2)}.`,
+            resourceType: 'booking_extension',
+            resourceId: extension.id,
+          },
+        });
+
+        console.log(`[Admin] Extension ${extensionId} approved but no reusable payment method. Notified parent.`);
+
+        logAuditEvent({
+          adminId: permCheck.user!.id,
+          adminEmail: permCheck.user!.email,
+          action: AuditActions.EXTENSION_APPROVED,
+          resource: 'bookingExtension',
+          resourceId: extensionId,
+          details: { decision: 'approved', paymentPending: true, bookingId: extension.bookingId },
+          request,
+        });
+
+        return apiSuccess({
+          status: 'PAYMENT_PENDING',
+        }, 'Extension approved but no saved payment method. Parent has been notified to pay.');
+      }
+
       const paymentIntent = await stripe.paymentIntents.create({
         amount: extension.extensionAmount,
         currency: 'cad',
@@ -197,7 +205,7 @@ export async function POST(
           extensionMinutes: extension.extensionMinutes.toString(),
           caregiverId: extension.booking.caregiverId,
           parentId: extension.booking.parentId,
-          approvedBy: session.user.id,
+          approvedBy: permCheck.user!.id,
         },
         description: `Booking extension: ${extension.extensionMinutes} minutes (admin approved)`,
       });
@@ -251,12 +259,12 @@ export async function POST(
           }
         });
 
-        console.log(`[Admin] Extension ${extensionId} approved by admin ${session.user.id}. Payment: ${paymentIntent.id}`);
+        console.log(`[Admin] Extension ${extensionId} approved by admin ${permCheck.user!.id}. Payment: ${paymentIntent.id}`);
 
         // Persistent audit log
         logAuditEvent({
-          adminId: session.user.id,
-          adminEmail: session.user.email!,
+          adminId: permCheck.user!.id,
+          adminEmail: permCheck.user!.email,
           action: AuditActions.EXTENSION_APPROVED,
           resource: 'bookingExtension',
           resourceId: extensionId,
@@ -270,12 +278,10 @@ export async function POST(
           request,
         });
 
-        return NextResponse.json({
-          success: true,
-          message: 'Extension approved and payment processed',
+        return apiSuccess({
           status: 'PAID',
           paymentIntentId: paymentIntent.id,
-        });
+        }, 'Extension approved and payment processed');
       } else {
         // Payment requires additional action — mark as pending
         await db.bookingExtension.update({
@@ -286,11 +292,9 @@ export async function POST(
           }
         });
 
-        return NextResponse.json({
-          success: true,
-          message: 'Extension approved but payment requires parent confirmation',
+        return apiSuccess({
           status: 'PAYMENT_PENDING',
-        });
+        }, 'Extension approved but payment requires parent confirmation');
       }
     } catch (stripeError: unknown) {
       console.error('[Admin] Stripe payment error for extension approval:', stripeError);
@@ -306,24 +310,17 @@ export async function POST(
           userId: extension.booking.parentId,
           type: 'PAYMENT_FAILED',
           title: 'Extension Payment Failed',
-          message: `The extension was approved but the payment failed. Please update your payment method.`,
+          message: `The extension was approved but the payment failed. Please visit your dashboard to retry the payment.`,
           resourceType: 'booking_extension',
           resourceId: extension.id,
         }
       });
 
-      return NextResponse.json({
-        success: false,
-        error: 'Extension approved but payment failed',
-        details: stripeError instanceof Error ? stripeError.message : 'Unknown error',
-      }, { status: 402 });
+      return apiError('Extension approved but payment failed', 402);
     }
 
   } catch (error) {
     console.error('Error processing extension approval:', error);
-    return NextResponse.json(
-      { error: 'Failed to process extension' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to process extension');
   }
 }

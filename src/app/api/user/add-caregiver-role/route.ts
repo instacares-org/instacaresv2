@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import { z } from 'zod';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+
+const addCaregiverRoleSchema = z.object({
+  caregiverData: z.object({
+    bio: z.string().max(2000, 'Bio too long').optional(),
+    hourlyRate: z.number().min(0, 'Hourly rate must be non-negative').max(1000, 'Hourly rate too high').optional(),
+    experienceYears: z.number().int('Experience years must be a whole number').min(0, 'Experience years must be non-negative').max(100, 'Experience years too high').optional(),
+    specialties: z.array(z.string().max(100, 'Specialty too long')).max(20, 'Too many specialties').optional(),
+  }).optional(),
+});
 
 /**
  * Geocode an address using Mapbox API
@@ -57,15 +69,28 @@ async function geocodeAddress(address: {
  */
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.PROFILE_UPDATE);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
     // Verify authentication using NextAuth
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const userId = session.user.id;
     const body = await request.json();
-    const { caregiverData } = body;
+    const parsed = addCaregiverRoleSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
+    }
+
+    const { caregiverData } = parsed.data;
 
     // Get current user with profile
     const user = await db.user.findUnique({
@@ -91,15 +116,12 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return ApiErrors.notFound('User not found');
     }
 
     // Check if user already has caregiver role
     if (user.isCaregiver) {
-      return NextResponse.json(
-        { error: 'You already have a caregiver role.' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('You already have a caregiver role.');
     }
 
     // Check if user profile has coordinates - if not, try to geocode
@@ -175,9 +197,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`[add-caregiver-role] User ${userId} added caregiver role`);
 
-    return NextResponse.json({
-      success: true,
-      message: 'Successfully added caregiver role. Your caregiver profile is pending approval.',
+    return apiSuccess({
       user: {
         id: updatedUser.id,
         email: updatedUser.email,
@@ -186,13 +206,10 @@ export async function POST(request: NextRequest) {
         activeRole: updatedUser.activeRole,
         approvalStatus: updatedUser.approvalStatus,
       },
-    });
+    }, 'Successfully added caregiver role. Your caregiver profile is pending approval.');
 
   } catch (error) {
     console.error('Error adding caregiver role:', error);
-    return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to add caregiver role');
   }
 }

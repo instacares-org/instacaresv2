@@ -1,7 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/database';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+import { z } from 'zod';
+import { prisma } from '@/lib/db';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger } from '@/lib/logger';
+
+const validServiceTypes = [
+  'BABYSITTING',
+  'NANNY',
+  'DAYCARE',
+  'AFTER_SCHOOL',
+  'OVERNIGHT',
+  'SPECIAL_NEEDS',
+  'TUTORING',
+] as const;
+
+const saveServicesSchema = z.object({
+  caregiverId: z.string().min(1, 'Caregiver ID is required'),
+  services: z.array(z.enum(validServiceTypes)).min(0),
+});
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,16 +37,13 @@ export async function GET(request: NextRequest) {
     });
 
     if (!caregiver) {
-      return NextResponse.json({ error: 'Caregiver not found' }, { status: 404 });
+      return ApiErrors.notFound('Caregiver not found');
     }
 
-    return NextResponse.json({
-      success: true,
-      services: caregiver.services
-    });
+    return apiSuccess({ services: caregiver.services });
   } catch (error) {
     logger.error('Failed to fetch caregiver services', error);
-    return NextResponse.json({ error: 'Failed to fetch services' }, { status: 500 });
+    return ApiErrors.internal('Failed to fetch services');
   }
 }
 
@@ -42,11 +56,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { caregiverId, services } = body;
-
-    if (!caregiverId || !Array.isArray(services)) {
-      return NextResponse.json({ error: 'Invalid request data' }, { status: 400 });
+    const parsed = saveServicesSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
     }
+    const { caregiverId, services } = parsed.data;
 
     // Verify ownership
     const caregiver = await prisma.caregiver.findUnique({
@@ -55,22 +69,11 @@ export async function POST(request: NextRequest) {
     });
 
     if (!caregiver || caregiver.userId !== authResult.user.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+      return ApiErrors.forbidden('Unauthorized');
     }
 
-    // Valid service types
-    const validServiceTypes = [
-      'BABYSITTING',
-      'NANNY',
-      'DAYCARE',
-      'AFTER_SCHOOL',
-      'OVERNIGHT',
-      'SPECIAL_NEEDS',
-      'TUTORING'
-    ];
-
-    // Filter to only valid service types
-    const validServices = services.filter((s: string) => validServiceTypes.includes(s));
+    // Services are already validated by Zod enum
+    const validServices = services;
 
     // Delete existing services for this caregiver
     await prisma.caregiverService.deleteMany({
@@ -98,12 +101,9 @@ export async function POST(request: NextRequest) {
       serviceCount: validServices.length
     });
 
-    return NextResponse.json({
-      success: true,
-      services: updatedServices
-    });
+    return apiSuccess({ services: updatedServices });
   } catch (error) {
     logger.error('Failed to save caregiver services', error);
-    return NextResponse.json({ error: 'Failed to save services' }, { status: 500 });
+    return ApiErrors.internal('Failed to save services');
   }
 }

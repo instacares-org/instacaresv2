@@ -43,8 +43,8 @@ export default function PayoutsManagement() {
       const data = await response.json();
       
       if (data.success) {
-        setPayouts(data.caregivers);
-        setSummary(data.summary);
+        setPayouts(data.data?.caregivers || data.caregivers || []);
+        setSummary(data.data?.summary || data.summary);
       }
     } catch (error) {
       console.error('Error fetching payouts:', error);

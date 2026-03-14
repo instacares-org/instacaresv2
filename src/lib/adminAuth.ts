@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
-import { cookies } from 'next/headers';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import { getToken } from 'next-auth/jwt';
+import { prisma } from '@/lib/db';
+import { ApiErrors } from '@/lib/api-utils';
+
+const ADMIN_TYPES = ['ADMIN', 'SUPERVISOR'] as const;
 
 export interface AdminAuthResult {
   success: boolean;
@@ -15,47 +16,27 @@ export interface AdminAuthResult {
 }
 
 /**
- * Verify admin authentication from request using NextAuth session
+ * Verify admin/supervisor authentication from request using NextAuth JWT token.
+ * Uses getToken() directly (reads cookies from the request) — more reliable
+ * than getServerSession() in Next.js 15 App Router route handlers.
  */
-export async function verifyAdminAuth(request?: NextRequest): Promise<AdminAuthResult> {
+export async function verifyAdminAuth(request: NextRequest): Promise<AdminAuthResult> {
   try {
-    // First try NextAuth session (preferred method)
-    const session = await getServerSession(authOptions);
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+      secureCookie: process.env.NODE_ENV === 'production',
+    });
 
-    if (session?.user?.userType === 'ADMIN' && session.user.email && session.user.id) {
-      return {
-        success: true,
-        user: {
-          id: session.user.id,
-          email: session.user.email,
-          userType: session.user.userType
-        }
-      };
-    }
-
-    // Fallback to custom JWT token (for backward compatibility)
-    const cookieStore = await cookies();
-    const token = cookieStore.get('auth-token');
-
-    if (!token) {
+    if (!token || !token.email) {
       return {
         success: false,
         error: 'No authentication session found. Please log in as admin.'
       };
     }
 
-    // Verify JWT token
-    const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret) {
-      console.error('CRITICAL: JWT_SECRET environment variable is not set');
-      return {
-        success: false,
-        error: 'Server configuration error. Please contact support.'
-      };
-    }
-    const decoded = jwt.verify(token.value, jwtSecret) as any;
-
-    if (decoded.userType !== 'ADMIN') {
+    const userType = token.userType as string;
+    if (!ADMIN_TYPES.includes(userType as typeof ADMIN_TYPES[number])) {
       return {
         success: false,
         error: 'Admin access required'
@@ -65,13 +46,14 @@ export async function verifyAdminAuth(request?: NextRequest): Promise<AdminAuthR
     return {
       success: true,
       user: {
-        id: decoded.userId,
-        email: decoded.email,
-        userType: decoded.userType
+        id: (token.userId || token.sub) as string,
+        email: token.email as string,
+        userType,
       }
     };
 
   } catch (error) {
+    console.error('[verifyAdminAuth] Error:', error);
     return {
       success: false,
       error: 'Invalid authentication. Please log in as admin.'
@@ -157,23 +139,113 @@ export function checkAdminRateLimit(adminId: string, actionType: string, maxActi
  * Validate admin session and permissions
  */
 export interface AdminPermissions {
-  canModerateReviews: boolean;
+  canApproveUsers: boolean;
   canManageUsers: boolean;
+  canModerateReviews: boolean;
+  canModerateChat: boolean;
   canViewFinancials: boolean;
-  canAccessLogs: boolean;
-  canManageSystem: boolean;
+  canProcessPayouts: boolean;
+  canManageExtensions: boolean;
+  canViewAnalytics: boolean;
+  canViewAuditLogs: boolean;
+  canManageSupport: boolean;
+  canManageWarnings: boolean;
+  canManageNotifications: boolean;
+  canManageSupervisors: boolean;
+  canManageSettings: boolean;
 }
 
-export function getAdminPermissions(adminUser: { id: string; email: string }): AdminPermissions {
-  // In a real system, this would be database-driven
-  // For now, all admins have full permissions
+const ALL_PERMISSIONS_TRUE: AdminPermissions = {
+  canApproveUsers: true,
+  canManageUsers: true,
+  canModerateReviews: true,
+  canModerateChat: true,
+  canViewFinancials: true,
+  canProcessPayouts: true,
+  canManageExtensions: true,
+  canViewAnalytics: true,
+  canViewAuditLogs: true,
+  canManageSupport: true,
+  canManageWarnings: true,
+  canManageNotifications: true,
+  canManageSupervisors: true,
+  canManageSettings: true,
+};
+
+const ALL_PERMISSIONS_FALSE: AdminPermissions = {
+  canApproveUsers: false,
+  canManageUsers: false,
+  canModerateReviews: false,
+  canModerateChat: false,
+  canViewFinancials: false,
+  canProcessPayouts: false,
+  canManageExtensions: false,
+  canViewAnalytics: false,
+  canViewAuditLogs: false,
+  canManageSupport: false,
+  canManageWarnings: false,
+  canManageNotifications: false,
+  canManageSupervisors: false,
+  canManageSettings: false,
+};
+
+export async function getAdminPermissions(adminUser: { id: string; email: string; userType: string }): Promise<AdminPermissions> {
+  // Admins get all permissions
+  if (adminUser.userType === 'ADMIN') {
+    return { ...ALL_PERMISSIONS_TRUE };
+  }
+
+  // Supervisors get database-driven permissions
+  const perms = await prisma.supervisorPermission.findUnique({
+    where: { userId: adminUser.id },
+  });
+
+  if (!perms) {
+    return { ...ALL_PERMISSIONS_FALSE };
+  }
+
   return {
-    canModerateReviews: true,
-    canManageUsers: true,
-    canViewFinancials: true,
-    canAccessLogs: true,
-    canManageSystem: true
+    canApproveUsers: perms.canApproveUsers,
+    canManageUsers: perms.canManageUsers,
+    canModerateReviews: perms.canModerateReviews,
+    canModerateChat: perms.canModerateChat,
+    canViewFinancials: perms.canViewFinancials,
+    canProcessPayouts: perms.canProcessPayouts,
+    canManageExtensions: perms.canManageExtensions,
+    canViewAnalytics: perms.canViewAnalytics,
+    canViewAuditLogs: perms.canViewAuditLogs,
+    canManageSupport: perms.canManageSupport,
+    canManageWarnings: perms.canManageWarnings,
+    canManageNotifications: perms.canManageNotifications,
+    canManageSupervisors: false, // Never for supervisors
+    canManageSettings: false,    // Never for supervisors
   };
+}
+
+/**
+ * Check if user has a specific permission (combines auth + permission check)
+ */
+export async function requirePermission(
+  request: NextRequest,
+  permission: keyof AdminPermissions
+): Promise<{ authorized: boolean; user?: AdminAuthResult['user']; response?: NextResponse }> {
+  const auth = await verifyAdminAuth(request);
+  if (!auth.success || !auth.user) {
+    return { authorized: false, response: ApiErrors.unauthorized() };
+  }
+
+  const perms = await getAdminPermissions(auth.user);
+  if (!perms[permission]) {
+    return {
+      authorized: false,
+      response: NextResponse.json(
+        { error: 'Insufficient permissions' },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return { authorized: true, user: auth.user };
 }
 
 /**

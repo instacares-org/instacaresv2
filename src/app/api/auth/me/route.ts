@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../[...nextauth]/options';
-import { prisma } from '@/lib/database';
+import { prisma } from '@/lib/db';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,10 +10,7 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
-      return NextResponse.json(
-        { error: 'Not authenticated' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized('Not authenticated');
     }
 
     // Find user in database with full details
@@ -34,13 +32,10 @@ export async function GET(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('User not found');
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       user: {
         id: user.id,
         email: user.email,
@@ -57,9 +52,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Get user error:', error);
-    return NextResponse.json(
-      { error: 'Failed to get user information' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to get user information');
   }
 }

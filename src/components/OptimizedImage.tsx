@@ -72,6 +72,9 @@ export default function OptimizedImage({
   // Use fallback image if primary image fails
   const imageSrc = imageError && fallbackSrc ? fallbackSrc : src;
 
+  // Bypass Next.js image optimizer for runtime-uploaded files (served by nginx)
+  const isUploadedFile = src?.startsWith('/uploads/');
+
   // Generate blur placeholder if not provided
   const defaultBlurDataURL = blurDataURL || (
     typeof window !== 'undefined' && width && height ? 
@@ -116,8 +119,9 @@ export default function OptimizedImage({
         sizes={responsiveSizes}
         onError={handleImageError}
         onLoad={handleImageLoad}
-        // Enable optimizations
-        quality={85} // Good balance between quality and file size
+        // Bypass optimizer for runtime-uploaded files (served directly by nginx)
+        unoptimized={isUploadedFile}
+        quality={isUploadedFile ? undefined : 85}
         loading={priority ? "eager" : "lazy"}
       />
     </div>

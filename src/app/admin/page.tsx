@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import AdminAuthLayout from '@/components/AdminAuthLayout';
 import {
   UsersIcon,
@@ -25,7 +25,8 @@ import {
   ClockIcon,
   BellIcon,
   ClipboardDocumentListIcon,
-  XCircleIcon
+  XCircleIcon,
+  UserGroupIcon
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import Image from "next/image";
@@ -106,6 +107,17 @@ interface PendingBabysitter {
   references: Array<{ id: string; name: string; relationship: string; isVerified: boolean }>;
   stripeOnboarded: boolean;
   acceptsOnsitePayment: boolean;
+  availability: Array<{
+    id: string;
+    recurrenceType: string;
+    dayOfWeek: number | null;
+    startTime: string;
+    endTime: string;
+    specificDate: string | null;
+    dayOfMonth: number | null;
+    repeatInterval: number | null;
+    isRecurring: boolean;
+  }>;
   createdAt: string;
   approvedAt: string | null;
 }
@@ -160,6 +172,8 @@ export default function AdminDashboard() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
+  const [permissions, setPermissions] = useState<Record<string, boolean>>({});
+  const [currentUserType, setCurrentUserType] = useState<string>('ADMIN');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showUserModal, setShowUserModal] = useState(false);
 
@@ -173,6 +187,21 @@ export default function AdminDashboard() {
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
 
+  // Supervisor management
+  const [supervisors, setSupervisors] = useState<any[]>([]);
+  const [loadingSupervisors, setLoadingSupervisors] = useState(false);
+  const [showSupervisorForm, setShowSupervisorForm] = useState(false);
+  const [editingSupervisor, setEditingSupervisor] = useState<any>(null);
+  const [supervisorForm, setSupervisorForm] = useState({
+    email: '', password: '', firstName: '', lastName: '',
+    permissions: {
+      canApproveUsers: false, canManageUsers: false, canModerateReviews: false,
+      canModerateChat: false, canViewFinancials: false, canProcessPayouts: false,
+      canManageExtensions: false, canViewAnalytics: false, canViewAuditLogs: false,
+      canManageSupport: false, canManageWarnings: false, canManageNotifications: false,
+    }
+  });
+
   // Babysitter approvals
   const [pendingBabysitters, setPendingBabysitters] = useState<PendingBabysitter[]>([]);
   const [loadingBabysitters, setLoadingBabysitters] = useState(false);
@@ -180,7 +209,7 @@ export default function AdminDashboard() {
   const [babysitterCounts, setBabysitterCounts] = useState({ total: 0, pending: 0, documentsSubmitted: 0, approved: 0, suspended: 0, rejected: 0 });
 
   // Filtered users based on search and filters
-  const filteredUsers = users.filter((user) => {
+  const filteredUsers = useMemo(() => users.filter((user) => {
     // Filter by search term (name or email)
     const matchesSearch = searchTerm === '' ||
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -193,10 +222,10 @@ export default function AdminDashboard() {
     const matchesType = filterType === 'all' || user.type === filterType;
 
     return matchesSearch && matchesStatus && matchesType;
-  });
+  }), [users, searchTerm, filterStatus, filterType]);
 
   // Helper function for time ago display
-  const getTimeAgo = (date: string | Date): string => {
+  const getTimeAgo = useCallback((date: string | Date): string => {
     const now = new Date();
     const past = new Date(date);
     const seconds = Math.floor((now.getTime() - past.getTime()) / 1000);
@@ -214,34 +243,37 @@ export default function AdminDashboard() {
     } else {
       return `${Math.floor(seconds / 31536000)} years ago`;
     }
-  };
+  }, []);
 
   // Handle viewing user details
-  const handleViewUser = (user: User) => {
+  const handleViewUser = useCallback((user: User) => {
     setSelectedUser(user);
     setShowUserModal(true);
-  };
+  }, []);
 
-  // Handle password reset
-  const handlePasswordReset = async (userId: string) => {
+  // Handle password reset for any user (parent, caregiver, supervisor)
+  const handlePasswordReset = useCallback(async (userId: string): Promise<{ success: boolean; email?: string }> => {
     try {
       const response = await fetch(`/api/admin/users/${userId}/reset-password`, {
         method: 'POST',
         credentials: 'include',
-        headers: await addCSRFHeader({ 'Content-Type': 'application/json' }),
+        headers: { ...addCSRFHeader({ 'Content-Type': 'application/json' }) },
+        body: JSON.stringify({}),
       });
       if (response.ok) {
         const data = await response.json();
-        alert(`Password reset successfully!\n\nA temporary password has been sent to: ${data.email}\n\n${data.emailSent ? 'Email delivered successfully.' : 'Warning: Email delivery may have failed. Check server logs.'}`);
+        const resetData = data.data || data;
+        return { success: true, email: resetData.email };
       } else {
         const errorData = await response.json().catch(() => ({}));
-        alert(`Failed to reset password: ${errorData.error || 'Unknown error'}`);
+        console.error('Password reset failed:', errorData);
+        return { success: false };
       }
     } catch (error) {
       console.error('Error resetting password:', error);
-      alert('Failed to reset password. Please try again.');
+      return { success: false };
     }
-  };
+  }, []);
 
   // Platform settings state
   const [platformSettings, setPlatformSettings] = useState({
@@ -271,15 +303,15 @@ export default function AdminDashboard() {
     supportTickets: 0
   });
 
-  const approveItem = (id: string) => {
+  const approveItem = useCallback((id: string) => {
     setPendingApprovals(prev => prev.filter(item => item.id !== id));
-  };
+  }, []);
 
-  const rejectItem = (id: string) => {
+  const rejectItem = useCallback((id: string) => {
     setPendingApprovals(prev => prev.filter(item => item.id !== id));
-  };
+  }, []);
 
-  const updateUserStatus = async (userId: string, newStatus: 'active' | 'suspended') => {
+  const updateUserStatus = useCallback(async (userId: string, newStatus: 'active' | 'suspended') => {
     try {
       const response = await fetch(`/api/admin/users/${userId}/status`, {
         method: 'PATCH',
@@ -287,7 +319,7 @@ export default function AdminDashboard() {
         headers: await addCSRFHeader({
           'Content-Type': 'application/json',
         }),
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           status: newStatus.toUpperCase(),
           reason: `Status changed to ${newStatus} by admin`
         }),
@@ -296,7 +328,7 @@ export default function AdminDashboard() {
       if (response.ok) {
         const data = await response.json();
         // Update local state to reflect the change
-        setUsers(prev => prev.map(user => 
+        setUsers(prev => prev.map(user =>
           user.id === userId ? { ...user, status: newStatus } : user
         ));
         console.log(`User status updated to ${newStatus} successfully`);
@@ -313,10 +345,125 @@ export default function AdminDashboard() {
       console.error('Error updating user status:', error);
       alert('Failed to update user status. Please try again.');
     }
-  };
+  }, []);
+
+  // Fetch supervisors
+  const fetchSupervisors = useCallback(async () => {
+    setLoadingSupervisors(true);
+    try {
+      const response = await fetch('/api/admin/supervisors', {
+        credentials: 'include',
+        headers: { ...addCSRFHeader({ 'Content-Type': 'application/json' }) },
+      });
+      if (response.ok) {
+        const result = await response.json();
+        setSupervisors(result.data?.supervisors || []);
+      }
+    } catch (error) {
+      console.error('Error fetching supervisors:', error);
+    } finally {
+      setLoadingSupervisors(false);
+    }
+  }, []);
+
+  const handleCreateSupervisor = useCallback(async () => {
+    try {
+      const response = await fetch('/api/admin/supervisors', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { ...addCSRFHeader({ 'Content-Type': 'application/json' }) },
+        body: JSON.stringify(supervisorForm),
+      });
+      if (response.ok) {
+        setShowSupervisorForm(false);
+        setSupervisorForm({
+          email: '', password: '', firstName: '', lastName: '',
+          permissions: {
+            canApproveUsers: false, canManageUsers: false, canModerateReviews: false,
+            canModerateChat: false, canViewFinancials: false, canProcessPayouts: false,
+            canManageExtensions: false, canViewAnalytics: false, canViewAuditLogs: false,
+            canManageSupport: false, canManageWarnings: false, canManageNotifications: false,
+          }
+        });
+        fetchSupervisors();
+      } else {
+        const err = await response.json();
+        alert(err.error || 'Failed to create supervisor');
+      }
+    } catch (error) {
+      console.error('Error creating supervisor:', error);
+    }
+  }, [supervisorForm, fetchSupervisors]);
+
+  const handleUpdateSupervisor = useCallback(async (id: string, data: any) => {
+    try {
+      const response = await fetch(`/api/admin/supervisors/${id}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { ...addCSRFHeader({ 'Content-Type': 'application/json' }) },
+        body: JSON.stringify(data),
+      });
+      if (response.ok) {
+        setEditingSupervisor(null);
+        fetchSupervisors();
+      } else {
+        const err = await response.json();
+        alert(err.error || 'Failed to update supervisor');
+      }
+    } catch (error) {
+      console.error('Error updating supervisor:', error);
+    }
+  }, [fetchSupervisors]);
+
+  const handleToggleSupervisorStatus = useCallback(async (id: string, isActive: boolean) => {
+    await handleUpdateSupervisor(id, { isActive: !isActive });
+  }, [handleUpdateSupervisor]);
+
+  const handleResetSupervisorPassword = useCallback(async (id: string, name: string) => {
+    if (!confirm(`Reset password for supervisor "${name}"? They will receive a new temporary password via email and must change it on next login.`)) {
+      return;
+    }
+    try {
+      const response = await fetch(`/api/admin/users/${id}/reset-password`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { ...addCSRFHeader({ 'Content-Type': 'application/json' }) },
+        body: JSON.stringify({}),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        alert(data.message || 'Password reset successfully. Temporary password sent via email.');
+      } else {
+        alert(data.error || 'Failed to reset password');
+      }
+    } catch (error) {
+      console.error('Error resetting supervisor password:', error);
+    }
+  }, []);
+
+  const handleDeleteSupervisor = useCallback(async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to permanently delete supervisor "${name}"? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      const response = await fetch(`/api/admin/supervisors/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { ...addCSRFHeader({ 'Content-Type': 'application/json' }) },
+      });
+      if (response.ok) {
+        fetchSupervisors();
+      } else {
+        const err = await response.json();
+        alert(err.error || 'Failed to delete supervisor');
+      }
+    } catch (error) {
+      console.error('Error deleting supervisor:', error);
+    }
+  }, [fetchSupervisors]);
 
   // Fetch pending users
-  const fetchPendingUsers = async () => {
+  const fetchPendingUsers = useCallback(async () => {
     setLoadingUsers(true);
     try {
       const response = await fetch('/api/admin/users/pending', {
@@ -327,7 +474,7 @@ export default function AdminDashboard() {
       });
       if (response.ok) {
         const data = await response.json();
-        setPendingUsers(data.users);
+        setPendingUsers(data.data?.users || data.users || []);
       } else {
         console.error('Failed to fetch pending users');
       }
@@ -336,12 +483,12 @@ export default function AdminDashboard() {
     } finally {
       setLoadingUsers(false);
     }
-  };
+  }, []);
 
   // Handle user approval/rejection
   
   
-  const fetchCaregiverDetails = async (caregiverId: string) => {
+  const fetchCaregiverDetails = useCallback(async (caregiverId: string) => {
     try {
       const response = await fetch(`/api/admin/caregivers/${caregiverId}/detailed-approval`, {
         method: 'GET',
@@ -349,15 +496,15 @@ export default function AdminDashboard() {
       });
       if (response.ok) {
         const data = await response.json();
-        setSelectedCaregiverData(data);
+        setSelectedCaregiverData(data.data || data);
         setShowDetailModal(true);
       }
     } catch (error) {
       console.error('Failed to fetch caregiver details:', error);
     }
-  };
+  }, []);
 
-  const handleUpdateVerification = async (caregiverId: string, type: string, status: string) => {
+  const handleUpdateVerification = useCallback(async (caregiverId: string, type: string, status: string) => {
     try {
       const response = await fetch('/api/admin/verifications', {
         method: 'PUT',
@@ -371,9 +518,9 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Failed to update verification:', error);
     }
-  };
+  }, [fetchCaregiverDetails]);
 
-const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED' | 'SUSPENDED', reason?: string) => {
+const handleUserApproval = useCallback(async (userId: string, action: 'APPROVED' | 'REJECTED' | 'SUSPENDED', reason?: string) => {
     try {
       const response = await fetch(`/api/admin/users/${userId}/approval`, {
         method: 'POST',
@@ -400,10 +547,10 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
     } catch (error) {
       console.error('Error updating user approval:', error);
     }
-  };
+  }, []);
 
   // Fetch babysitters for admin approval
-  const fetchBabysitters = async (statusFilter?: string) => {
+  const fetchBabysitters = useCallback(async (statusFilter?: string) => {
     setLoadingBabysitters(true);
     try {
       const response = await fetch('/api/admin/babysitters', {
@@ -412,27 +559,29 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
       });
       if (response.ok) {
         const data = await response.json();
-        let filtered = data.babysitters;
+        const babysitters = data.data?.babysitters || data.babysitters || [];
+        const counts = data.data?.counts || data.counts;
+        let filtered = babysitters;
         if (!statusFilter || statusFilter === 'pending') {
-          filtered = data.babysitters.filter((b: PendingBabysitter) =>
+          filtered = babysitters.filter((b: PendingBabysitter) =>
             b.status === 'PENDING_VERIFICATION' || b.status === 'DOCUMENTS_SUBMITTED'
           );
         } else if (statusFilter !== 'all') {
-          filtered = data.babysitters.filter((b: PendingBabysitter) =>
+          filtered = babysitters.filter((b: PendingBabysitter) =>
             b.status === statusFilter.toUpperCase()
           );
         }
         setPendingBabysitters(filtered);
-        setBabysitterCounts(data.counts);
+        setBabysitterCounts(counts);
       }
     } catch (error) {
       console.error('Error fetching babysitters:', error);
     } finally {
       setLoadingBabysitters(false);
     }
-  };
+  }, []);
 
-  const handleBabysitterAction = async (babysitterId: string, action: 'approve' | 'reject' | 'suspend' | 'unsuspend') => {
+  const handleBabysitterAction = useCallback(async (babysitterId: string, action: 'approve' | 'reject' | 'suspend' | 'unsuspend') => {
     try {
       const response = await fetch(`/api/admin/babysitters/${babysitterId}`, {
         method: 'PATCH',
@@ -449,7 +598,7 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
     } catch (error) {
       console.error('Error updating babysitter:', error);
     }
-  };
+  }, [babysitterStatusFilter, fetchBabysitters]);
 
   // Fetch dashboard data on component mount
   useEffect(() => {
@@ -523,6 +672,22 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
     };
     
     fetchDashboardData();
+
+    // Fetch permissions from admin session
+    const fetchPermissions = async () => {
+      try {
+        const res = await fetch('/api/admin/session', { credentials: 'include' });
+        if (res.ok) {
+          const result = await res.json();
+          const admin = result.data?.admin || result.admin;
+          if (admin?.permissions) setPermissions(admin.permissions);
+          if (admin?.userType) setCurrentUserType(admin.userType);
+        }
+      } catch (err) {
+        console.error('Error fetching permissions:', err);
+      }
+    };
+    fetchPermissions();
   }, []);
 
   // Load pending users and babysitters when approvals tab is active
@@ -533,6 +698,13 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
     }
   }, [activeTab]);
 
+  // Fetch supervisors when tab is active
+  useEffect(() => {
+    if (activeTab === 'supervisors') {
+      fetchSupervisors();
+    }
+  }, [activeTab]);
+
   // Fetch platform settings when settings tab is active
   useEffect(() => {
     if (activeTab === 'settings') {
@@ -540,7 +712,7 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
     }
   }, [activeTab]);
 
-  const fetchPlatformSettings = async () => {
+  const fetchPlatformSettings = useCallback(async () => {
     setLoadingSettings(true);
     try {
       const response = await fetch('/api/admin/settings', {
@@ -551,7 +723,7 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
       });
       if (response.ok) {
         const data = await response.json();
-        setPlatformSettings(data.settings);
+        setPlatformSettings(data.data?.settings || data.settings);
       } else {
         console.error('Failed to fetch platform settings');
       }
@@ -560,9 +732,9 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
     } finally {
       setLoadingSettings(false);
     }
-  };
+  }, []);
 
-  const savePlatformSettings = async () => {
+  const savePlatformSettings = useCallback(async () => {
     setSavingSettings(true);
     try {
       const response = await fetch('/api/admin/settings', {
@@ -575,7 +747,7 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
       });
       if (response.ok) {
         const data = await response.json();
-        setPlatformSettings(data.settings);
+        setPlatformSettings(data.data?.settings || data.settings);
         alert('Settings saved successfully!');
       } else {
         const errorData = await response.json().catch(() => ({}));
@@ -587,9 +759,9 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
     } finally {
       setSavingSettings(false);
     }
-  };
+  }, [platformSettings]);
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = useCallback((status: string) => {
     switch (status) {
       case 'active': return 'text-green-600 bg-green-100';
       case 'pending': return 'text-yellow-600 bg-yellow-100';
@@ -599,18 +771,18 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
       case 'closed': return 'text-green-600 bg-green-100';
       default: return 'text-gray-600 bg-gray-100';
     }
-  };
+  }, []);
 
-  const getPriorityColor = (priority: string) => {
+  const getPriorityColor = useCallback((priority: string) => {
     switch (priority) {
       case 'high': return 'text-red-600 bg-red-100';
       case 'medium': return 'text-yellow-600 bg-yellow-100';
       case 'low': return 'text-green-600 bg-green-100';
       default: return 'text-gray-600 bg-gray-100';
     }
-  };
+  }, []);
 
-  const getBookingStatusColor = (status: string) => {
+  const getBookingStatusColor = useCallback((status: string) => {
     switch (status) {
       case 'completed': return 'text-green-600 bg-green-100';
       case 'pending': return 'text-yellow-600 bg-yellow-100';
@@ -618,18 +790,18 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
       case 'disputed': return 'text-red-600 bg-red-100';
       default: return 'text-gray-600 bg-gray-100';
     }
-  };
+  }, []);
 
-  const getPaymentStatusColor = (status: string) => {
+  const getPaymentStatusColor = useCallback((status: string) => {
     switch (status) {
       case 'paid': return 'text-green-600 bg-green-100';
       case 'pending': return 'text-yellow-600 bg-yellow-100';
       case 'refunded': return 'text-red-600 bg-red-100';
       default: return 'text-gray-600 bg-gray-100';
     }
-  };
+  }, []);
 
-  const generateInvoice = (bookingId: string, type: 'parent' | 'caregiver') => {
+  const generateInvoice = useCallback((bookingId: string, type: 'parent' | 'caregiver') => {
     const booking = bookings.find(b => b.id === bookingId);
     if (!booking) return;
 
@@ -645,14 +817,14 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
     };
 
     setInvoices(prev => [...prev, newInvoice]);
-    
+
     // Update booking to mark invoice as generated
-    setBookings(prev => prev.map(b => 
+    setBookings(prev => prev.map(b =>
       b.id === bookingId ? { ...b, invoiceGenerated: true } : b
     ));
-  };
+  }, [bookings]);
 
-  const downloadInvoice = (invoice: Invoice) => {
+  const downloadInvoice = useCallback((invoice: Invoice) => {
     const booking = bookings.find(b => b.id === invoice.bookingId);
     if (!booking) return;
 
@@ -671,7 +843,12 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
 
     // Generate beautiful styled invoice for printing/PDF
     generateStyledInvoice(invoiceData);
-  };
+  }, [bookings]);
+
+  // Memoized booking stats
+  const totalRevenue = useMemo(() => bookings.reduce((sum, b) => sum + b.amount, 0), [bookings]);
+  const totalPlatformFees = useMemo(() => bookings.reduce((sum, b) => sum + b.platformFee, 0), [bookings]);
+  const totalCaregiverPayouts = useMemo(() => bookings.reduce((sum, b) => sum + b.caregiverPayout, 0), [bookings]);
 
   const StatCard = ({ title, value, subtitle, icon: Icon, color }: any) => (
     <div className="bg-white rounded-lg shadow-sm p-6">
@@ -708,20 +885,23 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
         {/* Tab Navigation */}
         <div className="flex flex-wrap gap-2 mb-8">
           {[
-            { key: 'overview', label: 'Overview', icon: ChartBarIcon },
-            { key: 'users', label: 'Users', icon: UsersIcon },
-            { key: 'payments', label: 'Payments', icon: CreditCardIcon },
-            { key: 'extensions', label: 'Extensions', icon: ClockIcon },
-            { key: 'approvals', label: 'Approvals', icon: ShieldCheckIcon },
-            { key: 'moderation', label: 'Reviews', icon: EyeIcon },
-            { key: 'chats', label: 'Chat Management', icon: ChatBubbleLeftRightIcon },
-            { key: 'notifications', label: 'Notifications', icon: BellIcon },
-            { key: 'analytics', label: 'Analytics', icon: DocumentChartBarIcon },
-            { key: 'support', label: 'Support', icon: ExclamationTriangleIcon },
-            { key: 'warnings', label: 'Warnings', icon: ExclamationTriangleIcon },
-            { key: 'audit', label: 'Audit Log', icon: ClipboardDocumentListIcon },
-            { key: 'settings', label: 'Settings', icon: CogIcon }
-          ].map(tab => (
+            { key: 'overview', label: 'Overview', icon: ChartBarIcon, permission: null },
+            { key: 'users', label: 'Users', icon: UsersIcon, permission: 'canManageUsers' },
+            { key: 'payments', label: 'Payments', icon: CreditCardIcon, permission: 'canViewFinancials' },
+            { key: 'extensions', label: 'Extensions', icon: ClockIcon, permission: 'canManageExtensions' },
+            { key: 'approvals', label: 'Approvals', icon: ShieldCheckIcon, permission: 'canApproveUsers' },
+            { key: 'moderation', label: 'Reviews', icon: EyeIcon, permission: 'canModerateReviews' },
+            { key: 'chats', label: 'Chat Management', icon: ChatBubbleLeftRightIcon, permission: 'canModerateChat' },
+            { key: 'notifications', label: 'Notifications', icon: BellIcon, permission: 'canManageNotifications' },
+            { key: 'analytics', label: 'Analytics', icon: DocumentChartBarIcon, permission: 'canViewAnalytics' },
+            { key: 'support', label: 'Support', icon: ExclamationTriangleIcon, permission: 'canManageSupport' },
+            { key: 'warnings', label: 'Warnings', icon: ExclamationTriangleIcon, permission: 'canManageWarnings' },
+            { key: 'audit', label: 'Audit Log', icon: ClipboardDocumentListIcon, permission: 'canViewAuditLogs' },
+            { key: 'supervisors', label: 'Supervisors', icon: UserGroupIcon, permission: 'canManageSupervisors' },
+            { key: 'settings', label: 'Settings', icon: CogIcon, permission: 'canManageSettings' },
+          ]
+          .filter(tab => tab.permission === null || permissions[tab.permission])
+          .map(tab => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
@@ -1200,6 +1380,7 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
                         { label: 'ECE Cert', done: bs.documents.eceCertificate },
                         { label: 'Stripe Setup', done: bs.stripeOnboarded },
                         { label: `References (${bs.references.length})`, done: bs.references.length > 0 },
+                        { label: `Schedule (${bs.availability?.length || 0})`, done: (bs.availability?.length || 0) > 0 },
                       ];
                       const allRequiredDone = requiredSteps.every(s => s.done);
                       const statusColor = bs.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
@@ -1267,6 +1448,49 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
                               ))}
                             </div>
                           </div>
+
+                          {/* Service Type & Schedule */}
+                          <div className="mb-3 flex flex-wrap gap-3">
+                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded bg-violet-50 text-violet-700">
+                              Travels to client location
+                            </span>
+                            {bs.acceptsOnsitePayment && (
+                              <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded bg-emerald-50 text-emerald-700">
+                                Accepts on-site payment
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Schedule Display */}
+                          {bs.availability && bs.availability.length > 0 && (
+                            <div className="mb-3 bg-gray-50 rounded-lg p-3">
+                              <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Configured Schedule</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                                {bs.availability.map((slot) => {
+                                  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                                  let label = '';
+                                  if (slot.recurrenceType === 'WEEKLY') {
+                                    label = slot.dayOfWeek !== null ? dayNames[slot.dayOfWeek] : 'Weekly';
+                                    if (slot.repeatInterval && slot.repeatInterval > 1) {
+                                      label += ` (every ${slot.repeatInterval} weeks)`;
+                                    }
+                                  } else if (slot.recurrenceType === 'ONCE') {
+                                    label = slot.specificDate ? new Date(slot.specificDate).toLocaleDateString() : 'One-time';
+                                  } else if (slot.recurrenceType === 'MONTHLY') {
+                                    label = slot.dayOfMonth ? `Monthly (day ${slot.dayOfMonth})` : 'Monthly';
+                                  } else {
+                                    label = slot.dayOfWeek !== null ? dayNames[slot.dayOfWeek] : 'Available';
+                                  }
+                                  return (
+                                    <div key={slot.id} className="flex items-center justify-between text-xs bg-white rounded px-2 py-1.5 border border-gray-200">
+                                      <span className="font-medium text-gray-900">{label}</span>
+                                      <span className="text-gray-500 ml-2">{slot.startTime} - {slot.endTime}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
 
                           {/* Action Buttons */}
                           <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
@@ -1546,7 +1770,7 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
                   <div>
                     <p className="text-sm font-medium text-gray-600">Total Revenue</p>
                     <p className="text-2xl font-bold text-green-600">
-                      ${(bookings.reduce((sum, b) => sum + b.amount, 0) / 100).toFixed(2)}
+                      ${(totalRevenue / 100).toFixed(2)}
                     </p>
                   </div>
                   <BanknotesIcon className="h-8 w-8 text-green-600" />
@@ -1558,7 +1782,7 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
                   <div>
                     <p className="text-sm font-medium text-gray-600">Platform Fees</p>
                     <p className="text-2xl font-bold text-blue-600">
-                      ${(bookings.reduce((sum, b) => sum + b.platformFee, 0) / 100).toFixed(2)}
+                      ${(totalPlatformFees / 100).toFixed(2)}
                     </p>
                   </div>
                   <CreditCardIcon className="h-8 w-8 text-blue-600" />
@@ -1570,7 +1794,7 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
                   <div>
                     <p className="text-sm font-medium text-gray-600">Caregiver Payouts</p>
                     <p className="text-2xl font-bold text-purple-600">
-                      ${(bookings.reduce((sum, b) => sum + b.caregiverPayout, 0) / 100).toFixed(2)}
+                      ${(totalCaregiverPayouts / 100).toFixed(2)}
                     </p>
                   </div>
                   <UsersIcon className="h-8 w-8 text-purple-600" />
@@ -1829,9 +2053,7 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
                   try {
                     const response = await fetch(`/api/reviews/${reviewId}`, {
                       method: 'PATCH',
-                      headers: { 
-                        'Content-Type': 'application/json',
-                      },
+                      headers: { ...addCSRFHeader({ 'Content-Type': 'application/json' }) },
                       credentials: 'include', // Ensure cookies are sent
                       body: JSON.stringify({
                         isApproved: action === 'approve',
@@ -1902,6 +2124,213 @@ const handleUserApproval = async (userId: string, action: 'APPROVED' | 'REJECTED
         {/* Audit Log Tab */}
         {activeTab === 'audit' && (
           <AdminAuditLog />
+        )}
+
+        {/* Supervisors Tab */}
+        {activeTab === 'supervisors' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-900">Supervisor Management</h2>
+              <button
+                onClick={() => { setShowSupervisorForm(true); setEditingSupervisor(null); }}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center"
+              >
+                <UserGroupIcon className="h-5 w-5 mr-2" />
+                Add Supervisor
+              </button>
+            </div>
+
+            {/* Create/Edit Form Modal */}
+            {(showSupervisorForm || editingSupervisor) && (
+              <div className="bg-white rounded-lg shadow-sm border p-6">
+                <h3 className="text-lg font-semibold mb-4">
+                  {editingSupervisor ? 'Edit Supervisor Permissions' : 'Create New Supervisor'}
+                </h3>
+
+                {!editingSupervisor && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                      <input
+                        type="email" value={supervisorForm.email}
+                        onChange={e => setSupervisorForm({ ...supervisorForm, email: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        placeholder="supervisor@instacares.net"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                      <input
+                        type="password" value={supervisorForm.password}
+                        onChange={e => setSupervisorForm({ ...supervisorForm, password: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        placeholder="Min 8 characters"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                      <input
+                        type="text" value={supervisorForm.firstName}
+                        onChange={e => setSupervisorForm({ ...supervisorForm, firstName: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                      <input
+                        type="text" value={supervisorForm.lastName}
+                        onChange={e => setSupervisorForm({ ...supervisorForm, lastName: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="mb-6">
+                  <h4 className="text-sm font-medium text-gray-700 mb-3">Permissions</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {[
+                      { key: 'canApproveUsers', label: 'Approve Users', desc: 'Approve/reject caregivers & babysitters' },
+                      { key: 'canManageUsers', label: 'Manage Users', desc: 'View user details, reset passwords' },
+                      { key: 'canModerateReviews', label: 'Moderate Reviews', desc: 'Flag/remove reviews' },
+                      { key: 'canModerateChat', label: 'Moderate Chat', desc: 'Monitor & manage chat rooms' },
+                      { key: 'canViewFinancials', label: 'View Financials', desc: 'See revenue & payment data' },
+                      { key: 'canProcessPayouts', label: 'Process Payouts', desc: 'Handle caregiver payouts' },
+                      { key: 'canManageExtensions', label: 'Manage Extensions', desc: 'Approve booking extensions' },
+                      { key: 'canViewAnalytics', label: 'View Analytics', desc: 'Access analytics dashboard' },
+                      { key: 'canViewAuditLogs', label: 'View Audit Logs', desc: 'Read admin audit trail' },
+                      { key: 'canManageSupport', label: 'Manage Support', desc: 'Handle support tickets' },
+                      { key: 'canManageWarnings', label: 'Manage Warnings', desc: 'Issue caregiver warnings' },
+                      { key: 'canManageNotifications', label: 'Manage Notifications', desc: 'Send & manage notifications' },
+                    ].map(perm => {
+                      const currentPerms = editingSupervisor?.permissions || supervisorForm.permissions;
+                      const isChecked = currentPerms[perm.key as keyof typeof currentPerms] || false;
+                      return (
+                        <label key={perm.key} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                          <input
+                            type="checkbox" checked={isChecked}
+                            onChange={e => {
+                              const updated = { ...currentPerms, [perm.key]: e.target.checked };
+                              if (editingSupervisor) {
+                                setEditingSupervisor({ ...editingSupervisor, permissions: updated });
+                              } else {
+                                setSupervisorForm({ ...supervisorForm, permissions: updated });
+                              }
+                            }}
+                            className="mt-1 h-4 w-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                          />
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{perm.label}</div>
+                            <div className="text-xs text-gray-500">{perm.desc}</div>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => { setShowSupervisorForm(false); setEditingSupervisor(null); }}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (editingSupervisor) {
+                        handleUpdateSupervisor(editingSupervisor.id, { permissions: editingSupervisor.permissions });
+                      } else {
+                        handleCreateSupervisor();
+                      }
+                    }}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                  >
+                    {editingSupervisor ? 'Update Permissions' : 'Create Supervisor'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Supervisors Table */}
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+              {loadingSupervisors ? (
+                <div className="p-8 text-center text-gray-500">Loading supervisors...</div>
+              ) : supervisors.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  <UserGroupIcon className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p>No supervisors created yet.</p>
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Permissions</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {supervisors.map(sup => {
+                      const permCount = sup.permissions ? Object.values(sup.permissions).filter(Boolean).length : 0;
+                      return (
+                        <tr key={sup.id} className={!sup.isActive ? 'bg-gray-50 opacity-60' : ''}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">
+                              {sup.profile?.firstName} {sup.profile?.lastName}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{sup.email}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              sup.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {sup.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {permCount}/12 enabled
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {new Date(sup.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm space-x-2">
+                            <button
+                              onClick={() => setEditingSupervisor(sup)}
+                              className="text-indigo-600 hover:text-indigo-900"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleResetSupervisorPassword(sup.id, `${sup.profile?.firstName || ''} ${sup.profile?.lastName || ''}`.trim())}
+                              className="text-orange-600 hover:text-orange-900"
+                            >
+                              Reset PW
+                            </button>
+                            <button
+                              onClick={() => handleToggleSupervisorStatus(sup.id, sup.isActive)}
+                              className={sup.isActive ? 'text-yellow-600 hover:text-yellow-900' : 'text-green-600 hover:text-green-900'}
+                            >
+                              {sup.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSupervisor(sup.id, `${sup.profile?.firstName || ''} ${sup.profile?.lastName || ''}`.trim())}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
         )}
 
         {/* Analytics placeholder */}

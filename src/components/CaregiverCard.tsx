@@ -67,6 +67,7 @@ export interface Caregiver {
   phone?: string; // Add phone for additional identification
   city?: string; // Add city for location distinction
   services?: { type: string; rate?: number; description?: string }[]; // Services offered by caregiver
+  maxChildren?: number; // Maximum children the caregiver can handle
 }
 
 interface CaregiverCardProps {
@@ -132,12 +133,12 @@ function CaregiverCard({ caregiver, onHover, isSelected, showContactInfo = false
             e.stopPropagation();
             setIsFavorited(!isFavorited);
           }}
-          className="absolute top-2 right-2 p-1 rounded-full bg-white/80 hover:bg-white transition"
+          className="absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-white/80 hover:bg-white transition shadow-sm"
         >
           {isFavorited ? (
-            <HeartIconSolid className="h-4 w-4 text-rose-500" />
+            <HeartIconSolid className="h-4 w-4 shrink-0 text-rose-500" />
           ) : (
-            <HeartIcon className="h-4 w-4 text-gray-700" />
+            <HeartIcon className="h-4 w-4 shrink-0 text-gray-700" />
           )}
         </button>
         
@@ -222,22 +223,50 @@ function CaregiverCard({ caregiver, onHover, isSelected, showContactInfo = false
         </div>
 
 
+        {/* Services Offered */}
+        {caregiver.services && caregiver.services.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-1">
+            {caregiver.services.slice(0, 2).map((service) => (
+              <span
+                key={service.type}
+                className="px-1.5 py-0.5 text-xs bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded"
+              >
+                {{ DAYCARE: 'Full-day care', BABYSITTING: 'Half-day care', AFTER_SCHOOL: 'Before/after school', OVERNIGHT: 'Overnight care', NANNY: 'Drop-in care' }[service.type] || service.type}
+              </span>
+            ))}
+            {caregiver.services.length > 2 && (
+              <span className="px-1.5 py-0.5 text-xs text-gray-500 dark:text-gray-400">
+                +{caregiver.services.length - 2}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Age Groups */}
+        {caregiver.ageGroups && caregiver.ageGroups.length > 0 && (
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1 truncate">
+            Ages: {caregiver.ageGroups.map(g => g.name).join(', ')}
+          </div>
+        )}
+
         {/* Specialties */}
-        <div className="flex flex-wrap gap-1 mb-2">
-          {caregiver.specialties.slice(0, 2).map((specialty) => (
-            <span
-              key={specialty}
-              className="px-1.5 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded"
-            >
-              {specialty}
-            </span>
-          ))}
-          {caregiver.specialties.length > 2 && (
-            <span className="px-1.5 py-0.5 text-xs text-gray-500 dark:text-gray-400">
-              +{caregiver.specialties.length - 2}
-            </span>
-          )}
-        </div>
+        {caregiver.specialties.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {caregiver.specialties.slice(0, 2).map((specialty) => (
+              <span
+                key={specialty}
+                className="px-1.5 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded"
+              >
+                {specialty}
+              </span>
+            ))}
+            {caregiver.specialties.length > 2 && (
+              <span className="px-1.5 py-0.5 text-xs text-gray-500 dark:text-gray-400">
+                +{caregiver.specialties.length - 2}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Price and Book Button */}
         <div className="flex items-center justify-between">
@@ -283,6 +312,10 @@ function CaregiverCard({ caregiver, onHover, isSelected, showContactInfo = false
           caregiver={caregiver}
           isOpen={showDetailModal}
           onClose={() => setShowDetailModal(false)}
+          onBookNow={() => {
+            setShowDetailModal(false);
+            setShowBookingModal(true);
+          }}
         />
       )}
     </div>

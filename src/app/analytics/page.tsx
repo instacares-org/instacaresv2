@@ -19,7 +19,7 @@ export default function AnalyticsPage() {
       const response = await fetch('/api/admin/session');
       if (response.ok) {
         const data = await response.json();
-        setAdminUserId(data.admin.id);
+        setAdminUserId(data.data?.admin?.id || data.admin?.id);
       }
     } catch (error) {
       console.error('Failed to get admin user ID:', error);

@@ -5,20 +5,43 @@ import { db } from '@/lib/db';
 import { getStripeInstance } from '@/lib/stripe';
 import { logger } from '@/lib/logger';
 import { emailService } from '@/lib/notifications/email.service';
+import { z } from 'zod';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+
+const cancelBookingBodySchema = z.object({
+  reason: z.string().max(1000, 'Reason must not exceed 1000 characters').optional(),
+  refundPercentage: z.number().min(0).max(100).optional(),
+  adminReason: z.string().max(1000).optional(),
+  isDiscretionary: z.boolean().optional(),
+  adminNotes: z.string().max(2000).optional(),
+});
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ bookingId: string }> }
 ) {
   try {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.API_WRITE);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const { bookingId } = await params;
     const body = await request.json();
-    const { reason } = body;
+    const parsed = cancelBookingBodySchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
+    }
+    const { reason } = parsed.data;
 
     // Get user type
     const user = await db.user.findUnique({
@@ -27,7 +50,7 @@ export async function POST(
     });
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return ApiErrors.notFound('User not found');
     }
 
     // Get booking with payment info and user details
@@ -66,7 +89,7 @@ export async function POST(
     });
 
     if (!booking) {
-      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+      return ApiErrors.notFound('Booking not found');
     }
 
     // Check authorization
@@ -75,16 +98,16 @@ export async function POST(
     const isAdmin = user.userType === 'ADMIN';
 
     if (!isParent && !isCaregiver && !isAdmin) {
-      return NextResponse.json({ error: 'Not authorized to cancel this booking' }, { status: 403 });
+      return ApiErrors.forbidden('Not authorized to cancel this booking');
     }
 
     // Check if booking can be cancelled
     if (booking.status === 'CANCELLED') {
-      return NextResponse.json({ error: 'Booking is already cancelled' }, { status: 400 });
+      return ApiErrors.badRequest('Booking is already cancelled');
     }
 
     if (booking.status === 'COMPLETED') {
-      return NextResponse.json({ error: 'Cannot cancel a completed booking' }, { status: 400 });
+      return ApiErrors.badRequest('Cannot cancel a completed booking');
     }
 
     // Determine who is cancelling
@@ -119,8 +142,8 @@ export async function POST(
       }
     } else {
       // Admin cancellation - can set custom refund (capped at 0-100%)
-      refundPercentage = Math.min(100, Math.max(0, body.refundPercentage ?? 100));
-      refundReason = body.adminReason || 'Admin cancellation';
+      refundPercentage = Math.min(100, Math.max(0, parsed.data.refundPercentage ?? 100));
+      refundReason = parsed.data.adminReason || 'Admin cancellation';
     }
 
     // Get payment info
@@ -173,7 +196,7 @@ export async function POST(
 
           // If it's a transfer reversal issue, log but continue
           if (stripeError.code === 'charge_already_refunded') {
-            return NextResponse.json({ error: 'This booking has already been refunded' }, { status: 400 });
+            return ApiErrors.badRequest('This booking has already been refunded');
           }
 
           // For other errors, we might need to handle manually
@@ -199,8 +222,8 @@ export async function POST(
           caregiverAmountReversed,
           stripeRefundId,
           status: stripeRefundId ? 'COMPLETED' : (refundPercentage > 0 ? 'PENDING' : 'COMPLETED'),
-          isDiscretionary: isAdmin && body.isDiscretionary === true,
-          adminNotes: isAdmin ? body.adminNotes : null,
+          isDiscretionary: isAdmin && parsed.data.isDiscretionary === true,
+          adminNotes: isAdmin ? parsed.data.adminNotes ?? null : null,
           processedAt: stripeRefundId ? new Date() : null
         }
       });
@@ -278,30 +301,23 @@ export async function POST(
       logger.error('Failed to send cancellation emails', { bookingId, error: emailError });
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        booking: result.updatedBooking,
-        cancellation: result.cancellation,
-        refund: {
-          percentage: refundPercentage,
-          amount: refundAmount / 100, // Convert to dollars
-          platformFeeRefunded: platformFeeRefunded / 100,
-          caregiverAmountReversed: caregiverAmountReversed / 100,
-          stripeRefundId,
-          reason: refundReason
-        }
-      },
-      message: refundPercentage > 0
-        ? `Booking cancelled. ${refundPercentage}% refund ($${(refundAmount / 100).toFixed(2)}) will be processed.`
-        : 'Booking cancelled. No refund will be issued per cancellation policy.'
-    });
+    return apiSuccess({
+      booking: result.updatedBooking,
+      cancellation: result.cancellation,
+      refund: {
+        percentage: refundPercentage,
+        amount: refundAmount / 100, // Convert to dollars
+        platformFeeRefunded: platformFeeRefunded / 100,
+        caregiverAmountReversed: caregiverAmountReversed / 100,
+        stripeRefundId,
+        reason: refundReason
+      }
+    }, refundPercentage > 0
+      ? `Booking cancelled. ${refundPercentage}% refund ($${(refundAmount / 100).toFixed(2)}) will be processed.`
+      : 'Booking cancelled. No refund will be issued per cancellation policy.');
 
   } catch (error: any) {
     logger.error('Error cancelling booking:', error);
-    return NextResponse.json(
-      { error: 'Failed to cancel booking', details: error.message },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to cancel booking');
   }
 }

@@ -7,7 +7,7 @@ const CSRF_HEADER_NAME = 'x-csrf-token';
 
 // Only enforce secret requirement on the server side — client-side code only
 // reads tokens from cookies and doesn't need the secret
-if (typeof window === 'undefined' && !CSRF_SECRET) {
+if (typeof window === 'undefined' && !CSRF_SECRET && process.env.NEXT_PHASE !== 'phase-production-build') {
   throw new Error('CRITICAL: CSRF_SECRET or JWT_SECRET environment variable must be set');
 }
 

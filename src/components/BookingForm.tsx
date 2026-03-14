@@ -148,22 +148,22 @@ export default function BookingForm({
       {/* Back Button */}
       <button
         onClick={onBack}
-        className="flex items-center text-gray-600 hover:text-gray-900 mb-4 transition"
+        className="flex items-center text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white mb-4 transition"
       >
         <ArrowLeftIcon className="h-4 w-4 mr-2" />
         Back to Details
       </button>
 
       {/* Booking Summary */}
-      <div className="bg-gray-50 rounded-lg p-4 mb-6">
-        <h3 className="font-medium text-gray-900 mb-3">Booking Summary</h3>
-        <div className="space-y-2 text-sm">
+      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-6">
+        <h3 className="font-medium text-gray-900 dark:text-white mb-3">Booking Summary</h3>
+        <div className="space-y-2 text-sm dark:text-gray-200">
           <div className="flex justify-between">
-            <span className="text-gray-600">Caregiver:</span>
+            <span className="text-gray-600 dark:text-gray-300">Caregiver:</span>
             <span className="font-medium">{caregiver.name}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Date:</span>
+            <span className="text-gray-600 dark:text-gray-300">Date:</span>
             <span className="font-medium">
               {new Date(bookingDetails.date).toLocaleDateString('en-US', {
                 weekday: 'long',
@@ -174,26 +174,26 @@ export default function BookingForm({
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Time:</span>
+            <span className="text-gray-600 dark:text-gray-300">Time:</span>
             <span className="font-medium">
               {formatTime(bookingDetails.startTime)} - {formatTime(bookingDetails.endTime)}
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Duration:</span>
+            <span className="text-gray-600 dark:text-gray-300">Duration:</span>
             <span className="font-medium">{calculateHours()} hours</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Children:</span>
+            <span className="text-gray-600 dark:text-gray-300">Children:</span>
             <span className="font-medium">{getChildrenCount()}</span>
           </div>
           {bookingDetails.specialRequests && (
-            <div className="pt-2 border-t border-gray-200">
-              <span className="text-gray-600 text-xs block mb-1">Special Requests:</span>
+            <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
+              <span className="text-gray-600 dark:text-gray-300 text-xs block mb-1">Special Requests:</span>
               <span className="text-sm">{bookingDetails.specialRequests}</span>
             </div>
           )}
-          <div className="flex justify-between pt-2 border-t border-gray-200">
+          <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-600">
             <span className="font-medium">Total Amount:</span>
             <span className="font-bold text-lg">${(totalAmount / 100).toFixed(2)}</span>
           </div>
@@ -204,33 +204,33 @@ export default function BookingForm({
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
           <div className="flex items-center mb-3">
-            <CreditCardIcon className="h-5 w-5 text-gray-600 mr-2" />
-            <h3 className="text-lg font-medium text-gray-900">Payment Information</h3>
+            <CreditCardIcon className="h-5 w-5 text-gray-600 dark:text-gray-300 mr-2" />
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">Payment Information</h3>
           </div>
-          
+
           {isDemoMode ? (
-            <div className="p-6 border-2 border-dashed border-yellow-300 rounded-lg bg-yellow-50">
+            <div className="p-6 border-2 border-dashed border-yellow-300 dark:border-yellow-600 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
               <div className="text-center">
                 <div className="text-3xl mb-2">🎭</div>
-                <h4 className="text-lg font-medium text-yellow-800 mb-2">Demo Mode</h4>
-                <p className="text-yellow-700 text-sm mb-4">
+                <h4 className="text-lg font-medium text-yellow-800 dark:text-yellow-200 mb-2">Demo Mode</h4>
+                <p className="text-yellow-700 dark:text-yellow-300 text-sm mb-4">
                   This is a demonstration payment. No real money will be charged and no actual payment is processed.
                 </p>
-                <div className="bg-white p-3 rounded-lg border border-yellow-200">
-                  <p className="text-xs text-gray-600 mb-1">Demo Payment Details:</p>
-                  <div className="flex justify-between text-sm">
+                <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-yellow-200 dark:border-yellow-700">
+                  <p className="text-xs text-gray-600 dark:text-gray-300 mb-1">Demo Payment Details:</p>
+                  <div className="flex justify-between text-sm dark:text-gray-200">
                     <span>Amount:</span>
                     <span className="font-mono">${(totalAmount / 100).toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between text-sm dark:text-gray-200">
                     <span>Status:</span>
-                    <span className="text-green-600">✓ Simulated</span>
+                    <span className="text-green-600 dark:text-green-400">✓ Simulated</span>
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="p-4 border border-gray-200 rounded-lg">
+            <div className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg">
               <PaymentElement
                 options={{
                   layout: 'tabs',
@@ -241,25 +241,25 @@ export default function BookingForm({
         </div>
 
         {errorMessage && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-700 text-sm">{errorMessage}</p>
+          <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
+            <p className="text-red-700 dark:text-red-300 text-sm">{errorMessage}</p>
           </div>
         )}
 
         {/* Security Notice */}
-        <div className="flex items-start space-x-2 p-3 bg-green-50 rounded-lg">
-          <ShieldCheckIcon className="h-5 w-5 text-green-600 mt-0.5" />
+        <div className="flex items-start space-x-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+          <ShieldCheckIcon className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
           <div className="text-sm">
-            <p className="text-green-800 font-medium">Secure Payment</p>
-            <p className="text-green-700">
+            <p className="text-green-800 dark:text-green-200 font-medium">Secure Payment</p>
+            <p className="text-green-700 dark:text-green-300">
               Your payment is processed securely through Stripe. Funds are held in escrow until service completion.
             </p>
           </div>
         </div>
 
         {/* Payment Breakdown */}
-        <div className="bg-blue-50 rounded-lg p-3">
-          <div className="text-xs text-blue-800 space-y-1">
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
+          <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
             <div className="flex justify-between">
               <span>Service fee:</span>
               <span>${((totalAmount * (1 - commissionRate)) / 100).toFixed(2)}</span>
@@ -268,7 +268,7 @@ export default function BookingForm({
               <span>Platform fee ({Math.round(commissionRate * 100)}%):</span>
               <span>${((totalAmount * commissionRate) / 100).toFixed(2)}</span>
             </div>
-            <div className="border-t border-blue-200 pt-1 font-medium flex justify-between">
+            <div className="border-t border-blue-200 dark:border-blue-700 pt-1 font-medium flex justify-between">
               <span>Total:</span>
               <span>${(totalAmount / 100).toFixed(2)}</span>
             </div>
@@ -279,7 +279,7 @@ export default function BookingForm({
         <button
           type="submit"
           disabled={(!stripe || !elements || isProcessing) && !isDemoMode}
-          className="w-full bg-rose-500 hover:bg-rose-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition duration-150 flex items-center justify-center"
+          className="w-full bg-rose-500 hover:bg-rose-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition duration-150 flex items-center justify-center"
         >
           {isProcessing ? (
             <>
@@ -293,11 +293,11 @@ export default function BookingForm({
       </form>
 
       {/* Terms */}
-      <p className="text-xs text-gray-500 mt-4 text-center">
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-4 text-center">
         By proceeding with payment, you agree to our{' '}
-        <a href="/terms" className="text-rose-500 hover:text-rose-600">Terms of Service</a>{' '}
+        <a href="/terms" className="text-rose-500 dark:text-rose-400 hover:text-rose-600">Terms of Service</a>{' '}
         and{' '}
-        <a href="/privacy" className="text-rose-500 hover:text-rose-600">Privacy Policy</a>.
+        <a href="/privacy" className="text-rose-500 dark:text-rose-400 hover:text-rose-600">Privacy Policy</a>.
       </p>
     </div>
   );

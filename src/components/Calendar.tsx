@@ -19,7 +19,7 @@ function Calendar({ onDateSelect }: CalendarProps) {
     "July", "August", "September", "October", "November", "December"
   ];
 
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -91,7 +91,8 @@ function Calendar({ onDateSelect }: CalendarProps) {
     if (!selectedStartDate || !hoveredDate || !isSelectingEndDate) return false;
     const start = selectedStartDate;
     const end = hoveredDate;
-    return date >= start && date <= end && date !== start;
+    // Use .getTime() for value comparison — reference comparison (!==) always returns true for different Date objects
+    return date >= start && date <= end && date.getTime() !== start.getTime();
   };
 
   const isHoverEndDate = (date: Date) => {
@@ -125,13 +126,14 @@ function Calendar({ onDateSelect }: CalendarProps) {
     const days = getDaysInMonth(displayMonth);
 
     return (
-      <div className="flex-1">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+      <div className="flex-1 md:min-w-70">
+        <div className="flex items-center justify-between mb-3 sm:mb-4">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
             {monthNames[displayMonth.getMonth()]} {displayMonth.getFullYear()}
           </h3>
+          {/* Desktop: nav arrows on first month only */}
           {monthOffset === 0 && (
-            <div className="flex space-x-2">
+            <div className="hidden md:flex space-x-2">
               <button
                 onClick={() => navigateMonth('prev')}
                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all duration-200 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
@@ -156,9 +158,9 @@ function Calendar({ onDateSelect }: CalendarProps) {
           ))}
         </div>
 
-        <div className="grid grid-cols-7">
+        <div className="grid grid-cols-7 gap-0.5 md:gap-1">
           {days.map((date, index) => (
-            <div key={index} className="aspect-square relative">
+            <div key={index} className="aspect-square relative min-h-10 sm:min-h-0">
               {date ? (
                 <>
                   {/* Background highlighting for range */}
@@ -185,32 +187,20 @@ function Calendar({ onDateSelect }: CalendarProps) {
                     disabled={isPastDate(date)}
                     className={`
                       w-full h-full flex items-center justify-center text-sm font-medium transition-all duration-200 relative z-10
-                      ${isPastDate(date) 
-                        ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' 
-                        : 'hover:bg-rose-50 dark:hover:bg-rose-900/30 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer rounded-lg text-gray-700 dark:text-gray-300'
-                      }
-                      ${isStartDate(date) 
-                        ? 'bg-rose-500 dark:bg-rose-600 text-white hover:bg-rose-600 dark:hover:bg-rose-700 rounded-lg shadow-lg scale-110' 
-                        : ''
-                      }
-                      ${isEndDate(date) 
-                        ? 'bg-rose-500 dark:bg-rose-600 text-white hover:bg-rose-600 dark:hover:bg-rose-700 rounded-lg shadow-lg scale-110' 
-                        : ''
-                      }
-                      ${isHoverEndDate(date) && !isEndDate(date)
-                        ? 'bg-rose-400 dark:bg-rose-500 text-white rounded-lg shadow-md scale-105' 
-                        : ''
-                      }
-                      ${isMiddleDate(date) 
-                        ? 'bg-transparent text-rose-700 dark:text-rose-300 font-semibold hover:bg-rose-200 dark:hover:bg-rose-800/40 hover:rounded-lg' 
-                        : ''
-                      }
-                      ${isInHoverRange(date) && !isMiddleDate(date)
-                        ? 'bg-transparent text-rose-600 dark:text-rose-400 font-semibold hover:bg-rose-100 dark:hover:bg-rose-900/30' 
-                        : ''
+                      ${isPastDate(date)
+                        ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                        : isStartDate(date) || isEndDate(date)
+                          ? 'bg-rose-500 dark:bg-rose-600 text-white hover:bg-rose-600 dark:hover:bg-rose-700 rounded-lg shadow-lg scale-110 cursor-pointer font-bold'
+                          : isHoverEndDate(date)
+                            ? 'bg-rose-400 dark:bg-rose-500 text-white rounded-lg shadow-md scale-105 cursor-pointer'
+                            : isMiddleDate(date)
+                              ? 'text-rose-700 dark:text-rose-300 font-semibold hover:bg-rose-200 dark:hover:bg-rose-800/40 hover:rounded-lg cursor-pointer'
+                              : isInHoverRange(date)
+                                ? 'text-rose-600 dark:text-rose-400 font-semibold hover:bg-rose-100 dark:hover:bg-rose-900/30 cursor-pointer'
+                                : 'hover:bg-rose-50 dark:hover:bg-rose-900/30 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer rounded-lg text-gray-700 dark:text-gray-300'
                       }
                       ${isToday(date) && !isDateSelected(date) && !isHoverEndDate(date)
-                        ? 'ring-2 ring-rose-400 dark:ring-rose-500 ring-opacity-60' 
+                        ? 'ring-2 ring-rose-400 dark:ring-rose-500 ring-opacity-60'
                         : ''
                       }
                     `}
@@ -231,58 +221,78 @@ function Calendar({ onDateSelect }: CalendarProps) {
   };
 
   return (
-    <div className="p-6">
-      <div className="mb-6 text-center border-b border-gray-200 dark:border-gray-700 pb-4">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center justify-center">
-          📅 <span className="ml-2">When do you need childcare?</span>
+    <div className="p-3 sm:p-6 lg:p-8">
+      <div className="mb-4 sm:mb-6 text-center border-b border-gray-200 dark:border-gray-700 pb-3 sm:pb-4">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100 mb-1 sm:mb-2 flex items-center justify-center">
+          <span>When do you need childcare?</span>
         </h2>
-        <p className="text-gray-600 dark:text-gray-400 text-sm">
-          Click to select your start date, then click your end date. The full range will be highlighted.
+        <p className="text-gray-600 dark:text-gray-400 text-xs sm:text-sm">
+          Tap to select your start date, then tap your end date.
         </p>
         {selectedStartDate && !selectedEndDate && (
-          <p className="text-rose-600 dark:text-rose-400 text-sm mt-2 font-medium bg-rose-50 dark:bg-rose-900/20 px-3 py-2 rounded-lg inline-block">
-            ✨ Now select your end date
+          <p className="text-rose-600 dark:text-rose-400 text-xs sm:text-sm mt-2 font-medium bg-rose-50 dark:bg-rose-900/20 px-3 py-1.5 sm:py-2 rounded-lg inline-block">
+            Now select your end date
           </p>
         )}
       </div>
 
-      <div className="flex space-x-8">
+      {/* Mobile: single month, Desktop: two months side-by-side */}
+      <div className="flex flex-col md:flex-row md:space-x-8">
         {renderCalendar(0)}
-        {renderCalendar(1)}
+        <div className="hidden md:block md:flex-1">
+          {renderCalendar(1)}
+        </div>
       </div>
 
-      <div className="flex justify-between items-center mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-        <div className="text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700">
+      {/* Mobile: show nav arrows centered below calendar for second month access */}
+      <div className="flex md:hidden justify-center items-center mt-2 mb-2 space-x-4">
+        <button
+          onClick={() => navigateMonth('prev')}
+          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-600 dark:text-gray-400"
+        >
+          <ChevronLeftIcon className="h-5 w-5" />
+        </button>
+        <span className="text-sm text-gray-500 dark:text-gray-400">Swipe months</span>
+        <button
+          onClick={() => navigateMonth('next')}
+          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-600 dark:text-gray-400"
+        >
+          <ChevronRightIcon className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-gray-200 dark:border-gray-700">
+        <div className="text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 px-3 sm:px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 w-full sm:w-auto text-center">
           {selectedStartDate && selectedEndDate ? (
             <span className="font-medium text-gray-900 dark:text-gray-100">
-              📅 {selectedStartDate.toLocaleDateString()} - {selectedEndDate.toLocaleDateString()}
+              {selectedStartDate.toLocaleDateString()} - {selectedEndDate.toLocaleDateString()}
             </span>
           ) : selectedStartDate ? (
             <span className="font-medium text-gray-900 dark:text-gray-100">
-              📅 Start: {selectedStartDate.toLocaleDateString()}
+              Start: {selectedStartDate.toLocaleDateString()}
             </span>
           ) : (
-            <span>📅 Select dates</span>
+            <span>Select dates</span>
           )}
         </div>
-        
-        <div className="flex space-x-3">
+
+        <div className="flex space-x-3 w-full sm:w-auto">
           <button
             onClick={() => {
               setSelectedStartDate(null);
               setSelectedEndDate(null);
               setIsSelectingEndDate(false);
             }}
-            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600 transition-all duration-200"
+            className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600 transition-all duration-200"
           >
             Clear
           </button>
           <button
             onClick={() => onDateSelect?.(selectedStartDate, selectedEndDate)}
             disabled={!selectedStartDate || !selectedEndDate}
-            className="px-6 py-2 text-sm font-medium bg-rose-500 hover:bg-rose-600 dark:bg-rose-600 dark:hover:bg-rose-700 text-white rounded-lg disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl disabled:shadow-none"
+            className="flex-1 sm:flex-none px-6 py-2 text-sm font-medium bg-rose-500 hover:bg-rose-600 dark:bg-rose-600 dark:hover:bg-rose-700 text-white rounded-lg disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl disabled:shadow-none"
           >
-            {selectedStartDate && selectedEndDate ? '✅ Apply Dates' : 'Apply'}
+            {selectedStartDate && selectedEndDate ? 'Apply Dates' : 'Apply'}
           </button>
         </div>
       </div>

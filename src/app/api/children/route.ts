@@ -1,6 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth-middleware';
 import { db } from '@/lib/db';
+import { z } from 'zod';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+
+const emergencyContactSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1, 'Contact name is required').max(200, 'Contact name too long').trim(),
+  relationship: z.string().min(1, 'Relationship is required').max(100, 'Relationship too long').trim(),
+  phone: z.string().min(7, 'Phone number must be at least 7 characters').max(20, 'Phone number too long').trim(),
+  email: z.string().email('Invalid email').max(200, 'Email too long').optional().or(z.literal('')),
+  canPickup: z.boolean().optional().default(false),
+});
+
+const createChildSchema = z.object({
+  firstName: z.string().min(1, 'First name is required').max(100, 'First name too long').trim(),
+  lastName: z.string().min(1, 'Last name is required').max(100, 'Last name too long').trim(),
+  dateOfBirth: z.string().min(1, 'Date of birth is required'),
+  gender: z.string().max(50, 'Gender too long').nullish(),
+  allergies: z.any().optional(),
+  medications: z.any().optional(),
+  medicalConditions: z.any().optional(),
+  emergencyMedicalInfo: z.string().max(1000, 'Emergency medical info too long').nullish(),
+  bloodType: z.string().max(10, 'Blood type too long').nullish(),
+  emergencyContacts: z.array(emergencyContactSchema).min(1, 'At least one emergency contact is required'),
+  dietaryRestrictions: z.any().optional(),
+  specialInstructions: z.string().max(1000, 'Special instructions too long').nullish(),
+  pickupInstructions: z.string().max(1000, 'Pickup instructions too long').nullish(),
+  photoUrl: z.string().url('Invalid photo URL').max(500, 'Photo URL too long').nullish(),
+});
 
 // Force dynamic rendering - don't cache this route
 export const dynamic = 'force-dynamic';
@@ -18,20 +47,11 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' }
     });
 
-    return NextResponse.json({
-      success: true,
-      data: children
-    });
+    return apiSuccess(children);
 
   } catch (error) {
     console.error('Error fetching children:', error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Failed to fetch children profiles' 
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch children profiles');
   }
 }
 
@@ -41,6 +61,14 @@ export async function POST(request: NextRequest) {
   process.stderr.write(`[POST /api/children] Request received at ${new Date().toISOString()}\n`);
   console.log('[POST /api/children] Request received');
   try {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.API_WRITE);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
     process.stderr.write('[POST /api/children] Calling withAuth...\n');
     console.log('[POST /api/children] Calling withAuth...');
     const authResult = await withAuth(request, 'PARENT');
@@ -51,6 +79,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    const parsed = createChildSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
+    }
+
     const {
       firstName,
       lastName,
@@ -66,18 +99,7 @@ export async function POST(request: NextRequest) {
       specialInstructions,
       pickupInstructions,
       photoUrl
-    } = body;
-
-    // Validate required fields
-    if (!firstName || !lastName || !dateOfBirth) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'First name, last name, and date of birth are required' 
-        },
-        { status: 400 }
-      );
-    }
+    } = parsed.data;
 
     const child = await db.child.create({
       data: {
@@ -99,20 +121,10 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({
-      success: true,
-      data: child,
-      message: 'Child profile created successfully'
-    });
+    return apiSuccess(child, 'Child profile created successfully');
 
   } catch (error) {
     console.error('Error creating child profile:', error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Failed to create child profile' 
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to create child profile');
   }
 }

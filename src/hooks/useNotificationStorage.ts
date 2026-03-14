@@ -5,6 +5,16 @@ import { notificationStorage, StoredNotification } from '../lib/notification-sto
 import { useAuth } from '../contexts/AuthContext';
 import { addCSRFHeader } from '../lib/csrf';
 
+// Map DB notification types to the UI category used for icons
+function mapNotificationType(dbType: string): StoredNotification['type'] {
+  const lower = dbType.toLowerCase();
+  if (lower.includes('booking') || lower.includes('extension')) return 'booking';
+  if (lower.includes('payment') || lower.includes('payout')) return 'payment';
+  if (lower.includes('message') || lower.includes('chat')) return 'message';
+  if (lower.includes('caregiver') || lower.includes('account_approved')) return 'caregiver';
+  return 'system';
+}
+
 export function useNotificationStorage() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<StoredNotification[]>([]);
@@ -23,7 +33,18 @@ export function useNotificationStorage() {
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          setNotifications(data.notifications);
+          // Map DB notification fields to StoredNotification shape
+          const mapped: StoredNotification[] = (data.data.notifications || []).map((n: any) => ({
+            id: n.id,
+            type: mapNotificationType(n.type || ''),
+            title: n.title,
+            message: n.message,
+            timestamp: n.timestamp || n.createdAt,
+            read: n.isRead ?? n.read ?? false,
+            actionUrl: n.resourceId ? undefined : undefined,
+            data: { resourceType: n.resourceType, resourceId: n.resourceId },
+          }));
+          setNotifications(mapped);
         }
       }
     } catch (error) {
@@ -65,8 +86,8 @@ export function useNotificationStorage() {
       
       if (response.ok) {
         // Update local state immediately for better UX
-        setNotifications(prev => prev.map(n => 
-          n.id === notificationId ? { ...n, isRead: true, readAt: new Date().toISOString() } : n
+        setNotifications(prev => prev.map(n =>
+          n.id === notificationId ? { ...n, read: true } : n
         ));
       }
     } catch (error) {
@@ -86,14 +107,10 @@ export function useNotificationStorage() {
         headers,
         body: JSON.stringify({ markAllAsRead: true }),
       });
-      
+
       if (response.ok) {
         // Update local state immediately for better UX
-        setNotifications(prev => prev.map(n => ({ 
-          ...n, 
-          isRead: true, 
-          readAt: new Date().toISOString() 
-        })));
+        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
       }
     } catch (error) {
       console.error('Failed to mark all notifications as read:', error);

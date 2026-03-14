@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
+import { requirePermission } from '@/lib/adminAuth';
 import { logger } from '@/lib/logger';
 import { emailService } from '@/lib/notifications/email.service';
 import { logAuditEvent, AuditActions } from '@/lib/audit-log';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 // GET - Get all warnings for a caregiver
 export async function GET(
@@ -12,20 +12,8 @@ export async function GET(
   { params }: { params: Promise<{ caregiverId: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Check if admin
-    const user = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: { userType: true }
-    });
-
-    if (user?.userType !== 'ADMIN') {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-    }
+    const permCheck = await requirePermission(request, 'canManageWarnings');
+    if (!permCheck.authorized) return permCheck.response!;
 
     const { caregiverId } = await params;
 
@@ -37,21 +25,15 @@ export async function GET(
     // Count active warnings
     const activeCount = warnings.filter(w => w.isActive).length;
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        warnings,
-        activeCount,
-        isReviewRequired: activeCount >= 3
-      }
+    return apiSuccess({
+      warnings,
+      activeCount,
+      isReviewRequired: activeCount >= 3
     });
 
   } catch (error) {
     logger.error('Error fetching caregiver warnings:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch warnings' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch warnings');
   }
 }
 
@@ -61,20 +43,8 @@ export async function POST(
   { params }: { params: Promise<{ caregiverId: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Check if admin
-    const user = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: { userType: true }
-    });
-
-    if (user?.userType !== 'ADMIN') {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-    }
+    const permCheck = await requirePermission(request, 'canManageWarnings');
+    if (!permCheck.authorized) return permCheck.response!;
 
     const { caregiverId } = await params;
     const body = await request.json();
@@ -82,10 +52,7 @@ export async function POST(
 
     // Validate required fields
     if (!warningType || !description) {
-      return NextResponse.json(
-        { error: 'Warning type and description are required' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Warning type and description are required');
     }
 
     // Verify caregiver exists
@@ -104,7 +71,7 @@ export async function POST(
     });
 
     if (!caregiver) {
-      return NextResponse.json({ error: 'Caregiver not found' }, { status: 404 });
+      return ApiErrors.notFound('Caregiver not found');
     }
 
     // Count existing active warnings
@@ -126,7 +93,7 @@ export async function POST(
         bookingId: bookingId || null,
         ticketId: ticketId || null,
         strikeNumber: newStrikeNumber,
-        issuedBy: session.user.id,
+        issuedBy: permCheck.user!.id,
         isActive: true,
         expiresAt: expiresAt ? new Date(expiresAt) : null
       }
@@ -137,13 +104,13 @@ export async function POST(
       warningId: warning.id,
       strikeNumber: newStrikeNumber,
       warningType,
-      issuedBy: session.user.id
+      issuedBy: permCheck.user!.id
     });
 
     // Persistent audit log
     logAuditEvent({
-      adminId: session.user.id,
-      adminEmail: session.user.email!,
+      adminId: permCheck.user!.id,
+      adminEmail: permCheck.user!.email!,
       action: AuditActions.CAREGIVER_WARNING_ISSUED,
       resource: 'caregiver',
       resourceId: caregiverId,
@@ -194,25 +161,18 @@ export async function POST(
       logger.error('Failed to send warning email', { caregiverId, error: emailError });
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        warning,
-        totalActiveWarnings: newStrikeNumber,
-        reviewRequired,
-        statusUpdated
-      },
-      message: reviewRequired
-        ? `Warning issued. Caregiver has ${newStrikeNumber} active warnings and requires admin review.`
-        : `Warning issued. Caregiver now has ${newStrikeNumber} active warning(s).`
-    });
+    return apiSuccess({
+      warning,
+      totalActiveWarnings: newStrikeNumber,
+      reviewRequired,
+      statusUpdated
+    }, reviewRequired
+      ? `Warning issued. Caregiver has ${newStrikeNumber} active warnings and requires admin review.`
+      : `Warning issued. Caregiver now has ${newStrikeNumber} active warning(s).`);
 
   } catch (error) {
     logger.error('Error issuing caregiver warning:', error);
-    return NextResponse.json(
-      { error: 'Failed to issue warning' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to issue warning');
   }
 }
 
@@ -222,27 +182,15 @@ export async function DELETE(
   { params }: { params: Promise<{ caregiverId: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Check if admin
-    const user = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: { userType: true }
-    });
-
-    if (user?.userType !== 'ADMIN') {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-    }
+    const permCheck = await requirePermission(request, 'canManageWarnings');
+    if (!permCheck.authorized) return permCheck.response!;
 
     const { caregiverId } = await params;
     const { searchParams } = new URL(request.url);
     const warningId = searchParams.get('warningId');
 
     if (!warningId) {
-      return NextResponse.json({ error: 'Warning ID is required' }, { status: 400 });
+      return ApiErrors.badRequest('Warning ID is required');
     }
 
     // Verify warning belongs to this caregiver
@@ -254,7 +202,7 @@ export async function DELETE(
     });
 
     if (!warning) {
-      return NextResponse.json({ error: 'Warning not found' }, { status: 404 });
+      return ApiErrors.notFound('Warning not found');
     }
 
     // Deactivate warning
@@ -266,19 +214,13 @@ export async function DELETE(
     logger.info('Caregiver warning deactivated', {
       caregiverId,
       warningId,
-      deactivatedBy: session.user.id
+      deactivatedBy: permCheck.user!.id
     });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Warning deactivated successfully'
-    });
+    return apiSuccess(undefined, 'Warning deactivated successfully');
 
   } catch (error) {
     logger.error('Error deactivating warning:', error);
-    return NextResponse.json(
-      { error: 'Failed to deactivate warning' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to deactivate warning');
   }
 }

@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { withAuth } from '@/lib/auth-middleware';
+import { requirePermission } from '@/lib/adminAuth';
 import { logger, getClientInfo } from '@/lib/logger';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 // Get detailed chat room info for admin
 export async function GET(
@@ -9,22 +10,14 @@ export async function GET(
   { params }: { params: Promise<{ roomId: string }> }
 ) {
   try {
-    // ✅ STEP 1: Require ADMIN authentication (REMOVE adminUserId query param vulnerability)
-    const authResult = await withAuth(request, 'ADMIN');
-    if (!authResult.isAuthorized) {
-      const clientInfo = getClientInfo(request);
-      logger.security('Unauthorized admin chat room access attempt', {
-        endpoint: '/api/admin/chat/[roomId]',
-        ip: clientInfo.ip,
-        userAgent: clientInfo.userAgent
-      });
-      return authResult.response;
-    }
+    // STEP 1: Require admin authentication with permission check
+    const permCheck = await requirePermission(request, 'canModerateChat');
+    if (!permCheck.authorized) return permCheck.response!;
 
-    const adminUser = authResult.user!;
+    const adminUser = permCheck.user!;
     const { roomId } = await params;
 
-    // ✅ Log admin action for audit trail
+    // Log admin action for audit trail
     logger.audit('Admin accessed chat room details', {
       adminId: adminUser.id,
       adminEmail: adminUser.email,
@@ -32,7 +25,7 @@ export async function GET(
     });
 
     // Get detailed chat room information
-    console.log('🔍 Fetching chat room:', roomId);
+    console.log('Fetching chat room:', roomId);
 
     const chatRoom = await db.chatRoom.findUnique({
       where: { id: roomId },
@@ -48,16 +41,16 @@ export async function GET(
     });
 
     if (!chatRoom) {
-      console.log('❌ Chat room not found');
+      console.log('Chat room not found');
       logger.security('Admin attempted to access non-existent chat room', {
         adminId: adminUser.id,
         roomId
       });
-      return NextResponse.json({ error: 'Chat room not found' }, { status: 404 });
+      return ApiErrors.notFound('Chat room not found');
     }
 
-    console.log('✅ Chat room found, fetching participants...');
-    
+    console.log('Chat room found, fetching participants...');
+
     // Fetch parent and caregiver separately
     const [parent, caregiver] = await Promise.all([
       db.user.findUnique({
@@ -71,11 +64,11 @@ export async function GET(
     ]);
 
     if (!parent || !caregiver) {
-      console.log('❌ Missing participants:', { parent: !!parent, caregiver: !!caregiver });
-      return NextResponse.json({ error: 'Participants not found' }, { status: 404 });
+      console.log('Missing participants:', { parent: !!parent, caregiver: !!caregiver });
+      return ApiErrors.notFound('Participants not found');
     }
 
-    console.log('✅ All data fetched, formatting response...');
+    console.log('All data fetched, formatting response...');
 
     // Format for admin view
     const adminView = {
@@ -122,16 +115,13 @@ export async function GET(
       }))
     };
 
-    return NextResponse.json(adminView);
+    return apiSuccess(adminView);
   } catch (error) {
     console.error('Error fetching admin chat details:', error);
     logger.error('Failed to fetch admin chat room details', {
       error: error instanceof Error ? error.message : 'Unknown error'
     });
-    return NextResponse.json(
-      { error: 'Failed to fetch chat details' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch chat details');
   }
 }
 
@@ -141,24 +131,16 @@ export async function PUT(
   { params }: { params: Promise<{ roomId: string }> }
 ) {
   try {
-    // ✅ STEP 1: Require ADMIN authentication (REMOVE adminUserId query param vulnerability)
-    const authResult = await withAuth(request, 'ADMIN');
-    if (!authResult.isAuthorized) {
-      const clientInfo = getClientInfo(request);
-      logger.security('Unauthorized admin chat room action attempt', {
-        endpoint: '/api/admin/chat/[roomId]',
-        ip: clientInfo.ip,
-        userAgent: clientInfo.userAgent
-      });
-      return authResult.response;
-    }
+    // STEP 1: Require admin authentication with permission check
+    const permCheck = await requirePermission(request, 'canModerateChat');
+    if (!permCheck.authorized) return permCheck.response!;
 
-    const adminUser = authResult.user!;
+    const adminUser = permCheck.user!;
     const body = await request.json();
     const { roomId } = await params;
     const { action, reason } = body;
 
-    // ✅ Log admin action for audit trail
+    // Log admin action for audit trail
     logger.audit('Admin chat room action', {
       adminId: adminUser.id,
       adminEmail: adminUser.email,
@@ -173,11 +155,11 @@ export async function PUT(
           where: { id: roomId },
           data: { isActive: false }
         });
-        
+
         // Create audit log using session admin ID
         await db.notification.create({
           data: {
-            userId: adminUser.id, // ✅ Use session admin ID, not client-provided
+            userId: adminUser.id, // Use session admin ID, not client-provided
             type: 'admin_action',
             title: 'Chat Room Disabled',
             message: `Chat room ${roomId} disabled by admin. Reason: ${reason || 'No reason provided'}`,
@@ -192,10 +174,10 @@ export async function PUT(
           where: { id: roomId },
           data: { isActive: true }
         });
-        
+
         await db.notification.create({
           data: {
-            userId: adminUser.id, // ✅ Use session admin ID, not client-provided
+            userId: adminUser.id, // Use session admin ID, not client-provided
             type: 'admin_action',
             title: 'Chat Room Enabled',
             message: `Chat room ${roomId} enabled by admin. Reason: ${reason || 'No reason provided'}`,
@@ -206,18 +188,15 @@ export async function PUT(
         break;
 
       default:
-        return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+        return ApiErrors.badRequest('Invalid action');
     }
 
-    return NextResponse.json({ success: true, action, roomId });
+    return apiSuccess({ action, roomId });
   } catch (error) {
     console.error('Error performing admin action:', error);
     logger.error('Failed to perform admin chat room action', {
       error: error instanceof Error ? error.message : 'Unknown error'
     });
-    return NextResponse.json(
-      { error: 'Failed to perform admin action' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to perform admin action');
   }
 }

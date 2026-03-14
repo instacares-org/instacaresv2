@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
@@ -13,6 +13,7 @@ import {
   checkUploadRateLimit,
 } from '@/lib/file-upload-validation';
 import { logger } from '@/lib/logger';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 const ALLOWED_DOCUMENT_TYPES = [
   'governmentIdFront',
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
   try {
     session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     // Check rate limiting
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
     // Validate file upload with comprehensive security checks
     const validation = await validateFileUpload(file, {
       allowedTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'],
-      maxSizeBytes: 10 * 1024 * 1024, // 10MB for documents
+      maxSizeBytes: 50 * 1024 * 1024, // 50MB - modern phone photos can be very large
       checkMagicBytes: true,
     });
 
@@ -82,10 +83,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!babysitter) {
-      return NextResponse.json(
-        { error: 'Babysitter profile not found. Please complete registration first.' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Babysitter profile not found. Please complete registration first.');
     }
 
     // Generate secure unique filename
@@ -178,8 +176,7 @@ export async function POST(request: NextRequest) {
       processedSize: processedBuffer.length,
     });
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       documentType,
       documentUrl,
       hasRequiredDocs,
@@ -198,9 +195,6 @@ export async function POST(request: NextRequest) {
       userId: session?.user?.id,
       email: session?.user?.email,
     });
-    return NextResponse.json(
-      { error: 'Failed to upload document' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to upload document');
   }
 }

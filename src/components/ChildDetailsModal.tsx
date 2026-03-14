@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import { Dialog, Transition } from '@headlessui/react';
 import {
   XMarkIcon,
@@ -47,6 +48,33 @@ interface ChildDetailsModalProps {
   parentName: string;
 }
 
+// Safely coerce a value that may be a JSON string, array, or other type into an array
+function ensureArray<T = string>(val: unknown): T[] {
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string') {
+    if (!val.trim()) return [];
+    try {
+      const parsed = JSON.parse(val);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [val as T];
+    }
+  }
+  return [];
+}
+
+// Normalize child data fields that may be stored as JSON strings in the DB
+function normalizeChild(child: Child): Child {
+  return {
+    ...child,
+    allergies: ensureArray(child.allergies),
+    medications: ensureArray(child.medications),
+    medicalConditions: ensureArray(child.medicalConditions),
+    dietaryRestrictions: ensureArray(child.dietaryRestrictions),
+    emergencyContacts: ensureArray(child.emergencyContacts),
+  };
+}
+
 export default function ChildDetailsModal({
   isOpen,
   onClose,
@@ -79,7 +107,7 @@ export default function ChildDetailsModal({
         throw new Error(data.error || 'Failed to fetch children');
       }
 
-      setChildren(data.data || []);
+      setChildren((data.data || []).map(normalizeChild));
       setSelectedChildIndex(0);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load children');
@@ -410,8 +438,10 @@ export default function ChildDetailsModal({
                           {/* Basic Info */}
                           <div className="flex items-start space-x-4">
                             {selectedChild.photoUrl ? (
-                              <img
+                              <Image
                                 src={selectedChild.photoUrl}
+                                width={80}
+                                height={80}
                                 alt={selectedChild.firstName}
                                 className="w-20 h-20 rounded-full object-cover border-4 border-blue-100 dark:border-blue-900"
                               />

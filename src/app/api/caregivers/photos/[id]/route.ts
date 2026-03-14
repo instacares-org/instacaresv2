@@ -1,40 +1,35 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 import { db } from '@/lib/db';
-import { headers } from 'next/headers';
-import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
-interface JWTPayload {
-  userId: string;
-  userType: string;
-}
+import { getToken } from 'next-auth/jwt';
 
 async function authenticateCaregiver(request: NextRequest) {
-  const headersList = await headers();
-  const cookieHeader = headersList.get('cookie');
-  
-  if (!cookieHeader) {
-    return null;
-  }
-  
-  const tokenMatch = cookieHeader.match(/auth-token=([^;]+)/);
-  if (!tokenMatch) {
-    return null;
-  }
-  
   try {
-    const payload = jwt.verify(tokenMatch[1], JWT_SECRET) as JWTPayload;
-    if (payload.userType !== 'CAREGIVER') {
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+      secureCookie: process.env.NODE_ENV === 'production',
+    });
+
+    if (!token) {
       return null;
     }
-    
+
+    const userId = (token.userId as string) || token.sub;
+    if (!userId) {
+      return null;
+    }
+
     const user = await db.user.findUnique({
-      where: { id: payload.userId },
+      where: { id: userId },
       include: { caregiver: true }
     });
-    
-    return user?.caregiver || null;
+
+    if (!user || (!user.isCaregiver && user.userType !== 'CAREGIVER')) {
+      return null;
+    }
+
+    return user.caregiver || null;
   } catch {
     return null;
   }
@@ -47,7 +42,7 @@ export async function PATCH(
   try {
     const caregiver = await authenticateCaregiver(request);
     if (!caregiver) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const { id } = await params;
@@ -57,20 +52,20 @@ export async function PATCH(
 
     // Verify photo belongs to caregiver
     const photo = await db.caregiverPhoto.findFirst({
-      where: { 
+      where: {
         id,
-        caregiverId: caregiver.id 
+        caregiverId: caregiver.id
       }
     });
 
     if (!photo) {
-      return NextResponse.json({ error: 'Photo not found' }, { status: 404 });
+      return ApiErrors.notFound('Photo not found');
     }
 
     // If setting as profile photo, unset other profile photos
     if (isProfile) {
       await db.caregiverPhoto.updateMany({
-        where: { 
+        where: {
           caregiverId: caregiver.id,
           isProfile: true,
           id: { not: id }
@@ -88,15 +83,10 @@ export async function PATCH(
       }
     });
 
-    return NextResponse.json({
-      success: true,
-      photo: updatedPhoto
-    });
+    return apiSuccess({ photo: updatedPhoto });
 
   } catch (error) {
     console.error('Photo update error:', error);
-    return NextResponse.json({ 
-      error: 'Failed to update photo' 
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to update photo');
   }
 }

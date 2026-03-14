@@ -1,15 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { metrics } from "@/lib/metrics";
-import { stripe, getCommissionRate, DEFAULT_COMMISSION_RATE } from '@/lib/stripe';
+import { getStripeInstance, getCommissionRate, DEFAULT_COMMISSION_RATE } from '@/lib/stripe';
 import { bookingOperations, paymentOperations } from '@/lib/db';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { ConfirmPaymentSchema, validateRequest } from '@/lib/api-validation';
 import { notificationService } from '@/lib/notifications/notification.service';
-import { prisma } from '@/lib/database';
+import { prisma } from '@/lib/db';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
+import { decryptField } from '@/lib/field-encryption';
 
 export async function POST(request: NextRequest) {
   try {
+    // --- RATE LIMITING ---
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.PAYMENT);
+    if (!rateLimitResult.success) {
+      return ApiErrors.tooManyRequests('Too many requests. Please try again later.');
+    }
+
     // Parse request body
     const requestBody = await request.json();
 
@@ -23,13 +32,7 @@ export async function POST(request: NextRequest) {
         userAgent: request.headers.get('user-agent')
       });
 
-      return NextResponse.json(
-        {
-          error: 'Invalid payment confirmation data',
-          details: validation.errors
-        },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Invalid payment confirmation data', validation.errors);
     }
 
     const { paymentIntentId } = validation.data;
@@ -37,18 +40,45 @@ export async function POST(request: NextRequest) {
     // Verify authentication
     const session = await getServerSession(authOptions);
     if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
+    }
+
+    // Check if this payment has already been confirmed (prevent duplicate processing)
+    // Check both payment records AND bookings to catch race conditions where the
+    // booking was created but payment record hasn't been committed yet.
+    const [existingPayment, existingBooking] = await Promise.all([
+      prisma.payment.findFirst({
+        where: { stripePaymentIntentId: paymentIntentId },
+        include: { booking: true }
+      }),
+      prisma.booking.findFirst({
+        where: { payments: { some: { stripePaymentIntentId: paymentIntentId } } },
+      }),
+    ]);
+
+    if (existingPayment || existingBooking) {
+      console.log(`[Payment] Payment ${paymentIntentId} already confirmed, returning existing booking`);
+      const booking = existingPayment?.booking || existingBooking;
+      return apiSuccess({
+        id: paymentIntentId,
+        status: 'succeeded',
+        amount: existingPayment?.amount || 0,
+        bookingId: existingPayment?.bookingId || existingBooking?.id,
+        metadata: booking ? {
+          caregiverName: '',
+          bookingDate: '',
+          startTime: '',
+          endTime: '',
+          childrenCount: String(booking.childrenCount),
+        } : {},
+        alreadyConfirmed: true,
+      }, 'Payment already confirmed');
     }
 
     // Retrieve the payment intent to get its current status
+    const stripe = getStripeInstance();
     if (!stripe) {
-      return NextResponse.json(
-        { error: 'Stripe is not configured' },
-        { status: 500 }
-      );
+      return ApiErrors.internal('Stripe is not configured');
     }
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
@@ -143,7 +173,7 @@ export async function POST(request: NextRequest) {
             });
 
             console.error('Could not find caregiver for booking:', { caregiverName, metadata });
-            return NextResponse.json({
+            return apiSuccess({
               id: paymentIntent.id,
               status: paymentIntent.status,
               amount: paymentIntent.amount,
@@ -178,7 +208,8 @@ export async function POST(request: NextRequest) {
 
           console.log('Booking created successfully:', booking.id);
 
-          // Create the payment record
+          // Create the payment record (unique constraint on stripePaymentIntentId
+          // prevents true duplicates if a race condition slips past the check above)
           try {
             const caregiverPayout = totalAmount - platformFee;
             const payment = await paymentOperations.createPayment({
@@ -200,10 +231,18 @@ export async function POST(request: NextRequest) {
               }
             });
             console.log('Booking status updated to CONFIRMED');
-          } catch (paymentError) {
+          } catch (paymentError: any) {
+            // If unique constraint violation, this is a duplicate — clean up orphaned booking
+            if (paymentError?.code === 'P2002') {
+              console.log(`[Payment] Duplicate detected for ${paymentIntentId}, cleaning up orphaned booking ${booking.id}`);
+              await prisma.booking.delete({ where: { id: booking.id } }).catch(() => {});
+              return apiSuccess({
+                id: paymentIntentId,
+                status: 'succeeded',
+                alreadyConfirmed: true,
+              }, 'Payment already confirmed');
+            }
             console.error('Error creating payment record:', paymentError);
-            // Don't fail the entire flow if payment record creation fails
-            // The booking was created, which is the most important part
           }
 
           // Send notifications to both parent and caregiver
@@ -253,9 +292,16 @@ export async function POST(request: NextRequest) {
               ? `${parentUser.profile.firstName} ${parentUser.profile.lastName}`
               : session.user.name || 'Parent';
 
-            // Fetch children details for the parent (for caregiver notification)
+            // Fetch only the selected children for this booking (not all parent's children)
+            const selectedChildIdStr = metadata.selectedChildIds || '';
+            const selectedChildIds = selectedChildIdStr ? selectedChildIdStr.split(',').filter(Boolean) : [];
+
+            const childQuery = selectedChildIds.length > 0
+              ? { parentId: session.user.id, id: { in: selectedChildIds } }
+              : { parentId: session.user.id };
+
             const parentChildren = await prisma.child.findMany({
-              where: { parentId: session.user.id },
+              where: childQuery,
               select: {
                 id: true,
                 firstName: true,
@@ -266,6 +312,26 @@ export async function POST(request: NextRequest) {
                 specialInstructions: true,
               }
             });
+
+            // Helper to format a Json? field into a readable string
+            const formatJsonField = (value: unknown): string | undefined => {
+              if (!value) return undefined;
+              // Encrypted string — decrypt it
+              if (typeof value === 'string') {
+                if (value.startsWith('enc:')) return decryptField(value) || undefined;
+                return value;
+              }
+              // JSON array — join items
+              if (Array.isArray(value)) {
+                const items = value.filter(Boolean);
+                return items.length > 0 ? items.join(', ') : undefined;
+              }
+              // JSON object — stringify
+              if (typeof value === 'object') {
+                return JSON.stringify(value);
+              }
+              return String(value);
+            };
 
             // Calculate age from date of birth
             const childrenWithAge = parentChildren.map(child => {
@@ -280,8 +346,8 @@ export async function POST(request: NextRequest) {
                 firstName: child.firstName,
                 lastName: child.lastName || undefined,
                 age,
-                allergies: child.allergies || undefined,
-                medicalConditions: child.medicalConditions || undefined,
+                allergies: formatJsonField(child.allergies),
+                medicalConditions: formatJsonField(child.medicalConditions),
                 specialInstructions: child.specialInstructions || undefined,
               };
             });
@@ -344,7 +410,7 @@ export async function POST(request: NextRequest) {
             console.error('[NOTIFICATION] Error sending booking notifications:', notificationError);
           }
 
-          return NextResponse.json({
+          return apiSuccess({
             id: paymentIntent.id,
             status: paymentIntent.status,
             amount: paymentIntent.amount,
@@ -352,25 +418,17 @@ export async function POST(request: NextRequest) {
             transferData: paymentIntent.transfer_data,
             metadata: paymentIntent.metadata,
             bookingId: booking.id,
-            message: 'Payment confirmed and booking created'
-          });
+          }, 'Payment confirmed and booking created');
 
         } catch (bookingError) {
           console.error('Error creating booking:', bookingError);
           // Payment succeeded but booking creation failed
-          return NextResponse.json({
-            id: paymentIntent.id,
-            status: paymentIntent.status,
-            amount: paymentIntent.amount,
-            metadata: paymentIntent.metadata,
-            error: 'Payment succeeded but booking creation failed',
-            details: process.env.NODE_ENV === 'development' ? (bookingError as Error).message : undefined
-          }, { status: 500 });
+          return ApiErrors.internal('Payment succeeded but booking creation failed');
         }
       }
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       id: paymentIntent.id,
       status: paymentIntent.status,
       amount: paymentIntent.amount,
@@ -380,9 +438,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Payment confirmation error:', error);
-    return NextResponse.json(
-      { error: 'Failed to confirm payment status' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to confirm payment status');
   }
 }

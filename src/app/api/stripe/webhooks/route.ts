@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiError, ApiErrors } from '@/lib/api-utils';
 import Stripe from 'stripe';
 import { stripe } from '@/lib/stripe';
 import { headers } from 'next/headers';
@@ -12,10 +13,7 @@ export async function POST(request: NextRequest) {
 
   try {
     if (!stripe) {
-      return NextResponse.json(
-        { error: 'Stripe is not configured' },
-        { status: 500 }
-      );
+      return ApiErrors.internal('Stripe is not configured');
     }
     event = stripe.webhooks.constructEvent(
       body,
@@ -24,10 +22,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (err: unknown) {
     console.error('Webhook signature verification failed:', err instanceof Error ? err.message : String(err));
-    return NextResponse.json(
-      { error: 'Invalid signature' },
-      { status: 400 }
-    );
+    return ApiErrors.badRequest('Invalid signature');
   }
 
   // Handle the event
@@ -85,10 +80,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error('Error processing webhook:', error);
-    return NextResponse.json(
-      { error: 'Webhook processing failed' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Webhook processing failed');
   }
 }
 
@@ -97,11 +89,26 @@ async function handleSuccessfulPayment(paymentIntent: Stripe.PaymentIntent) {
     paymentIntentId: paymentIntent.id,
     amount: paymentIntent.amount,
     applicationFeeAmount: paymentIntent.application_fee_amount,
-    transferDestination: paymentIntent.transfer_data?.destination,
-    metadata: paymentIntent.metadata,
+    type: paymentIntent.metadata?.type || 'booking',
   });
-  
+
+  // Route extension payments to the dedicated handler
+  if (paymentIntent.metadata?.type === 'booking_extension') {
+    await handleExtensionPayment(paymentIntent);
+    return;
+  }
+
   try {
+    // --- Idempotency check: skip if this PaymentIntent was already processed ---
+    const { default: db } = await import('@/lib/db');
+    const existingPayment = await db.payment.findUnique({
+      where: { stripePaymentIntentId: paymentIntent.id },
+    });
+    if (existingPayment) {
+      console.log('Duplicate webhook detected (payment already exists), skipping:', paymentIntent.id);
+      return;
+    }
+
     const metadata = paymentIntent.metadata;
 
     // Extract booking details from metadata
@@ -119,8 +126,8 @@ async function handleSuccessfulPayment(paymentIntent: Stripe.PaymentIntent) {
     const longitude = metadata.longitude ? parseFloat(metadata.longitude) : undefined;
 
     if (!caregiverId || !parentEmail || !bookingDate) {
-      console.error('Missing required booking metadata:', metadata);
-      return;
+      // Throw so the outer handler returns 500 → Stripe retries the webhook
+      throw new Error(`Missing required booking metadata for payment ${paymentIntent.id}`);
     }
 
     // Find parent user by email
@@ -128,8 +135,8 @@ async function handleSuccessfulPayment(paymentIntent: Stripe.PaymentIntent) {
     const parent = await userOperations.findUserByEmail(parentEmail);
 
     if (!parent) {
-      console.error('Parent not found for email:', parentEmail);
-      return;
+      // Throw so Stripe retries — parent account may not be synced yet
+      throw new Error(`Parent not found for payment ${paymentIntent.id}`);
     }
 
     // Handle multi-day vs single-day bookings with proper timezone handling
@@ -244,15 +251,201 @@ async function handleSuccessfulPayment(paymentIntent: Stripe.PaymentIntent) {
   }
 }
 
+async function handleExtensionPayment(paymentIntent: Stripe.PaymentIntent) {
+  const extensionId = paymentIntent.metadata.extensionId;
+
+  console.log('[Webhook] Processing extension payment:', {
+    paymentIntentId: paymentIntent.id,
+    extensionId,
+    amount: paymentIntent.amount,
+  });
+
+  if (!extensionId) {
+    console.error('[Webhook] Extension payment missing extensionId in metadata:', paymentIntent.id);
+    return;
+  }
+
+  try {
+    const { default: db } = await import('@/lib/db');
+
+    // Fetch the extension with its booking data for totals update
+    const extension = await db.bookingExtension.findUnique({
+      where: { id: extensionId },
+      include: {
+        booking: {
+          select: {
+            id: true,
+            parentId: true,
+            caregiverId: true,
+            totalHours: true,
+            subtotal: true,
+            platformFee: true,
+            totalAmount: true,
+          },
+        },
+      },
+    });
+
+    if (!extension) {
+      console.error('[Webhook] BookingExtension not found for extensionId:', extensionId);
+      return;
+    }
+
+    // Idempotency: if the extension is already PAID, skip duplicate processing
+    if (extension.status === 'PAID') {
+      console.log('[Webhook] Extension already PAID, skipping duplicate webhook:', extensionId);
+      return;
+    }
+
+    // Update the extension record to PAID
+    await db.bookingExtension.update({
+      where: { id: extensionId },
+      data: {
+        status: 'PAID',
+        stripePaymentIntentId: paymentIntent.id,
+        paidAt: new Date(),
+      },
+    });
+
+    console.log('[Webhook] Extension marked as PAID:', extensionId);
+
+    // Update the booking totals to reflect the extension
+    const extensionHours = extension.extensionMinutes / 60;
+
+    await db.booking.update({
+      where: { id: extension.bookingId },
+      data: {
+        endTime: extension.newEndTime,
+        totalHours: extension.booking.totalHours + extensionHours,
+        subtotal: extension.booking.subtotal + extension.extensionAmount,
+        platformFee: extension.booking.platformFee + extension.platformFee,
+        totalAmount: extension.booking.totalAmount + extension.extensionAmount,
+      },
+    });
+
+    console.log('[Webhook] Booking totals updated for extension:', extension.bookingId);
+
+    // Notify the parent that the extension payment was confirmed
+    await db.notification.create({
+      data: {
+        userId: extension.booking.parentId,
+        type: 'PAYMENT_RECEIVED',
+        title: 'Extension Payment Confirmed',
+        message: `Your payment of $${(extension.extensionAmount / 100).toFixed(2)} for the ${extension.extensionMinutes}-minute extension has been confirmed.`,
+        resourceType: 'booking_extension',
+        resourceId: extension.id,
+      },
+    });
+
+    // Notify the caregiver that the extension has been approved and paid
+    await db.notification.create({
+      data: {
+        userId: extension.booking.caregiverId,
+        type: 'BOOKING_UPDATE',
+        title: 'Extension Approved & Paid',
+        message: `The ${extension.extensionMinutes}-minute extension has been approved and paid. The booking has been extended.`,
+        resourceType: 'booking_extension',
+        resourceId: extension.id,
+      },
+    });
+
+    console.log('[Webhook] Extension payment fully processed:', extensionId);
+  } catch (error: unknown) {
+    console.error(
+      '[Webhook] Error processing extension payment:',
+      error instanceof Error ? error.message : String(error)
+    );
+    throw error; // Re-throw so the outer handler returns 500 and Stripe retries
+  }
+}
+
 async function handleFailedPayment(failedPayment: Stripe.PaymentIntent) {
   console.log('Processing failed payment:', {
     paymentIntentId: failedPayment.id,
-    lastPaymentError: failedPayment.last_payment_error,
-    metadata: failedPayment.metadata,
+    lastPaymentError: failedPayment.last_payment_error?.code,
   });
-  
+
+  // Handle extension payment failures
+  if (failedPayment.metadata?.type === 'booking_extension') {
+    await handleExtensionPaymentFailed(failedPayment);
+    return;
+  }
+
   // Send failure notification to parent
   // Update booking status to 'payment_failed'
+}
+
+async function handleExtensionPaymentFailed(failedPayment: Stripe.PaymentIntent) {
+  const extensionId = failedPayment.metadata.extensionId;
+
+  console.log('[Webhook] Processing failed extension payment:', {
+    paymentIntentId: failedPayment.id,
+    extensionId,
+    errorCode: failedPayment.last_payment_error?.code,
+  });
+
+  if (!extensionId) {
+    console.error('[Webhook] Failed extension payment missing extensionId in metadata:', failedPayment.id);
+    return;
+  }
+
+  try {
+    const { default: db } = await import('@/lib/db');
+
+    const extension = await db.bookingExtension.findUnique({
+      where: { id: extensionId },
+      include: {
+        booking: {
+          select: {
+            parentId: true,
+          },
+        },
+      },
+    });
+
+    if (!extension) {
+      console.error('[Webhook] BookingExtension not found for failed payment, extensionId:', extensionId);
+      return;
+    }
+
+    // If already in a terminal state, skip
+    if (extension.status === 'PAID' || extension.status === 'FAILED') {
+      console.log('[Webhook] Extension already in terminal state, skipping:', extensionId, extension.status);
+      return;
+    }
+
+    // Mark the extension as FAILED
+    await db.bookingExtension.update({
+      where: { id: extensionId },
+      data: {
+        status: 'FAILED',
+        stripePaymentIntentId: failedPayment.id,
+      },
+    });
+
+    console.log('[Webhook] Extension marked as FAILED:', extensionId);
+
+    // Notify the parent about the failed payment
+    const errorMessage = failedPayment.last_payment_error?.message || 'Your payment could not be processed';
+    await db.notification.create({
+      data: {
+        userId: extension.booking.parentId,
+        type: 'PAYMENT_FAILED',
+        title: 'Extension Payment Failed',
+        message: `The payment of $${(extension.extensionAmount / 100).toFixed(2)} for the ${extension.extensionMinutes}-minute extension failed. ${errorMessage}. Please update your payment method and try again.`,
+        resourceType: 'booking_extension',
+        resourceId: extension.id,
+      },
+    });
+
+    console.log('[Webhook] Parent notified of failed extension payment:', extensionId);
+  } catch (error: unknown) {
+    console.error(
+      '[Webhook] Error handling failed extension payment:',
+      error instanceof Error ? error.message : String(error)
+    );
+    throw error; // Re-throw so Stripe retries
+  }
 }
 
 async function handleAccountUpdate(account: Stripe.Account) {

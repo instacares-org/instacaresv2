@@ -3,13 +3,16 @@ import GoogleProvider from "next-auth/providers/google";
 import FacebookProvider from "next-auth/providers/facebook";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { prisma } from "@/lib/database";
+import { prisma } from "@/lib/db";
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
+import { verifySync as otpVerifySync } from 'otplib';
 
 import { metrics } from "@/lib/metrics";
 import { emailService } from "@/lib/notifications/email.service";
 import { logAuditEvent, AuditActions } from "@/lib/audit-log";
+import { getRedisClient } from "@/lib/redis";
+import { decryptField, isEncrypted } from "@/lib/field-encryption";
 
 // Helper function to check if a user profile is complete
 // Returns true if all required fields are filled
@@ -39,8 +42,29 @@ const isProfileComplete = (profile: {
 const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION = 15 * 60 * 1000; // 15 minutes
+const LOCKOUT_SECONDS = Math.floor(LOCKOUT_DURATION / 1000); // 900 seconds
 
-const checkRateLimit = (email: string) => {
+const checkRateLimit = async (email: string): Promise<{ allowed: boolean }> => {
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      const key = `login-attempts:${email}`;
+      const count = await redis.get<number>(key);
+      if (count !== null && count >= MAX_LOGIN_ATTEMPTS) {
+        const ttl = await redis.ttl(key);
+        if (ttl > 0) {
+          return { allowed: false };
+        }
+        // TTL expired or key has no expiry; allow the attempt
+        await redis.del(key);
+      }
+      return { allowed: true };
+    } catch {
+      // Redis error — fall through to in-memory logic
+    }
+  }
+
+  // In-memory fallback
   const now = Date.now();
   const attempts = loginAttempts.get(email) || { count: 0, lastAttempt: 0 };
 
@@ -55,7 +79,23 @@ const checkRateLimit = (email: string) => {
   return { allowed: true };
 };
 
-const recordFailedAttempt = (email: string) => {
+const recordFailedAttempt = async (email: string): Promise<void> => {
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      const key = `login-attempts:${email}`;
+      const newCount = await redis.incr(key);
+      if (newCount === 1) {
+        // First failed attempt — set the expiry window
+        await redis.expire(key, LOCKOUT_SECONDS);
+      }
+      return;
+    } catch {
+      // Redis error — fall through to in-memory logic
+    }
+  }
+
+  // In-memory fallback
   const now = Date.now();
   const attempts = loginAttempts.get(email) || { count: 0, lastAttempt: 0 };
   attempts.count += 1;
@@ -63,7 +103,18 @@ const recordFailedAttempt = (email: string) => {
   loginAttempts.set(email, attempts);
 };
 
-const resetFailedAttempts = (email: string) => {
+const resetFailedAttempts = async (email: string): Promise<void> => {
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      await redis.del(`login-attempts:${email}`);
+      return;
+    } catch {
+      // Redis error — fall through to in-memory logic
+    }
+  }
+
+  // In-memory fallback
   loginAttempts.delete(email);
 };
 
@@ -75,7 +126,8 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
-        userType: { label: "User Type", type: "text" }
+        userType: { label: "User Type", type: "text" },
+        twoFactorToken: { label: "2FA Token", type: "text" }
       },
       async authorize(credentials) {
 
@@ -87,7 +139,7 @@ export const authOptions: NextAuthOptions = {
           const email = credentials.email.toLowerCase();
 
           // Rate limiting check
-          const rateLimitResult = checkRateLimit(email);
+          const rateLimitResult = await checkRateLimit(email);
           if (!rateLimitResult.allowed) {
             logAuditEvent({
               adminId: email,
@@ -110,7 +162,7 @@ export const authOptions: NextAuthOptions = {
           });
 
           if (!user) {
-            recordFailedAttempt(email);
+            await recordFailedAttempt(email);
             logAuditEvent({
               adminId: email,
               adminEmail: email,
@@ -129,7 +181,7 @@ export const authOptions: NextAuthOptions = {
             if (credentials.userType === 'babysitter') {
               // Babysitters must have isBabysitter=true AND userType='CAREGIVER'
               if (!user.isBabysitter || user.userType !== 'CAREGIVER') {
-                recordFailedAttempt(email);
+                await recordFailedAttempt(email);
                 metrics.authFailure("invalid_credentials");
                 return null;
               }
@@ -138,8 +190,11 @@ export const authOptions: NextAuthOptions = {
                                      credentials.userType === 'caregiver' ? 'CAREGIVER' :
                                      credentials.userType === 'admin' ? 'ADMIN' : null;
 
-              if (expectedUserType && user.userType !== expectedUserType) {
-                recordFailedAttempt(email);
+              // Allow SUPERVISOR to log in via admin login form
+              if (expectedUserType === 'ADMIN' && user.userType === 'SUPERVISOR') {
+                // Supervisor logging in via /login/admin — allowed
+              } else if (expectedUserType && user.userType !== expectedUserType) {
+                await recordFailedAttempt(email);
                 metrics.authFailure("invalid_credentials");
                 return null;
               }
@@ -148,7 +203,7 @@ export const authOptions: NextAuthOptions = {
 
           // Verify password
           if (!user.passwordHash || typeof user.passwordHash !== 'string') {
-            recordFailedAttempt(email);
+            await recordFailedAttempt(email);
           // Track failed authentication
           metrics.authFailure("invalid_credentials");
           return null;
@@ -156,7 +211,7 @@ export const authOptions: NextAuthOptions = {
 
           const isValidPassword = await bcrypt.compare(credentials.password, user.passwordHash);
           if (!isValidPassword) {
-            recordFailedAttempt(email);
+            await recordFailedAttempt(email);
             logAuditEvent({
               adminId: user.id,
               adminEmail: email,
@@ -174,11 +229,6 @@ export const authOptions: NextAuthOptions = {
             throw new Error('Account is deactivated. Please contact support.');
           }
 
-          // Allow PENDING caregivers to login and complete their profile
-          if (user.approvalStatus === 'PENDING' && user.userType !== 'CAREGIVER') {
-            throw new Error('Account is pending approval. You will be notified once approved.');
-          }
-
           if (user.approvalStatus === 'REJECTED') {
             throw new Error('Account has been rejected. Please contact support for more information.');
           }
@@ -187,8 +237,36 @@ export const authOptions: NextAuthOptions = {
             throw new Error('Account is suspended. Please contact support for assistance.');
           }
 
+          // ── Two-Factor Authentication check ───────────────────
+          if (user.twoFactorEnabled && user.twoFactorSecret) {
+            const twoFactorToken = credentials.twoFactorToken;
+
+            if (!twoFactorToken) {
+              // No 2FA token provided — signal to the frontend that 2FA is required.
+              // This error is intentionally re-thrown (not caught by the generic catch below)
+              // so that NextAuth surfaces it as an error message the client can detect.
+              throw new Error('2FA_REQUIRED');
+            }
+
+            // Verify the provided 2FA token
+            const sanitizedToken = twoFactorToken.replace(/[\s-]/g, '');
+            if (!/^\d{6}$/.test(sanitizedToken)) {
+              throw new Error('Invalid 2FA code format');
+            }
+
+            const secret = isEncrypted(user.twoFactorSecret)
+              ? decryptField(user.twoFactorSecret)
+              : user.twoFactorSecret;
+
+            const otpResult = otpVerifySync({ token: sanitizedToken, secret });
+            if (!otpResult.valid) {
+              await recordFailedAttempt(email);
+              throw new Error('Invalid 2FA code');
+            }
+          }
+
           // Reset failed attempts on successful login
-          resetFailedAttempts(email);
+          await resetFailedAttempts(email);
 
           // Audit log for successful login
           logAuditEvent({
@@ -221,16 +299,30 @@ export const authOptions: NextAuthOptions = {
             caregiver: user.caregiver,
             isBabysitter: user.isBabysitter,
             babysitter: user.babysitter,
+            mustChangePassword: user.mustChangePassword,
             // Dual-role support - include from database
             isParent: user.isParent,
             isCaregiver: user.isCaregiver,
             activeRole: user.activeRole || user.userType, // Default to userType if activeRole not set
           };
         } catch (error) {
-          // Return null instead of throwing to prevent NextAuth from crashing
+          // Re-throw intentional errors so NextAuth can surface them to the client.
+          // These include 2FA_REQUIRED, account status messages, and invalid 2FA codes.
+          if (error instanceof Error && (
+            error.message === '2FA_REQUIRED' ||
+            error.message === 'Invalid 2FA code' ||
+            error.message === 'Invalid 2FA code format' ||
+            error.message.startsWith('Account is') ||
+            error.message.startsWith('Account has') ||
+            error.message.startsWith('Too many login')
+          )) {
+            throw error;
+          }
+
+          // For unexpected errors, return null to prevent NextAuth from crashing
           const email = credentials?.email?.toLowerCase();
           if (email) {
-            recordFailedAttempt(email);
+            await recordFailedAttempt(email);
           }
           return null;
         }
@@ -389,6 +481,7 @@ export const authOptions: NextAuthOptions = {
       // The session callback runs server-side, but the client only receives what's in the token
       if (token) {
         session.user.needsProfileCompletion = token.needsProfileCompletion as boolean;
+        session.user.mustChangePassword = token.mustChangePassword as boolean;
         session.user.isParent = token.isParent as boolean;
         session.user.isCaregiver = token.isCaregiver as boolean;
         session.user.isBabysitter = token.isBabysitter as boolean;
@@ -409,6 +502,7 @@ export const authOptions: NextAuthOptions = {
               userType: true,
               approvalStatus: true,
               isActive: true,
+              mustChangePassword: true,
               caregiver: true,
               // Dual role support
               isParent: true,
@@ -420,24 +514,31 @@ export const authOptions: NextAuthOptions = {
 
           if (dbUser) {
             // Add profile completion status to session - override token value with fresh DB check
-            const profileComplete = isProfileComplete(dbUser.profile);
+            // ADMIN/SUPERVISOR users never need profile completion - they use the admin dashboard
+            const isAdmin = ['ADMIN', 'SUPERVISOR'].includes((dbUser.activeRole || dbUser.userType) as string);
+            const profileComplete = isAdmin || isProfileComplete(dbUser.profile);
             const needsCompletion = !profileComplete;
 
             // Build the session user object explicitly with spread to ensure all fields are included
+            // ADMIN/SUPERVISOR always use their real userType (activeRole is for parent/caregiver switching)
+            const effectiveUserType = ['ADMIN', 'SUPERVISOR'].includes(dbUser.userType)
+              ? dbUser.userType
+              : (dbUser.activeRole || dbUser.userType);
             session.user = {
               ...session.user,
               id: dbUser.id,
               profile: dbUser.profile,
-              userType: dbUser.activeRole || dbUser.userType, // Use activeRole as current effective userType
+              userType: effectiveUserType,
               approvalStatus: dbUser.approvalStatus,
               isActive: dbUser.isActive,
               caregiver: dbUser.caregiver,
               needsProfileCompletion: needsCompletion,
+              mustChangePassword: dbUser.mustChangePassword,
               // Dual role support
               isParent: dbUser.isParent,
               isCaregiver: dbUser.isCaregiver,
               isBabysitter: dbUser.isBabysitter,
-              activeRole: dbUser.activeRole || dbUser.userType,
+              activeRole: effectiveUserType,
             };
 
           }
@@ -461,6 +562,7 @@ export const authOptions: NextAuthOptions = {
           token.profile = (user as any).profile;
           token.caregiver = (user as any).caregiver;
           token.needsProfileCompletion = false; // Credentials users have complete profiles
+          token.mustChangePassword = (user as any).mustChangePassword || false;
           // Dual role support for credentials provider
           token.isParent = (user as any).isParent;
           token.isCaregiver = (user as any).isCaregiver;
@@ -478,6 +580,7 @@ export const authOptions: NextAuthOptions = {
                 userType: true,
                 approvalStatus: true,
                 isActive: true,
+                mustChangePassword: true,
                 // Dual role support
                 isParent: true,
                 isCaregiver: true,
@@ -499,12 +602,14 @@ export const authOptions: NextAuthOptions = {
               token.userType = dbUser.userType;
               token.approvalStatus = dbUser.approvalStatus;
               token.isActive = dbUser.isActive;
+              token.mustChangePassword = dbUser.mustChangePassword;
               // Dual role support - store in JWT token
               token.isParent = dbUser.isParent;
               token.isCaregiver = dbUser.isCaregiver;
               token.activeRole = dbUser.activeRole;
               // Check if OAuth user needs to complete their profile
-              token.needsProfileCompletion = !isProfileComplete(dbUser.profile);
+              // ADMIN/SUPERVISOR users never need profile completion
+              token.needsProfileCompletion = ['ADMIN', 'SUPERVISOR'].includes(dbUser.userType) ? false : !isProfileComplete(dbUser.profile);
             }
           } catch (error) {
             // Default to requiring profile completion if we can't check
@@ -520,6 +625,7 @@ export const authOptions: NextAuthOptions = {
             select: {
               approvalStatus: true,
               isActive: true,
+              mustChangePassword: true,
               // Dual role support - refresh on every request
               isParent: true,
               isCaregiver: true,
@@ -541,14 +647,19 @@ export const authOptions: NextAuthOptions = {
           if (dbUser) {
             token.approvalStatus = dbUser.approvalStatus;
             token.isActive = dbUser.isActive;
+            token.mustChangePassword = dbUser.mustChangePassword;
             // Dual role support - update on every request
             token.isParent = dbUser.isParent;
             token.isCaregiver = dbUser.isCaregiver;
             token.isBabysitter = dbUser.isBabysitter;
             token.activeRole = dbUser.activeRole;
-            token.userType = dbUser.activeRole || dbUser.userType;
-            // Update profile completion status
-            token.needsProfileCompletion = !isProfileComplete(dbUser.profile);
+            // ADMIN/SUPERVISOR always use their real userType (activeRole is for parent/caregiver switching)
+            token.userType = ['ADMIN', 'SUPERVISOR'].includes(dbUser.userType)
+              ? dbUser.userType
+              : (dbUser.activeRole || dbUser.userType);
+            // Update profile completion status - ADMIN/SUPERVISOR users never need profile completion
+            const effectiveType = token.userType as string;
+            token.needsProfileCompletion = ['ADMIN', 'SUPERVISOR'].includes(effectiveType as string) ? false : !isProfileComplete(dbUser.profile);
           }
         } catch (error) {
           // Silently fail - keep existing token values

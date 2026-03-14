@@ -2,10 +2,18 @@
 
 import { useState } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
+import type { Stripe } from '@stripe/stripe-js';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { addCSRFHeader } from '@/lib/csrf';
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+// Lazy-load Stripe.js only when needed (not at module level)
+let stripePromise: Promise<Stripe | null> | null = null;
+const getStripePromise = () => {
+  if (!stripePromise) {
+    stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+  }
+  return stripePromise;
+};
 
 interface TipButtonProps {
   bookingId: string;
@@ -186,7 +194,7 @@ function TipButtonContent({ bookingId, caregiverName, onSuccess }: TipButtonProp
 
 export default function TipButton(props: TipButtonProps) {
   return (
-    <Elements stripe={stripePromise}>
+    <Elements stripe={getStripePromise()}>
       <TipButtonContent {...props} />
     </Elements>
   );

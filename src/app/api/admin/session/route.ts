@@ -1,17 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { verifyAdminAuth, logAdminAction, getAdminPermissions } from '@/lib/adminAuth';
-import { prisma } from '@/lib/database';
+import { prisma } from '@/lib/db';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 // GET /api/admin/session - Get current admin session info
 export async function GET(request: NextRequest) {
   try {
     const authResult = await verifyAdminAuth(request);
-    
+
     if (!authResult.success) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const adminUser = authResult.user!;
@@ -24,15 +22,12 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    if (!user || user.userType !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Admin user not found' },
-        { status: 404 }
-      );
+    if (!user || !['ADMIN', 'SUPERVISOR'].includes(user.userType)) {
+      return ApiErrors.notFound('Admin user not found');
     }
 
-    // Get admin permissions
-    const permissions = getAdminPermissions(adminUser);
+    // Get permissions (async — DB-driven for supervisors)
+    const permissions = await getAdminPermissions({ ...adminUser, userType: user.userType });
 
     // Get recent admin activity (commenting out for now as adminLog table doesn't exist)
     // const recentActivity = await prisma.adminLog.findMany({
@@ -61,8 +56,7 @@ export async function GET(request: NextRequest) {
       timestamp: new Date()
     });
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       admin: {
         id: user.id,
         email: user.email,
@@ -81,10 +75,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Error getting admin session:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return ApiErrors.internal();
   }
 }
 
@@ -94,10 +85,7 @@ export async function POST(request: NextRequest) {
     const authResult = await verifyAdminAuth(request);
     
     if (!authResult.success) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const adminUser = authResult.user!;
@@ -119,17 +107,12 @@ export async function POST(request: NextRequest) {
       timestamp: new Date()
     });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Session extended',
+    return apiSuccess({
       expiresIn: '7d' // JWT token expiry
-    });
+    }, 'Session extended');
 
   } catch (error) {
     console.error('Error extending admin session:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return ApiErrors.internal();
   }
 }

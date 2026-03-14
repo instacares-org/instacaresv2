@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
@@ -13,6 +13,7 @@ import {
   checkUploadRateLimit,
 } from '@/lib/file-upload-validation';
 import { logger } from '@/lib/logger';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
 export async function POST(request: NextRequest) {
   let session: any = null;
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
     // Verify authentication using NextAuth
     session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     // Check rate limiting
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
     // Validate file upload with comprehensive security checks
     const validation = await validateFileUpload(file, {
       allowedTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
-      maxSizeBytes: 5 * 1024 * 1024, // 5MB
+      maxSizeBytes: 50 * 1024 * 1024, // 50MB - modern phone photos can be very large
       checkMagicBytes: true, // Verify file content matches declared type
     });
 
@@ -142,8 +143,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       avatarUrl,
       user: {
         id: user!.id,
@@ -159,9 +159,6 @@ export async function POST(request: NextRequest) {
       userId: session?.user?.id,
       email: session?.user?.email,
     });
-    return NextResponse.json(
-      { error: 'Failed to upload avatar' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to upload avatar');
   }
 }

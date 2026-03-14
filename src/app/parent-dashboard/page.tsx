@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useMemo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import AddressAutocomplete from '@/components/AddressAutocomplete';
 import SignupModal from '@/components/SignupModal';
@@ -36,7 +36,6 @@ import { addCSRFHeader } from '@/lib/csrf';
 import OrganizedMessagesContainer from '../../components/OrganizedMessagesContainer';
 import { SocketProvider } from '../../context/SocketContext';
 import { CSRFTokenProvider } from '../../components/security/CSRFTokenProvider';
-import NotificationSettings from '../../components/NotificationSettings';
 import NotificationInitializer from '../../components/NotificationInitializer';
 import { useUnreadMessageCount } from '../../hooks/useUnreadMessageCount';
 import { useBookingUnreadCounts } from '../../hooks/useBookingUnreadCounts';
@@ -46,6 +45,8 @@ import ReviewList from '../../components/ReviewList';
 import ChildProfile from '../../components/ChildProfile';
 import ThemeToggle from '../../components/ThemeToggle';
 import UserSupportTickets from '../../components/UserSupportTickets';
+import ExtensionPaymentBanner from '../../components/ExtensionPaymentBanner';
+import { useUserTimezone } from '../../hooks/useUserTimezone';
 // Dynamic import for BookingChatModal to reduce initial bundle size (socket.io-client)
 const BookingChatModal = dynamic(() => import('../../components/BookingChatModal'), {
   loading: () => null,
@@ -174,6 +175,7 @@ const ParentDashboardContent: React.FC = () => {
   const [editingChild, setEditingChild] = useState<Child | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
+  const { timezone: userTimezone } = useUserTimezone();
 
   // Chat modal state
   const [showChatModal, setShowChatModal] = useState(false);
@@ -304,87 +306,34 @@ const ParentDashboardContent: React.FC = () => {
       fetchDashboardData();
     }
   }, [user, authLoading]);
-  // Clean up old sample data - run once per user
-  useEffect(() => {
-    if (user) {
-      const cleanupVersion = localStorage.getItem(`cleanup-v1-${user.id}`);
-      
-      if (!cleanupVersion) {
-        // Remove old notification initialization flag
-        localStorage.removeItem(`notifications-initialized-${user.id}`);
-        
-        // Clear all notifications for this user to remove sample notifications
-        const storageKey = `notifications-${user.id}`;
-        const stored = localStorage.getItem(storageKey);
-        if (stored) {
-          try {
-            const allNotifications = JSON.parse(stored);
-            // Remove sample notifications (Emily Davis, Jennifer Chen)
-            const cleanedNotifications = allNotifications.filter((n: any) => 
-              !n.message?.includes('Emily Davis') && 
-              !n.message?.includes('Jennifer Chen') &&
-              !n.title?.includes('Booking Confirmed')
-            );
-            localStorage.setItem(storageKey, JSON.stringify(cleanedNotifications));
-          } catch (e) {
-            console.error('Error cleaning notifications:', e);
-          }
-        }
-        
-        // Mark cleanup as done
-        localStorage.setItem(`cleanup-v1-${user.id}`, 'true');
-        
-        // Force reload to fetch fresh data
-        window.location.reload();
-      }
-    }
-  }, [user?.id]);
-
-
-  // Initialize welcome notifications for new users (separate effect to avoid infinite loop)
-  useEffect(() => {
-    if (user && notifications.length === 0) {
-      // Use a flag to prevent multiple executions
-      const notificationInitialized = localStorage.getItem(`notifications-initialized-${user.id}`);
-      
-      if (!notificationInitialized) {
-        // Add welcome notification for new users
-        addSystemNotification('Welcome to Instacares!', 'Thank you for joining Instacares. You can now book trusted caregivers for your children.');
-
-        // Mark as initialized
-        localStorage.setItem(`notifications-initialized-${user.id}`, 'true');
-      }
-    }
-  }, [user?.id, notifications.length]); // Only depend on user.id and notification count
-
   // Fetch children from API
-  const fetchChildren = async () => {
+  const fetchChildren = useCallback(async () => {
     if (!user) return [];
-    
+
     try {
       const response = await fetch('/api/children');
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch children');
       }
-      
+
       const result = await response.json();
-      
+
       if (result.success && result.data) {
         return result.data;
       }
-      
+
       return [];
     } catch (error) {
       console.error('Error fetching children:', error);
       return [];
     }
-  };
+  }, [user]);
 
   // Fetch bookings from API
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
     if (!user) return [];
-    
+
     try {
       console.log('🔍 Fetching bookings for user:', user.id);
       const response = await fetch(`/api/bookings?userId=${user.id}&userType=parent`);
@@ -405,16 +354,15 @@ const ParentDashboardContent: React.FC = () => {
         return result.data.map((booking: any) => {
           const startDate = new Date(booking.startTime);
           const endDate = new Date(booking.endTime);
-          
-          // Format date as YYYY-MM-DD using local timezone to avoid timezone shifts
-          const year = startDate.getFullYear();
-          const month = String(startDate.getMonth() + 1).padStart(2, '0');
-          const day = String(startDate.getDate()).padStart(2, '0');
-          const date = `${year}-${month}-${day}`;
-          
-          // Format times as HH:MM using local timezone
-          const startTime = startDate.toTimeString().substring(0, 5);
-          const endTime = endDate.toTimeString().substring(0, 5);
+
+          // Format date as YYYY-MM-DD using user's timezone to avoid UTC day shifts
+          const dateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: userTimezone, year: 'numeric', month: '2-digit', day: '2-digit' });
+          const date = dateFormatter.format(startDate); // en-CA gives YYYY-MM-DD format
+
+          // Format times as HH:MM using user's timezone
+          const timeFormatter = new Intl.DateTimeFormat('en-US', { timeZone: userTimezone, hour: '2-digit', minute: '2-digit', hour12: false });
+          const startTime = timeFormatter.format(startDate);
+          const endTime = timeFormatter.format(endDate);
           
           return {
             id: booking.id,
@@ -444,10 +392,10 @@ const ParentDashboardContent: React.FC = () => {
       console.error('Error fetching bookings:', error);
       return [];
     }
-  };
+  }, [user, userTimezone]);
 
   // Fetch fresh profile data directly from API to avoid stale session data
-  const fetchFreshProfileData = async () => {
+  const fetchFreshProfileData = useCallback(async () => {
     try {
       const response = await fetch('/api/profile', {
         method: 'GET',
@@ -459,13 +407,13 @@ const ParentDashboardContent: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         console.log('🏠 Fresh profile data from API:', {
-          streetAddress: data.profile?.streetAddress,
-          city: data.profile?.city,
-          state: data.profile?.state,
-          zipCode: data.profile?.zipCode,
-          fullProfile: data.profile
+          streetAddress: data.data?.profile?.streetAddress,
+          city: data.data?.profile?.city,
+          state: data.data?.profile?.state,
+          zipCode: data.data?.profile?.zipCode,
+          fullProfile: data.data?.profile
         });
-        return data.profile;
+        return data.data?.profile;
       } else {
         console.warn('❌ Profile API returned non-OK status:', response.status);
       }
@@ -473,9 +421,9 @@ const ParentDashboardContent: React.FC = () => {
       console.warn('Failed to fetch fresh profile, using session data:', error);
     }
     return null;
-  };
+  }, []);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -555,9 +503,9 @@ const ParentDashboardContent: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, fetchFreshProfileData, fetchBookings, fetchChildren]);
 
-  const updateProfile = async (updatedProfile: ParentProfile) => {
+  const updateProfile = useCallback(async (updatedProfile: ParentProfile) => {
     try {
       let addressResult = null;
 
@@ -593,14 +541,14 @@ const ParentDashboardContent: React.FC = () => {
       const updatedProfileWithServerData = {
         ...updatedProfile,
         address: {
-          street: addressResult?.profile?.streetAddress || updatedProfile.address?.street || '',
-          apartment: addressResult?.profile?.apartment || updatedProfile.address?.apartment || '',
-          city: addressResult?.profile?.city || updatedProfile.address?.city || '',
-          province: addressResult?.profile?.state || updatedProfile.address?.province || '',
-          postalCode: addressResult?.profile?.zipCode || updatedProfile.address?.postalCode || '',
-          country: addressResult?.profile?.country || updatedProfile.address?.country || 'Canada',
-          latitude: addressResult?.profile?.latitude || updatedProfile.address?.latitude,
-          longitude: addressResult?.profile?.longitude || updatedProfile.address?.longitude
+          street: addressResult?.data?.profile?.streetAddress || updatedProfile.address?.street || '',
+          apartment: addressResult?.data?.profile?.apartment || updatedProfile.address?.apartment || '',
+          city: addressResult?.data?.profile?.city || updatedProfile.address?.city || '',
+          province: addressResult?.data?.profile?.state || updatedProfile.address?.province || '',
+          postalCode: addressResult?.data?.profile?.zipCode || updatedProfile.address?.postalCode || '',
+          country: addressResult?.data?.profile?.country || updatedProfile.address?.country || 'Canada',
+          latitude: addressResult?.data?.profile?.latitude || updatedProfile.address?.latitude,
+          longitude: addressResult?.data?.profile?.longitude || updatedProfile.address?.longitude
         }
       };
 
@@ -616,9 +564,9 @@ const ParentDashboardContent: React.FC = () => {
       console.error('Error updating profile:', error);
       alert('Failed to update profile. Please try again.');
     }
-  };
+  }, []);
 
-  const addChild = async (childData: Child) => {
+  const addChild = useCallback(async (childData: Child) => {
     try {
       // Send to API to save in database
       const response = await fetch('/api/children', {
@@ -697,9 +645,9 @@ const ParentDashboardContent: React.FC = () => {
       console.error('Error adding child:', error);
       alert('Failed to save child profile. Please try again.');
     }
-  };
+  }, [profile, fetchChildren]);
 
-  const updateChild = async (childData: Child) => {
+  const updateChild = useCallback(async (childData: Child) => {
     try {
       if (!editingChild?.id) {
         alert('No child selected for editing');
@@ -739,32 +687,102 @@ const ParentDashboardContent: React.FC = () => {
       console.error('Error updating child:', error);
       alert('Failed to update child profile. Please try again.');
     }
-  };
+  }, [editingChild, profile, fetchChildren]);
 
-  const handleSaveChild = (childData: Child) => {
+  const handleSaveChild = useCallback((childData: Child) => {
     if (editingChild) {
       updateChild(childData);
     } else {
       addChild(childData);
     }
-  };
+  }, [editingChild, updateChild, addChild]);
 
-  const handleEditChild = (child: Child) => {
+  const handleEditChild = useCallback((child: Child) => {
     setEditingChild(child);
     setShowChildProfile(true);
-  };
+  }, []);
 
-  const handleAddNewChild = () => {
+  const handleAddNewChild = useCallback(() => {
     setEditingChild(undefined);
     setShowChildProfile(true);
-  };
+  }, []);
 
-  const handleCancelChildProfile = () => {
+  const handleCancelChildProfile = useCallback(() => {
     setShowChildProfile(false);
     setEditingChild(undefined);
-  };
+  }, []);
 
+  // All hooks MUST be above early returns to avoid React error #310
+  const upcomingBookings = useMemo(() => bookings.filter(b => b.status === 'upcoming').length, [bookings]);
+  const unreadNotificationsList = useMemo(() => notifications.filter(n => !n.read), [notifications]);
 
+  const handleLeaveReview = useCallback((booking: Booking) => {
+    setReviewBooking(booking);
+    setShowReviewForm(true);
+  }, []);
+
+  const handleSubmitReview = useCallback(async (reviewData: ReviewFormData) => {
+    setIsSubmittingReview(true);
+    try {
+      const response = await fetch('/api/reviews', {
+        method: 'POST',
+        headers: addCSRFHeader({
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({
+          bookingId: reviewData.bookingId,
+          caregiverId: reviewData.revieweeId,
+          parentId: user?.id,
+          rating: reviewData.rating,
+          comment: reviewData.comment,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to submit review');
+      }
+
+      setBookings(prev => prev.map(b =>
+        b.id === reviewData.bookingId ? { ...b, reviewGiven: true } : b
+      ));
+
+      setShowReviewForm(false);
+      setReviewBooking(null);
+
+      addSystemNotification('Review Submitted', 'Your review has been submitted successfully and is pending approval.');
+
+    } catch (error) {
+      console.error('Error submitting review:', error);
+      alert(error instanceof Error ? error.message : 'Failed to submit review');
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  }, [user?.id, addSystemNotification]);
+
+  const handleCloseReviewForm = useCallback(() => {
+    setShowReviewForm(false);
+    setReviewBooking(null);
+  }, []);
+
+  const handleTabChange = useCallback((tab: 'overview' | 'profile' | 'bookings' | 'messages' | 'children' | 'notifications' | 'support') => {
+    setActiveTab(tab);
+
+    if (tab === 'messages') {
+      const unreadMessageNotifications = notifications.filter(n =>
+        !n.read && n.type === 'message'
+      );
+
+      unreadMessageNotifications.forEach(notification => {
+        markNotificationAsRead(notification.id);
+      });
+
+      refreshMessageCount();
+    }
+  }, [notifications, markNotificationAsRead, refreshMessageCount]);
+
+  // Early returns AFTER all hooks
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
@@ -785,78 +803,7 @@ const ParentDashboardContent: React.FC = () => {
   }
 
   const unreadNotifications = realUnreadCount;
-  const upcomingBookings = bookings.filter(b => b.status === 'upcoming').length;
-  
-  // Use real unread message count from chat rooms
   const unreadMessageCount = realUnreadMessageCount;
-
-  // Review functions
-  const handleLeaveReview = (booking: Booking) => {
-    setReviewBooking(booking);
-    setShowReviewForm(true);
-  };
-
-
-  const handleSubmitReview = async (reviewData: ReviewFormData) => {
-    setIsSubmittingReview(true);
-    try {
-      const response = await fetch('/api/reviews', {
-        method: 'POST',
-        headers: addCSRFHeader({
-          'Content-Type': 'application/json',
-        }),
-        body: JSON.stringify(reviewData),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to submit review');
-      }
-
-      // Update booking to mark review as given
-      setBookings(prev => prev.map(b => 
-        b.id === reviewData.bookingId ? { ...b, reviewGiven: true } : b
-      ));
-
-      // Close form
-      setShowReviewForm(false);
-      setReviewBooking(null);
-
-      // Show success notification
-      addSystemNotification('Review Submitted', 'Your review has been submitted successfully and is pending approval.');
-
-    } catch (error) {
-      console.error('Error submitting review:', error);
-      alert(error instanceof Error ? error.message : 'Failed to submit review');
-    } finally {
-      setIsSubmittingReview(false);
-    }
-  };
-
-  const handleCloseReviewForm = () => {
-    setShowReviewForm(false);
-    setReviewBooking(null);
-  };
-
-  // Mark message notifications as read when messages tab is viewed
-  const handleTabChange = (tab: 'overview' | 'profile' | 'bookings' | 'messages' | 'children' | 'notifications' | 'support') => {
-    setActiveTab(tab);
-    
-    if (tab === 'messages') {
-      // Mark all unread message notifications as read
-      const unreadMessageNotifications = notifications.filter(n =>
-        !n.read && n.type === 'message'
-      );
-      
-      unreadMessageNotifications.forEach(notification => {
-        markNotificationAsRead(notification.id);
-      });
-
-      // Refresh real message count when opening messages tab
-      refreshMessageCount();
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -1025,9 +972,11 @@ const ParentDashboardContent: React.FC = () => {
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2">
                   {profile.profilePhoto ? (
-                    <img 
-                      src={profile.profilePhoto} 
-                      alt="Profile" 
+                    <Image
+                      src={profile.profilePhoto}
+                      alt="Profile"
+                      width={32}
+                      height={32}
                       className="h-8 w-8 rounded-full object-cover"
                     />
                   ) : (
@@ -1162,11 +1111,15 @@ const ParentDashboardContent: React.FC = () => {
 
           {/* Main Content */}
           <div className="flex-1">
+            {/* Extension payment banner -- shows above all tabs when there are pending extension payments */}
+            <ExtensionPaymentBanner />
+
             {activeTab === 'overview' && (
-              <OverviewTab 
-                profile={profile} 
-                bookings={bookings} 
-                notifications={notifications.filter(n => !n.read)} 
+              <OverviewTab
+                profile={profile}
+                bookings={bookings}
+                notifications={unreadNotificationsList}
+                userTimezone={userTimezone}
               />
             )}
             {activeTab === 'profile' && (
@@ -1190,6 +1143,7 @@ const ParentDashboardContent: React.FC = () => {
                 }}
                 getCountForBooking={getCountForBooking}
                 clearCountForBooking={clearCountForBooking}
+                userTimezone={userTimezone}
               />
             )}
             {activeTab === 'messages' && user && (
@@ -1284,7 +1238,8 @@ const OverviewTab: React.FC<{
   profile: ParentProfile;
   bookings: Booking[];
   notifications: any[];
-}> = ({ profile, bookings, notifications }) => {
+  userTimezone: string;
+}> = ({ profile, bookings, notifications, userTimezone }) => {
   const upcomingBookings = bookings?.filter(b => b.status === 'upcoming') || [];
   const totalSpent = bookings
     ?.filter(b => b.status === 'completed')
@@ -1362,9 +1317,11 @@ const OverviewTab: React.FC<{
               {upcomingBookings.slice(0, 3).map((booking) => (
                 <div key={booking.id} className="flex items-center p-3 border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                   {booking.caregiverPhoto ? (
-                    <img 
-                      src={booking.caregiverPhoto} 
+                    <Image
+                      src={booking.caregiverPhoto}
                       alt={booking.caregiverName}
+                      width={40}
+                      height={40}
                       className="h-10 w-10 rounded-full object-cover"
                     />
                   ) : (
@@ -1377,7 +1334,7 @@ const OverviewTab: React.FC<{
                       {booking.caregiverName}
                     </p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {new Date(booking.date).toLocaleDateString()} at {booking.startTime}
+                      {new Date(booking.date + 'T12:00:00').toLocaleDateString('en-US', { timeZone: userTimezone })} at {booking.startTime}
                     </p>
                   </div>
                   <div className="text-right">
@@ -1481,9 +1438,9 @@ const ProfileTab: React.FC<{
       return;
     }
     
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB');
+    // Validate file size (max 50MB)
+    if (file.size > 50 * 1024 * 1024) {
+      alert('File size must be less than 50MB');
       return;
     }
     
@@ -1502,7 +1459,7 @@ const ProfileTab: React.FC<{
       
       if (response.ok) {
         const data = await response.json();
-        setFormData(prev => ({ ...prev, profilePhoto: data.avatarUrl }));
+        setFormData(prev => ({ ...prev, profilePhoto: data.data?.avatarUrl }));
         await refreshUser();
         // Force a page refresh to update the header immediately
         window.location.reload();
@@ -1556,9 +1513,11 @@ const ProfileTab: React.FC<{
             <div className="text-center">
               <div className="relative inline-block">
                 {formData.profilePhoto ? (
-                  <img 
-                    src={formData.profilePhoto} 
-                    alt="Profile" 
+                  <Image
+                    src={formData.profilePhoto}
+                    alt="Profile"
+                    width={128}
+                    height={128}
                     className="h-32 w-32 rounded-full object-cover border-4 border-white shadow-lg"
                   />
                 ) : (
@@ -1938,7 +1897,8 @@ const BookingsTab: React.FC<{
   onMessageCaregiver: (booking: Booking) => void;
   getCountForBooking: (bookingId: string) => number;
   clearCountForBooking: (bookingId: string) => void;
-}> = ({ bookings, handleTabChange, handleLeaveReview, onMessageCaregiver, getCountForBooking, clearCountForBooking }) => {
+  userTimezone: string;
+}> = ({ bookings, handleTabChange, handleLeaveReview, onMessageCaregiver, getCountForBooking, clearCountForBooking, userTimezone }) => {
   const [filter, setFilter] = useState<'all' | 'upcoming' | 'completed' | 'cancelled'>('all');
   
   const filteredBookings = bookings.filter(booking => {
@@ -1968,12 +1928,12 @@ const BookingsTab: React.FC<{
 
   return (
     <div className="space-y-6">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">My Bookings</h2>
-          
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">My Bookings</h2>
+
           {/* Filter Buttons */}
-          <div className="flex space-x-2">
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
             {[
               { key: 'all', label: 'All' },
               { key: 'upcoming', label: 'Upcoming' },
@@ -1983,7 +1943,7 @@ const BookingsTab: React.FC<{
               <button
                 key={key}
                 onClick={() => setFilter(key as any)}
-                className={`px-4 py-2 text-sm font-medium rounded-lg ${
+                className={`px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-lg ${
                   filter === key
                     ? 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300'
                     : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
@@ -1999,28 +1959,30 @@ const BookingsTab: React.FC<{
         <div className="space-y-4">
           {filteredBookings.length > 0 ? (
             filteredBookings.map((booking) => (
-              <div key={booking.id} className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg p-6 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between">
-                  <div className="flex space-x-4">
+              <div key={booking.id} className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 hover:shadow-md transition-shadow">
+                <div className="flex flex-col gap-4">
+                  <div className="flex space-x-3 sm:space-x-4 min-w-0">
                     {/* Caregiver Photo */}
                     <div className="flex-shrink-0">
                       {booking.caregiverPhoto ? (
-                        <img 
-                          src={booking.caregiverPhoto} 
+                        <Image
+                          src={booking.caregiverPhoto}
                           alt={booking.caregiverName}
-                          className="h-16 w-16 rounded-full object-cover"
+                          width={64}
+                          height={64}
+                          className="h-12 w-12 sm:h-16 sm:w-16 rounded-full object-cover"
                         />
                       ) : (
-                        <div className="h-16 w-16 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center">
-                          <User className="h-8 w-8 text-gray-400 dark:text-gray-500" />
+                        <div className="h-12 w-12 sm:h-16 sm:w-16 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center">
+                          <User className="h-6 w-6 sm:h-8 sm:w-8 text-gray-400 dark:text-gray-500" />
                         </div>
                       )}
                     </div>
 
                     {/* Booking Details */}
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
                           {booking.caregiverName}
                         </h3>
                         {booking.caregiverRating !== null && (
@@ -2037,14 +1999,15 @@ const BookingsTab: React.FC<{
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-300">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-4 text-sm text-gray-600 dark:text-gray-300">
                         <div className="flex items-center">
                           <Calendar className="h-4 w-4 mr-2" />
-                          {new Date(booking.date).toLocaleDateString('en-US', { 
-                            weekday: 'long', 
-                            year: 'numeric', 
-                            month: 'long', 
-                            day: 'numeric' 
+                          {new Date(booking.date + 'T12:00:00').toLocaleDateString('en-US', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            timeZone: userTimezone
                           })}
                         </div>
                         <div className="flex items-center">
@@ -2072,29 +2035,29 @@ const BookingsTab: React.FC<{
                   </div>
 
                   {/* Booking Actions & Price */}
-                  <div className="text-right">
-                    <div className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                  <div className="flex items-center justify-between border-t border-gray-100 dark:border-gray-700 pt-3 sm:border-0 sm:pt-0">
+                    <div className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
                       {formatCAD(Math.round(booking.totalAmount * 100))}
                     </div>
-                    
-                    <div className="space-y-2">
+
+                    <div className="flex flex-wrap gap-2 justify-end">
                       {booking.status === 'completed' && !booking.reviewGiven && (
-                        <button 
+                        <button
                           onClick={() => handleLeaveReview(booking)}
-                          className="w-full px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 rounded-lg transition-colors"
+                          className="px-3 sm:px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 rounded-lg transition-colors whitespace-nowrap"
                         >
                           Leave Review
                         </button>
                       )}
-                      
+
                       {(booking.status === 'upcoming' || booking.status === 'ongoing') && (
                         <>
                           <button
                             onClick={() => onMessageCaregiver(booking)}
-                            className="relative w-full px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 rounded-lg transition-colors shadow-sm flex items-center justify-center"
+                            className="relative px-3 sm:px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 rounded-lg transition-colors shadow-sm flex items-center justify-center whitespace-nowrap"
                           >
                             <MessageCircle className="h-4 w-4 mr-1.5" />
-                            Message Caregiver
+                            Message
                             {getCountForBooking(booking.id) > 0 && (
                               <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center shadow-lg">
                                 {getCountForBooking(booking.id) > 9 ? '9+' : getCountForBooking(booking.id)}
@@ -2102,15 +2065,15 @@ const BookingsTab: React.FC<{
                             )}
                           </button>
                           {booking.status === 'upcoming' && (
-                            <button className="w-full px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors">
-                              Cancel Booking
+                            <button className="px-3 sm:px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors whitespace-nowrap">
+                              Cancel
                             </button>
                           )}
                         </>
                       )}
-                      
+
                       {booking.status === 'completed' && (
-                        <button className="w-full px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors">
+                        <button className="px-3 sm:px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors whitespace-nowrap">
                           Book Again
                         </button>
                       )}
@@ -2309,32 +2272,27 @@ const ChildrenTab: React.FC<{
 
       {/* Critical Safety Alert Banner */}
       {(severeAllergies > 0 || childrenWithEmergencyInfo > 0) && (
-        <div className="bg-gradient-to-r from-red-600 to-red-700 dark:from-red-700 dark:to-red-800 text-white p-6 rounded-lg shadow-xl dark:shadow-2xl border-4 border-red-300 dark:border-red-400 animate-pulse">
-          <div className="flex items-center space-x-4">
-            <div className="text-4xl animate-bounce">🚨</div>
-            <div className="flex-1">
-              <h3 className="text-xl font-bold mb-2">CRITICAL SAFETY ALERT</h3>
-              <p className="font-medium">
+        <div className="bg-gradient-to-r from-red-600 to-red-700 dark:from-red-700 dark:to-red-800 text-white p-4 sm:p-6 rounded-lg shadow-xl dark:shadow-2xl border-4 border-red-300 dark:border-red-400 animate-pulse">
+          <div className="flex items-start gap-3 sm:gap-4">
+            <div className="text-3xl sm:text-4xl animate-bounce flex-shrink-0">🚨</div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg sm:text-xl font-bold mb-2">CRITICAL SAFETY ALERT</h3>
+              <p className="font-medium text-sm sm:text-base">
                 {severeAllergies > 0 && `${severeAllergies} child(ren) have SEVERE allergies requiring immediate attention. `}
                 {childrenWithEmergencyInfo > 0 && `${childrenWithEmergencyInfo} child(ren) have emergency medical conditions. `}
                 Ensure all caregivers are fully briefed before any childcare session.
               </p>
             </div>
-            <div className="text-right">
-              <p className="text-sm font-bold uppercase tracking-wider">IMMEDIATE</p>
-              <p className="text-sm font-bold uppercase tracking-wider">ATTENTION</p>
-              <p className="text-sm font-bold uppercase tracking-wider">REQUIRED</p>
-            </div>
           </div>
         </div>
       )}
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">My Children</h2>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">My Children</h2>
           <button
             onClick={onAddChild}
-            className="inline-flex items-center px-4 py-2 bg-green-600 dark:bg-green-700 text-white text-sm font-medium rounded-lg hover:bg-green-700 dark:hover:bg-green-600 transition-colors"
+            className="inline-flex items-center justify-center px-4 py-2 bg-green-600 dark:bg-green-700 text-white text-sm font-medium rounded-lg hover:bg-green-700 dark:hover:bg-green-600 transition-colors"
           >
             <Plus className="h-4 w-4 mr-2" />
             Add Child
@@ -2350,30 +2308,33 @@ const ChildrenTab: React.FC<{
               const safetyReminders = getSafetyReminders(child);
               
               return (
-              <div key={child.id} className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg p-6 hover:shadow-md dark:hover:shadow-lg transition-all">
-                <div className="flex items-start justify-between">
-                  <div className="flex space-x-4">
+              <div key={child.id} className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg p-4 sm:p-6 hover:shadow-md dark:hover:shadow-lg transition-all">
+                <div className="flex flex-col gap-4">
+                  <div className="flex space-x-3 sm:space-x-4">
                     <div className="flex-shrink-0">
                       {child.photoUrl ? (
-                        <img 
-                          src={child.photoUrl} 
+                        <Image
+                          src={child.photoUrl}
                           alt={`${child.firstName} ${child.lastName}`}
-                          className="h-16 w-16 rounded-full object-cover ring-2 ring-purple-200 dark:ring-purple-700"
+                          width={64}
+                          height={64}
+                          unoptimized
+                          className="h-12 w-12 sm:h-16 sm:w-16 rounded-full object-cover ring-2 ring-purple-200 dark:ring-purple-700"
                         />
                       ) : (
-                        <div className="h-16 w-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center ring-2 ring-purple-200 dark:ring-purple-700">
-                          <Baby className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+                        <div className="h-12 w-12 sm:h-16 sm:w-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center ring-2 ring-purple-200 dark:ring-purple-700">
+                          <Baby className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600 dark:text-purple-400" />
                         </div>
                       )}
                     </div>
 
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
                           {child.firstName} {child.lastName}
                         </h3>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${ageGroup.color}`}>
-                          {age} years old • {ageGroup.label}
+                          {age}y • {ageGroup.label}
                         </span>
                         {child.gender && (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300">
@@ -2382,7 +2343,7 @@ const ChildrenTab: React.FC<{
                         )}
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-300 mb-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-4 text-sm text-gray-600 dark:text-gray-300 mb-3">
                         <div className="flex items-center">
                           <Calendar className="h-4 w-4 mr-2 text-gray-500 dark:text-gray-400" />
                           Born: {new Date(child.dateOfBirth).toLocaleDateString()}
@@ -2561,12 +2522,12 @@ const ChildrenTab: React.FC<{
                       )}
 
                       {/* Medical Information Quick Reference */}
-                      <div className="mt-4 p-4 bg-gradient-to-r from-teal-500 to-cyan-600 dark:from-teal-600 dark:to-cyan-700 text-white rounded-lg shadow-lg dark:shadow-xl">
-                        <h4 className="font-bold text-sm uppercase tracking-wide mb-3 flex items-center">
+                      <div className="mt-4 p-3 sm:p-4 bg-gradient-to-r from-teal-500 to-cyan-600 dark:from-teal-600 dark:to-cyan-700 text-white rounded-lg shadow-lg dark:shadow-xl">
+                        <h4 className="font-bold text-xs sm:text-sm uppercase tracking-wide mb-3 flex items-center">
                           <span className="mr-2">🏥</span>
                           MEDICAL QUICK REFERENCE
                         </h4>
-                        <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="grid grid-cols-2 gap-2 sm:gap-4 text-sm">
                           <div>
                             <p className="font-semibold opacity-90">Age Group:</p>
                             <p className="font-medium">{ageGroup.label} ({age} years old)</p>
@@ -2602,12 +2563,12 @@ const ChildrenTab: React.FC<{
                       </div>
 
                       {/* Safety Checklist */}
-                      <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg">
-                        <h4 className="font-bold text-sm text-gray-900 dark:text-white mb-3 flex items-center">
+                      <div className="mt-4 p-3 sm:p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg">
+                        <h4 className="font-bold text-xs sm:text-sm text-gray-900 dark:text-white mb-3 flex items-center">
                           <span className="mr-2">✅</span>
                           CAREGIVER SAFETY CHECKLIST
                         </h4>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                           <div className={`flex items-center space-x-2 ${child.allergies.length > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
                             <span>{child.allergies.length > 0 ? '⚠️' : '✅'}</span>
                             <span>Allergy information reviewed</span>
@@ -2630,27 +2591,23 @@ const ChildrenTab: React.FC<{
                   </div>
 
                   {/* Actions */}
-                  <div className="text-right">
-                    <div className="space-y-2">
-                      <button
-                        onClick={() => onEditChild(child)}
-                        className="w-full px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-                      >
-                        <Edit2 className="h-4 w-4 mr-2 inline" />
-                        Edit Profile
-                      </button>
-                      
-                      {/* Quick Stats */}
-                      <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1 pt-2 border-t border-gray-200 dark:border-gray-700">
-                        <div>👥 {child.emergencyContacts?.length || 0} emergency contacts</div>
-                        {child.allergies.length > 0 && (
-                          <div>⚠️ {child.allergies.length} allergies</div>
-                        )}
-                        {child.medications.length > 0 && (
-                          <div>💊 {child.medications.length} medications</div>
-                        )}
-                      </div>
+                  <div className="flex items-center justify-between border-t border-gray-100 dark:border-gray-700 pt-3">
+                    <div className="flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
+                      <span>👥 {child.emergencyContacts?.length || 0} contacts</span>
+                      {child.allergies.length > 0 && (
+                        <span>⚠️ {child.allergies.length} allergies</span>
+                      )}
+                      {child.medications.length > 0 && (
+                        <span>💊 {child.medications.length} meds</span>
+                      )}
                     </div>
+                    <button
+                      onClick={() => onEditChild(child)}
+                      className="px-3 sm:px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors whitespace-nowrap"
+                    >
+                      <Edit2 className="h-4 w-4 mr-1.5 inline" />
+                      Edit
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2678,7 +2635,7 @@ const ChildrenTab: React.FC<{
       </div>
 
       {/* Enhanced Child Safety Information */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 sm:p-6">
         <div className="flex items-start">
           <CheckCircle className="h-5 w-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
           <div>
@@ -2697,7 +2654,7 @@ const ChildrenTab: React.FC<{
       </div>
 
       {/* Quick Safety Tips */}
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 sm:p-6">
         <div className="flex items-start">
           <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" />
           <div>
@@ -2738,11 +2695,11 @@ const NotificationsTab: React.FC<{
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'booking': return <Calendar className="h-5 w-5 text-blue-600" />;
-      case 'caregiver': return <User className="h-5 w-5 text-green-600" />;
-      case 'payment': return <CreditCard className="h-5 w-5 text-indigo-600" />;
-      case 'system': return <AlertCircle className="h-5 w-5 text-yellow-600" />;
-      default: return <Bell className="h-5 w-5 text-gray-600" />;
+      case 'booking': return <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />;
+      case 'caregiver': return <User className="h-5 w-5 text-green-600 dark:text-green-400" />;
+      case 'payment': return <CreditCard className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />;
+      case 'system': return <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />;
+      default: return <Bell className="h-5 w-5 text-gray-600 dark:text-gray-400" />;
     }
   };
 
@@ -2752,27 +2709,27 @@ const NotificationsTab: React.FC<{
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/20 p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
             Notifications
             {unreadCount > 0 && (
-              <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+              <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
                 {unreadCount} unread
               </span>
             )}
           </h2>
-          
+
           <div className="flex space-x-2">
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsReadHandler}
-                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900"
+                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
               >
                 Mark all as read
               </button>
             )}
-            
+
             {/* Filter Buttons */}
             <div className="flex space-x-2">
               {[
@@ -2785,8 +2742,8 @@ const NotificationsTab: React.FC<{
                   onClick={() => setFilter(key as any)}
                   className={`px-4 py-2 text-sm font-medium rounded-lg ${
                     filter === key
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                   }`}
                 >
                   {label}
@@ -2803,9 +2760,9 @@ const NotificationsTab: React.FC<{
               <div
                 key={notification.id}
                 className={`p-4 border rounded-lg cursor-pointer transition-all ${
-                  notification.read 
-                    ? 'bg-white border-gray-200 hover:shadow-sm' 
-                    : 'bg-blue-50 border-blue-200 hover:shadow-md'
+                  notification.read
+                    ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:shadow-sm'
+                    : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 hover:shadow-md'
                 }`}
                 onClick={() => !notification.read && onMarkAsRead(notification.id)}
               >
@@ -2813,17 +2770,17 @@ const NotificationsTab: React.FC<{
                   <div className="flex-shrink-0 mt-1">
                     {getNotificationIcon(notification.type)}
                   </div>
-                  
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <p className={`text-sm font-medium ${notification.read ? 'text-gray-900' : 'text-gray-900 font-semibold'}`}>
+                        <p className={`text-sm font-medium ${notification.read ? 'text-gray-900 dark:text-white' : 'text-gray-900 dark:text-white font-semibold'}`}>
                           {notification.title}
                         </p>
-                        <p className={`text-sm mt-1 ${notification.read ? 'text-gray-600' : 'text-gray-700'}`}>
+                        <p className={`text-sm mt-1 ${notification.read ? 'text-gray-600 dark:text-gray-400' : 'text-gray-700 dark:text-gray-300'}`}>
                           {notification.message}
                         </p>
-                        <p className="text-xs text-gray-400 mt-2">
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
                           {new Date(notification.timestamp).toLocaleString('en-US', {
                             weekday: 'short',
                             year: 'numeric',
@@ -2842,7 +2799,7 @@ const NotificationsTab: React.FC<{
                         
                         {notification.actionUrl && (
                           <button
-                            className="px-3 py-1 text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-full"
+                            className="px-3 py-1 text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 hover:bg-green-100 dark:hover:bg-green-900/50 rounded-full"
                             onClick={(e) => {
                               e.stopPropagation();
                               // Handle navigation to actionUrl
@@ -2860,10 +2817,10 @@ const NotificationsTab: React.FC<{
             ))
           ) : (
             <div className="text-center py-12">
-              <Bell className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No notifications</h3>
-              <p className="text-gray-600">
-                {filter === 'all' 
+              <Bell className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No notifications</h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                {filter === 'all'
                   ? "You're all caught up!"
                   : `No ${filter} notifications.`
                 }
@@ -2873,75 +2830,6 @@ const NotificationsTab: React.FC<{
         </div>
       </div>
 
-      {/* Notification Settings */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Notification Settings</h3>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-gray-900">Booking Notifications</h4>
-              <p className="text-sm text-gray-600">Get notified about booking confirmations and updates</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" defaultChecked className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-gray-900">Caregiver Messages</h4>
-              <p className="text-sm text-gray-600">Get notified when caregivers send you messages</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" defaultChecked className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-gray-900">Payment Notifications</h4>
-              <p className="text-sm text-gray-600">Get notified about payment confirmations and receipts</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" defaultChecked className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-gray-900">Email Notifications</h4>
-              <p className="text-sm text-gray-600">Receive notifications via email</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" defaultChecked className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-medium text-gray-900">SMS Notifications</h4>
-              <p className="text-sm text-gray-600">Receive notifications via text message</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" className="sr-only peer" />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-            </label>
-          </div>
-        </div>
-
-        <div className="mt-6">
-          <button className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700">
-            Save Settings
-          </button>
-        </div>
-      </div>
-      
-      {/* Real-world Browser Notification Settings */}
-      <NotificationSettings />
       
       {/* Test Notification Buttons (Development Only) */}
       {process.env.NODE_ENV === 'development' && (

@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/database';
-import { withAuth } from '@/lib/auth-middleware';
+import { NextRequest } from 'next/server';
+import { prisma } from '@/lib/db';
+import { requirePermission } from '@/lib/adminAuth';
 import { logger, getClientInfo } from '@/lib/logger';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,8 +13,8 @@ export async function GET(
 ) {
   const clientInfo = getClientInfo(request);
   try {
-    const authResult = await withAuth(request, 'ADMIN', true);
-    if (!authResult.isAuthorized) return authResult.response;
+    const permCheck = await requirePermission(request, 'canApproveUsers');
+    if (!permCheck.authorized) return permCheck.response!;
 
     const { caregiverId } = await params;
     const caregiver = await prisma.caregiver.findUnique({
@@ -34,7 +35,7 @@ export async function GET(
     });
 
     if (!caregiver) {
-      return NextResponse.json({ error: 'Caregiver not found' }, { status: 404 });
+      return ApiErrors.notFound('Caregiver not found');
     }
 
     const verification = await prisma.caregiverVerification.findUnique({
@@ -67,7 +68,7 @@ export async function GET(
     const riskLevel = riskScore <= 20 ? 'LOW' : riskScore <= 50 ? 'MEDIUM' : 'HIGH';
     const readyForApproval = checklist.profileComplete && checklist.idVerified && checklist.backgroundCheckPassed && riskScore <= 30;
 
-    return NextResponse.json({
+    return apiSuccess({
       caregiver,
       user: caregiver.user,
       profile,
@@ -92,6 +93,6 @@ export async function GET(
     });
   } catch (error) {
     logger.error('Failed to fetch detailed caregiver data', error);
-    return NextResponse.json({ error: 'Failed to fetch caregiver data' }, { status: 500 });
+    return ApiErrors.internal('Failed to fetch caregiver data');
   }
 }

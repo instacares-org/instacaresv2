@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Safety & Trust | InstaCares',
+  title: 'Safety & Trust',
   description: 'Learn about InstaCares safety measures, caregiver verification process, and how we protect families across Canada.',
 };
 

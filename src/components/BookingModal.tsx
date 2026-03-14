@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js';
+import type { Stripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import { XMarkIcon, CalendarDaysIcon, ClockIcon, UserGroupIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { Caregiver } from './CaregiverCard';
@@ -10,6 +12,7 @@ import CaregiverProfileImage from './CaregiverProfileImage';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAvailability, useLiveAvailability } from '@/hooks/useAvailability';
 import { useUserTimezone } from '@/hooks/useUserTimezone';
+import { useStripeAppearance } from '@/hooks/useStripeAppearance';
 import { DateTime } from 'luxon';
 import { useRouter } from 'next/navigation';
 import { addCSRFHeaders, useCSRFToken } from './security/CSRFTokenProvider';
@@ -21,10 +24,16 @@ interface BookingModalProps {
   onClose: () => void;
 }
 
-// Only initialize Stripe if we have valid keys (not demo mode)
-const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.startsWith('pk_') 
-  ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!) 
-  : Promise.resolve(null);
+// Lazy-load Stripe.js only when needed (not at module level)
+let stripePromise: Promise<Stripe | null> | null = null;
+const getStripePromise = () => {
+  if (!stripePromise) {
+    stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.startsWith('pk_')
+      ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
+      : Promise.resolve(null);
+  }
+  return stripePromise;
+};
 
 interface ChildProfile {
   id: string;
@@ -45,31 +54,33 @@ interface ChildProfile {
   createdAt: string;
 }
 
-// TIMEZONE FIX: Helper function to format times in UTC to prevent 5-hour shifts
-const formatTimeUTC = (timeString: string) => {
+// TIMEZONE FIX: Convert UTC database times to user's local timezone for display
+// Uses Luxon + user's timezone from their profile (via useUserTimezone hook)
+const formatTimeForDisplay = (timeString: string, tz: string) => {
   try {
-    // Force interpretation as UTC by ensuring 'Z' suffix
-    // Database stores times as "2025-01-15 08:00:00" which JavaScript
-    // interprets as LOCAL time, causing 5-hour shifts.
-    // We force UTC interpretation to show the exact time caregiver selected.
-    let utcTimeString = timeString;
-    if (!timeString.endsWith('Z') && !timeString.includes('+')) {
-      utcTimeString = timeString.replace(/\.\d{3}$/, '') + 'Z';
-    }
-
-    const date = new Date(utcTimeString);
-    const hours = date.getUTCHours();
-    const minutes = date.getUTCMinutes();
-
-    // Convert to 12-hour format
-    const hour12 = hours % 12 || 12;
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const minutesStr = minutes.toString().padStart(2, '0');
-
-    return `${hour12}:${minutesStr} ${ampm}`;
+    // Ensure the string is treated as UTC
+    const utcStr = timeString.endsWith('Z') || timeString.includes('+')
+      ? timeString
+      : timeString.replace(/\.\d{3}$/, '') + 'Z';
+    const dt = DateTime.fromISO(utcStr, { zone: 'UTC' }).setZone(tz);
+    if (!dt.isValid) return 'Invalid time';
+    return dt.toFormat('h:mm a');
   } catch {
     return 'Invalid time';
   }
+};
+
+// Helper: Convert a UTC time string to local Luxon DateTime
+const toLocalDateTime = (timeString: string, tz: string) => {
+  const utcStr = timeString.endsWith('Z') || timeString.includes('+')
+    ? timeString
+    : timeString.replace(/\.\d{3}$/, '') + 'Z';
+  return DateTime.fromISO(utcStr, { zone: 'UTC' }).setZone(tz);
+};
+
+// Helper: Get today's date string in user's timezone (YYYY-MM-DD)
+const getTodayInTimezone = (tz: string) => {
+  return DateTime.now().setZone(tz).toFormat('yyyy-MM-dd');
 };
 
 export default function BookingModal({ caregiver, isOpen, onClose }: BookingModalProps) {
@@ -80,6 +91,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
   const [clientSecret, setClientSecret] = useState<string>('');
   const [commissionRate, setCommissionRate] = useState<number>(0.10); // Default 10%
   const { timezone: userTimezone } = useUserTimezone();
+  const stripeAppearance = useStripeAppearance();
   const [bookingDetails, setBookingDetails] = useState({
     isMultiDay: false,
     startDate: '',
@@ -133,7 +145,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
     refresh: refreshAvailability 
   } = useLiveAvailability(
     caregiverIdForAvailability,
-    bookingDetails.date || new Date().toISOString().split('T')[0],
+    bookingDetails.date || getTodayInTimezone(userTimezone),
     15000 // Refresh every 15 seconds
   );
 
@@ -144,7 +156,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
     availability: availability,
     totalSpots: availability?.totalSpotsAvailable,
     slotsCount: availability?.slots?.length,
-    queryingDate: bookingDetails.date || new Date().toISOString().split('T')[0]
+    queryingDate: bookingDetails.date || getTodayInTimezone(userTimezone)
   });
 
   const calculateHours = () => {
@@ -233,11 +245,12 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
       setAvailabilityLoading(true);
       setAvailabilityError(null);
       
-      // Get next 60 days of availability
-      const startDate = new Date().toISOString().split('T')[0];
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 60);
-      const endDateStr = endDate.toISOString().split('T')[0];
+      // Get next 60 days of availability (use local date, not UTC, so evening slots work after 7PM EST)
+      const nowLocal = new Date();
+      const startDate = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
+      const endDateObj = new Date(nowLocal);
+      endDateObj.setDate(endDateObj.getDate() + 60);
+      const endDateStr = `${endDateObj.getFullYear()}-${String(endDateObj.getMonth() + 1).padStart(2, '0')}-${String(endDateObj.getDate()).padStart(2, '0')}`;
       
       console.log('🔍 Fetching all availability for caregiver:', caregiverIdForAvailability);
       console.log('📅 Date range:', { startDate, endDate: endDateStr });
@@ -499,12 +512,15 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
       });
 
       const data = await response.json();
-      
-      if (data.clientSecret) {
-        setClientSecret(data.clientSecret);
+
+      // API returns { success, data: { clientSecret, ... }, error }
+      const paymentData = data.data || data;
+
+      if (paymentData.clientSecret) {
+        setClientSecret(paymentData.clientSecret);
         setStep('payment');
       } else {
-        console.error('Failed to create payment:', data.error);
+        console.error('Failed to create payment:', data.error, data.details);
         setError(data.error || 'Failed to create payment. Please try again.');
       }
     } catch (error) {
@@ -518,11 +534,9 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
   const stripeOptions: StripeElementsOptions = {
     clientSecret,
     appearance: {
-      theme: 'stripe',
+      ...stripeAppearance,
       variables: {
         colorPrimary: '#ef4444',
-        colorBackground: '#ffffff',
-        colorText: '#1f2937',
       },
     },
   };
@@ -533,21 +547,21 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
   if (!isAuthenticated) {
     return (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-white/20 relative">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/80 to-gray-50/50 rounded-xl pointer-events-none"></div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl max-w-md w-full p-6 shadow-2xl border border-white/20 dark:border-gray-700 relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-white/80 to-gray-50/50 dark:from-gray-800/80 dark:to-gray-900/50 rounded-xl pointer-events-none"></div>
           <div className="relative z-10">
           <div className="text-center">
-            <div className="w-16 h-16 mx-auto mb-4 bg-blue-100 rounded-full flex items-center justify-center">
+            <div className="w-16 h-16 mx-auto mb-4 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
               <span className="text-2xl">🔐</span>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Login Required</h3>
-            <p className="text-gray-500 text-sm mb-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Login Required</h3>
+            <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
               You need to log in to book a caregiver.
             </p>
             <div className="flex space-x-3">
               <button
                 onClick={onClose}
-                className="flex-1 px-4 py-2 text-gray-700 hover:text-gray-900 transition"
+                className="flex-1 px-4 py-2 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white transition"
               >
                 Cancel
               </button>
@@ -572,15 +586,15 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
   if (!isParent) {
     return (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-white/20 relative">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/80 to-gray-50/50 rounded-xl pointer-events-none"></div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl max-w-md w-full p-6 shadow-2xl border border-white/20 dark:border-gray-700 relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-white/80 to-gray-50/50 dark:from-gray-800/80 dark:to-gray-900/50 rounded-xl pointer-events-none"></div>
           <div className="relative z-10">
           <div className="text-center">
-            <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+            <div className="w-16 h-16 mx-auto mb-4 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
               <span className="text-2xl">🚫</span>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
-            <p className="text-gray-500 text-sm mb-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Access Restricted</h3>
+            <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
               Only parents can book caregiver services.
             </p>
             <button
@@ -600,12 +614,12 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
   if (childrenLoading) {
     return (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-white/20 relative">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/80 to-gray-50/50 rounded-xl pointer-events-none"></div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl max-w-md w-full p-6 shadow-2xl border border-white/20 dark:border-gray-700 relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-white/80 to-gray-50/50 dark:from-gray-800/80 dark:to-gray-900/50 rounded-xl pointer-events-none"></div>
           <div className="relative z-10">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto mb-4"></div>
-            <p className="text-gray-600">Checking your profile...</p>
+            <p className="text-gray-600 dark:text-gray-300">Checking your profile...</p>
           </div>
           </div>
         </div>
@@ -616,25 +630,25 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
   if (hasChildren === false) {
     return (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-white/20 relative">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/80 to-gray-50/50 rounded-xl pointer-events-none"></div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl max-w-md w-full p-6 shadow-2xl border border-white/20 dark:border-gray-700 relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-white/80 to-gray-50/50 dark:from-gray-800/80 dark:to-gray-900/50 rounded-xl pointer-events-none"></div>
           <div className="relative z-10">
           <div className="text-center">
-            <div className="w-16 h-16 mx-auto mb-4 bg-yellow-100 rounded-full flex items-center justify-center">
+            <div className="w-16 h-16 mx-auto mb-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center">
               <span className="text-2xl">👶</span>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Add Child Profile Required</h3>
-            <p className="text-gray-600 text-sm mb-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Add Child Profile Required</h3>
+            <p className="text-gray-600 dark:text-gray-300 text-sm mb-4">
               For safety and care quality, please add at least one child profile before booking childcare services.
             </p>
-            <p className="text-gray-500 text-xs mb-6">
+            <p className="text-gray-500 dark:text-gray-400 text-xs mb-6">
               Child profiles help caregivers provide the best possible care by knowing about allergies, medical conditions, and special instructions.
               Clicking "Add Child Profile" will take you directly to the Children section of your dashboard.
             </p>
             <div className="flex space-x-3">
               <button
                 onClick={onClose}
-                className="flex-1 px-4 py-2 text-gray-700 hover:text-gray-900 transition"
+                className="flex-1 px-4 py-2 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white transition"
               >
                 Cancel
               </button>
@@ -658,11 +672,11 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-white/20 relative">
-        <div className="absolute inset-0 bg-gradient-to-br from-white/80 to-gray-50/50 rounded-xl pointer-events-none"></div>
+      <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-white/20 dark:border-gray-700 relative">
+        <div className="absolute inset-0 bg-gradient-to-br from-white/80 to-gray-50/50 dark:from-gray-800/80 dark:to-gray-900/50 rounded-xl pointer-events-none"></div>
         <div className="relative z-10">
         {/* Header */}
-        <div className="p-4 border-b border-gray-200">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 rounded-full overflow-hidden">
@@ -676,15 +690,15 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                 />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                   Book with {caregiver.name}
                 </h2>
-                <p className="text-sm text-gray-600">${caregiver.hourlyRate}/hour</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">${caregiver.hourlyRate}/hour</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition"
+              className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition"
             >
               <XMarkIcon className="h-5 w-5" />
             </button>
@@ -692,10 +706,10 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
           
           {/* Error Display */}
           {error && (
-            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
               <div className="flex items-center space-x-2">
-                <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
-                <span className="text-red-800 text-sm">{error}</span>
+                <ExclamationTriangleIcon className="h-5 w-5 text-red-500 dark:text-red-400" />
+                <span className="text-red-800 dark:text-red-300 text-sm">{error}</span>
               </div>
             </div>
           )}
@@ -708,25 +722,25 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
               {availabilityLoading ? (
                 <div className="text-center py-6">
                   <div className="animate-spin rounded-full h-6 w-6 border-2 border-rose-500 border-t-transparent mx-auto mb-2"></div>
-                  <p className="text-gray-600 text-sm">Loading {caregiver.name}'s availability...</p>
+                  <p className="text-gray-600 dark:text-gray-300 text-sm">Loading {caregiver.name}'s availability...</p>
                 </div>
               ) : availabilityError ? (
-                <div className="text-center py-4 text-red-600">
+                <div className="text-center py-4 text-red-600 dark:text-red-400">
                   <p className="text-sm">Failed to load availability: {availabilityError}</p>
                 </div>
               ) : allAvailability.length === 0 ? (
                 <div className="text-center py-6">
-                  <div className="w-12 h-12 mx-auto mb-3 bg-orange-100 rounded-full flex items-center justify-center">
-                    <CalendarDaysIcon className="h-6 w-6 text-orange-500" />
+                  <div className="w-12 h-12 mx-auto mb-3 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center">
+                    <CalendarDaysIcon className="h-6 w-6 text-orange-500 dark:text-orange-400" />
                   </div>
-                  <h4 className="text-base font-medium text-gray-900 mb-2">No Availability Posted Yet</h4>
-                  <p className="text-gray-600 text-sm mb-4">
+                  <h4 className="text-base font-medium text-gray-900 dark:text-white mb-2">No Availability Posted Yet</h4>
+                  <p className="text-gray-600 dark:text-gray-300 text-sm mb-4">
                     {caregiver.name} hasn't posted any available time slots yet.
                   </p>
                   
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left">
-                    <h5 className="font-medium text-blue-900 mb-2">💡 What you can do:</h5>
-                    <ul className="text-sm text-blue-800 space-y-1">
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-left">
+                    <h5 className="font-medium text-blue-900 dark:text-blue-300 mb-2">💡 What you can do:</h5>
+                    <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
                       <li>• Send {caregiver.name} a message to ask about availability</li>
                       <li>• Check back later - caregivers often update their schedules</li>
                       <li>• Browse other caregivers who have posted availability</li>
@@ -751,13 +765,13 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                           // Refresh the page to browse other caregivers
                           window.location.reload();
                         }}
-                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm"
+                        className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition text-sm"
                       >
                         Browse Other Caregivers
                       </button>
                     </div>
                     
-                    <div className="border-t border-gray-200 pt-3">
+                    <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
                       <button
                         onClick={async () => {
                           try {
@@ -780,7 +794,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                             alert('Unable to set up notifications at this time.');
                           }
                         }}
-                        className="w-full px-4 py-2 bg-green-50 border border-green-200 text-green-700 rounded-lg hover:bg-green-100 transition text-sm flex items-center justify-center space-x-2"
+                        className="w-full px-4 py-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition text-sm flex items-center justify-center space-x-2"
                       >
                         <span>🔔</span>
                         <span>Get notified when {caregiver.name.split(' ')[0]} posts availability</span>
@@ -791,7 +805,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
               ) : (
                 <>
                   {/* Multi-day Toggle */}
-                  <div className="border border-gray-200 rounded-lg p-3">
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
                     <label className="flex items-center cursor-pointer">
                       <input
                         type="checkbox"
@@ -812,8 +826,8 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                         className="mr-3 rounded text-rose-500 focus:ring-rose-500"
                       />
                       <div>
-                        <span className="font-medium text-gray-700">Multi-day booking</span>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <span className="font-medium text-gray-700 dark:text-gray-200">Multi-day booking</span>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                           Book for multiple consecutive days (3+ days get discount!)
                         </p>
                       </div>
@@ -824,7 +838,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                   {bookingDetails.isMultiDay ? (
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                           Start Date
                         </label>
                         <div className="relative">
@@ -841,7 +855,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                 endTime: ''
                               }));
                             }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-rose-500 focus:border-rose-500"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-rose-500 focus:border-rose-500"
                             required
                           >
                             <option value="">Select start date...</option>
@@ -859,12 +873,12 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                               ));
                             })()}
                           </select>
-                          <CalendarDaysIcon className="absolute right-3 top-2.5 h-5 w-5 text-gray-400 pointer-events-none" />
+                          <CalendarDaysIcon className="absolute right-3 top-2.5 h-5 w-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
                         </div>
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                           End Date
                         </label>
                         <div className="relative">
@@ -878,7 +892,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                 endTime: ''
                               }));
                             }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-rose-500 focus:border-rose-500"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-rose-500 focus:border-rose-500"
                             disabled={!bookingDetails.startDate}
                             required
                           >
@@ -900,20 +914,20 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                               ));
                             })()}
                           </select>
-                          <CalendarDaysIcon className="absolute right-3 top-2.5 h-5 w-5 text-gray-400 pointer-events-none" />
+                          <CalendarDaysIcon className="absolute right-3 top-2.5 h-5 w-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
                         </div>
                       </div>
                     </div>
                   ) : (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                         Date
                       </label>
                     <div className="relative">
                       <select
                         value={bookingDetails.date}
                         onChange={(e) => setBookingDetails(prev => ({ ...prev, date: e.target.value, startTime: '', endTime: '' }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-rose-500 focus:border-rose-500"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-rose-500 focus:border-rose-500"
                         required
                       >
                         <option value="">Select an available date...</option>
@@ -932,16 +946,16 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                           ));
                         })()}
                       </select>
-                      <CalendarDaysIcon className="absolute right-3 top-2.5 h-5 w-5 text-gray-400 pointer-events-none" />
+                      <CalendarDaysIcon className="absolute right-3 top-2.5 h-5 w-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
                     </div>
                     </div>
                   )}
 
                   {/* Multi-day date range display */}
                   {bookingDetails.isMultiDay && bookingDetails.startDate && bookingDetails.endDate && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <h4 className="font-medium text-gray-900 mb-1">📅 Multi-day Booking</h4>
-                      <div className="space-y-1 text-sm">
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                      <h4 className="font-medium text-gray-900 dark:text-white mb-1">📅 Multi-day Booking</h4>
+                      <div className="space-y-1 text-sm dark:text-gray-200">
                         <div className="flex justify-between">
                           <span>Duration:</span>
                           <span className="font-medium">{calculateDays()} days</span>
@@ -963,7 +977,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                           </span>
                         </div>
                         {calculateDays() >= 3 && (
-                          <div className="flex justify-between text-green-700">
+                          <div className="flex justify-between text-green-700 dark:text-green-400">
                             <span>Discount:</span>
                             <span className="font-medium">
                               {calculateDays() >= 5 ? '10% off' : '5% off'} 🎉
@@ -980,7 +994,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                     <>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                             Start Time
                           </label>
                           <div className="relative">
@@ -990,7 +1004,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                 const selectedStartTime = e.target.value;
                                 setBookingDetails(prev => ({ ...prev, startTime: selectedStartTime, endTime: '' }));
                               }}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-rose-500 focus:border-rose-500"
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-rose-500 focus:border-rose-500"
                             >
                               <option value="">Select start time...</option>
                               {(() => {
@@ -1015,81 +1029,69 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
 
                                   // Group slots by time range - USE LOCAL TIME consistently
                                   // Since we display times in local time to users, we need to use local time for grouping too
-                                  const timeSlotGroups: Record<string, { dates: string[], slotStart: Date, slotEnd: Date }> = {};
+                                  const timeSlotGroups: Record<string, { dates: string[], startLocal: DateTime, endLocal: DateTime }> = {};
                                   allAvailability.forEach(slot => {
                                     const slotDate = slot.date.split('T')[0];
                                     if (dateRange.includes(slotDate) && slot.availableSpots > 0) {
-                                      // Force UTC interpretation for slot times
-                                      let startTimeStr = slot.startTime;
-                                      let endTimeStr = slot.endTime;
-                                      if (!startTimeStr.endsWith('Z') && !startTimeStr.includes('+')) {
-                                        startTimeStr = startTimeStr.replace(/\.\d{3}$/, '') + 'Z';
-                                      }
-                                      if (!endTimeStr.endsWith('Z') && !endTimeStr.includes('+')) {
-                                        endTimeStr = endTimeStr.replace(/\.\d{3}$/, '') + 'Z';
-                                      }
-                                      const slotStart = new Date(startTimeStr);
-                                      const slotEnd = new Date(endTimeStr);
+                                      // Convert UTC slot times to user's local timezone
+                                      const startLocal = toLocalDateTime(slot.startTime, userTimezone);
+                                      const endLocal = toLocalDateTime(slot.endTime, userTimezone);
 
-                                      // Use LOCAL time for display (toTimeString gives local time)
-                                      const timeKey = `${slotStart.toTimeString().slice(0,5)}-${slotEnd.toTimeString().slice(0,5)}`;
+                                      // Use user's timezone for display grouping
+                                      const timeKey = `${startLocal.toFormat('HH:mm')}-${endLocal.toFormat('HH:mm')}`;
                                       if (!timeSlotGroups[timeKey]) {
-                                        timeSlotGroups[timeKey] = { dates: [], slotStart, slotEnd };
+                                        timeSlotGroups[timeKey] = { dates: [], startLocal, endLocal };
                                       }
                                       timeSlotGroups[timeKey].dates.push(slotDate);
                                     }
                                   });
                                   
                                   // Only include time slots that are available on ALL dates
+                                  const commonTimeSlotsFinal: Array<{ startLocal: DateTime; endLocal: DateTime }> = [];
                                   Object.entries(timeSlotGroups).forEach(([timeKey, slotData]) => {
                                     if (slotData.dates.length === dateRange.length) {
-                                      // This time slot is available on all dates
-                                      const [startTime, endTime] = timeKey.split('-');
-                                      // Store both the display time (local) and the actual Date objects for proper calculation
-                                      commonTimeSlots.push({ startTime, endTime, slotStart: slotData.slotStart, slotEnd: slotData.slotEnd });
+                                      commonTimeSlotsFinal.push({ startLocal: slotData.startLocal, endLocal: slotData.endLocal });
                                     }
                                   });
-                                  
-                                  console.log('🕐 Common time slots for multi-day:', commonTimeSlots);
-                                  
-                                  if (commonTimeSlots.length === 0) {
+
+                                  console.log('🕐 Common time slots for multi-day:', commonTimeSlotsFinal);
+
+                                  if (commonTimeSlotsFinal.length === 0) {
                                     return [(
                                       <option key="no-times" value="" disabled className="text-gray-500">
                                         No times available for all selected dates
                                       </option>
                                     )];
                                   }
-                                  
+
                                   const availableTimeRanges: string[] = [];
-                                  commonTimeSlots.forEach(({ startTime, endTime, slotStart, slotEnd }) => {
-                                    // Use LOCAL time since that's what we display to users
-                                    // slotStart and slotEnd are the actual Date objects from the database
-                                    const startHour = slotStart.getHours();
-                                    const endHour = slotEnd.getHours();
+                                  commonTimeSlotsFinal.forEach(({ startLocal, endLocal }) => {
+                                    // Use user's timezone hours for time generation
+                                    const startMinutes = startLocal.hour * 60 + startLocal.minute;
+                                    let endMinutes = endLocal.hour * 60 + endLocal.minute;
+                                    // Handle overnight slots
+                                    if (endMinutes <= startMinutes) endMinutes += 24 * 60;
 
-                                    // Handle overnight slots (end hour less than start hour)
-                                    const effectiveEndHour = endHour <= startHour ? endHour + 24 : endHour;
-
-                                    // Generate hourly start times within the slot - USE LOCAL HOURS
-                                    for (let hour = startHour; hour < effectiveEndHour; hour++) {
-                                      const displayHour = hour % 24;
-                                      const timeStr = `${displayHour.toString().padStart(2, '0')}:00`;
+                                    // Generate hourly start times
+                                    for (let min = startMinutes; min < endMinutes; min += 60) {
+                                      const hour = Math.floor((min % (24 * 60)) / 60);
+                                      const timeStr = `${hour.toString().padStart(2, '0')}:00`;
                                       if (!availableTimeRanges.includes(timeStr)) {
                                         availableTimeRanges.push(timeStr);
                                       }
                                     }
 
-                                    // Add half-hour intervals if slot allows - USE LOCAL HOURS
-                                    for (let hour = startHour; hour < effectiveEndHour; hour++) {
-                                      const displayHour = hour % 24;
-                                      const timeStr = `${displayHour.toString().padStart(2, '0')}:30`;
+                                    // Add half-hour intervals
+                                    for (let min = startMinutes + 30; min < endMinutes; min += 60) {
+                                      const hour = Math.floor((min % (24 * 60)) / 60);
+                                      const timeStr = `${hour.toString().padStart(2, '0')}:30`;
                                       if (!availableTimeRanges.includes(timeStr)) {
                                         availableTimeRanges.push(timeStr);
                                       }
                                     }
 
-                                    // Add the exact slot start time - USE LOCAL HOURS/MINUTES
-                                    const exactStart = `${slotStart.getHours().toString().padStart(2, '0')}:${slotStart.getMinutes().toString().padStart(2, '0')}`;
+                                    // Add the exact slot start time
+                                    const exactStart = `${startLocal.hour.toString().padStart(2, '0')}:${startLocal.minute.toString().padStart(2, '0')}`;
                                     if (!availableTimeRanges.includes(exactStart)) {
                                       availableTimeRanges.push(exactStart);
                                     }
@@ -1147,40 +1149,38 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                   
                                   const availableTimeRanges: string[] = [];
                                   selectedDateSlots.forEach(slot => {
-                                  // TIMEZONE FIX: Force UTC interpretation
-                                  let startTimeStr = slot.startTime;
-                                  let endTimeStr = slot.endTime;
-                                  if (!startTimeStr.endsWith('Z') && !startTimeStr.includes('+')) {
-                                    startTimeStr = startTimeStr.replace(/\.\d{3}$/, '') + 'Z';
-                                  }
-                                  if (!endTimeStr.endsWith('Z') && !endTimeStr.includes('+')) {
-                                    endTimeStr = endTimeStr.replace(/\.\d{3}$/, '') + 'Z';
-                                  }
+                                    // Convert UTC slot times to user's local timezone using Luxon
+                                    const slotStartLocal = toLocalDateTime(slot.startTime, userTimezone);
+                                    const slotEndLocal = toLocalDateTime(slot.endTime, userTimezone);
 
-                                  const slotStart = new Date(startTimeStr);
-                                  const slotEnd = new Date(endTimeStr);
+                                    const startMinutes = slotStartLocal.hour * 60 + slotStartLocal.minute;
+                                    let endMinutes = slotEndLocal.hour * 60 + slotEndLocal.minute;
+                                    // Handle overnight slots
+                                    if (endMinutes <= startMinutes) endMinutes += 24 * 60;
 
-                                  // Generate hourly start times within the slot - USE UTC HOURS
-                                  for (let hour = slotStart.getUTCHours(); hour < slotEnd.getUTCHours(); hour++) {
-                                    const timeStr = `${hour.toString().padStart(2, '0')}:00`;
-                                    if (!availableTimeRanges.includes(timeStr)) {
-                                      availableTimeRanges.push(timeStr);
+                                    // Generate hourly start times within the slot - LOCAL TIMEZONE HOURS
+                                    for (let min = startMinutes; min < endMinutes; min += 60) {
+                                      const hour = Math.floor((min % (24 * 60)) / 60);
+                                      const timeStr = `${hour.toString().padStart(2, '0')}:00`;
+                                      if (!availableTimeRanges.includes(timeStr)) {
+                                        availableTimeRanges.push(timeStr);
+                                      }
                                     }
-                                  }
 
-                                  // Add half-hour intervals if slot allows - USE UTC HOURS
-                                  for (let hour = slotStart.getUTCHours(); hour < slotEnd.getUTCHours(); hour++) {
-                                    const timeStr = `${hour.toString().padStart(2, '0')}:30`;
-                                    if (!availableTimeRanges.includes(timeStr)) {
-                                      availableTimeRanges.push(timeStr);
+                                    // Add half-hour intervals - LOCAL TIMEZONE HOURS
+                                    for (let min = startMinutes + 30; min < endMinutes; min += 60) {
+                                      const hour = Math.floor((min % (24 * 60)) / 60);
+                                      const timeStr = `${hour.toString().padStart(2, '0')}:30`;
+                                      if (!availableTimeRanges.includes(timeStr)) {
+                                        availableTimeRanges.push(timeStr);
+                                      }
                                     }
-                                  }
 
-                                  // Add the exact slot start time - USE UTC HOURS/MINUTES
-                                  const exactStart = `${slotStart.getUTCHours().toString().padStart(2, '0')}:${slotStart.getUTCMinutes().toString().padStart(2, '0')}`;
-                                  if (!availableTimeRanges.includes(exactStart)) {
-                                    availableTimeRanges.push(exactStart);
-                                  }
+                                    // Add the exact slot start time - LOCAL TIMEZONE
+                                    const exactStart = `${slotStartLocal.hour.toString().padStart(2, '0')}:${slotStartLocal.minute.toString().padStart(2, '0')}`;
+                                    if (!availableTimeRanges.includes(exactStart)) {
+                                      availableTimeRanges.push(exactStart);
+                                    }
                                   });
 
                                   // Filter out past times if the selected date is today
@@ -1204,7 +1204,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                   if (filteredTimeRanges.length === 0) {
                                     return [(
                                       <option key="no-future-times" value="" disabled className="text-gray-500">
-                                        No future times available today
+                                        {isToday ? "No bookable times left today — try tomorrow" : "No times available for this date"}
                                       </option>
                                     )];
                                   }
@@ -1221,19 +1221,19 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                 }
                               })()}
                             </select>
-                            <ClockIcon className="absolute right-3 top-2.5 h-5 w-5 text-gray-400 pointer-events-none" />
+                            <ClockIcon className="absolute right-3 top-2.5 h-5 w-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
                           </div>
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                             End Time
                           </label>
                           <div className="relative">
                             <select
                               value={bookingDetails.endTime}
                               onChange={(e) => setBookingDetails(prev => ({ ...prev, endTime: e.target.value }))}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-rose-500 focus:border-rose-500"
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-rose-500 focus:border-rose-500"
                               disabled={!bookingDetails.startTime}
                             >
                               <option value="">Select end time...</option>
@@ -1260,41 +1260,27 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                 const availableEndTimes: string[] = [];
                                 selectedDateSlots.forEach(slot => {
                                   try {
-                                    // TIMEZONE FIX: Force UTC interpretation for database times
-                                    let startTimeStr = slot.startTime;
-                                    let endTimeStr = slot.endTime;
-                                    if (!startTimeStr.endsWith('Z') && !startTimeStr.includes('+')) {
-                                      startTimeStr = startTimeStr.replace(/\.\d{3}$/, '') + 'Z';
-                                    }
-                                    if (!endTimeStr.endsWith('Z') && !endTimeStr.includes('+')) {
-                                      endTimeStr = endTimeStr.replace(/\.\d{3}$/, '') + 'Z';
-                                    }
-
-                                    const slotStart = new Date(startTimeStr);
-                                    const slotEnd = new Date(endTimeStr);
+                                    // Convert UTC slot times to user's local timezone using Luxon
+                                    const slotStartLocal = toLocalDateTime(slot.startTime, userTimezone);
+                                    const slotEndLocal = toLocalDateTime(slot.endTime, userTimezone);
                                     const selectedStartTime = bookingDetails.startTime;
                                     const [startHour, startMin] = selectedStartTime.split(':').map(Number);
 
-                                    // Get UTC hours from the slot for comparison
-                                    // Since start times are generated in UTC, we must compare in UTC
-                                    const slotStartUTCHour = slotStart.getUTCHours();
-                                    const slotStartUTCMin = slotStart.getUTCMinutes();
-                                    const slotEndUTCHour = slotEnd.getUTCHours();
-                                    const slotEndUTCMin = slotEnd.getUTCMinutes();
-
-                                    // Convert times to minutes since midnight for easy comparison
-                                    const selectedStartMinutes = startHour * 60 + startMin;
-                                    const slotStartMinutes = slotStartUTCHour * 60 + slotStartUTCMin;
-                                    // Handle overnight slots (end before start)
-                                    let slotEndMinutes = slotEndUTCHour * 60 + slotEndUTCMin;
+                                    // Use local timezone hours for comparison
+                                    const slotStartMinutes = slotStartLocal.hour * 60 + slotStartLocal.minute;
+                                    let slotEndMinutes = slotEndLocal.hour * 60 + slotEndLocal.minute;
+                                    // Handle overnight slots
                                     if (slotEndMinutes <= slotStartMinutes) {
-                                      slotEndMinutes += 24 * 60; // Add 24 hours
+                                      slotEndMinutes += 24 * 60;
                                     }
 
-                                    console.log('🔍 Slot comparison (UTC TIME):', {
-                                      slotStartUTC: `${slotStartUTCHour}:${slotStartUTCMin.toString().padStart(2, '0')}`,
-                                      slotEndUTC: `${slotEndUTCHour}:${slotEndUTCMin.toString().padStart(2, '0')}`,
-                                      selectedStartUTC: selectedStartTime,
+                                    const selectedStartMinutes = startHour * 60 + startMin;
+
+                                    console.log('🔍 Slot comparison (LOCAL TIME):', {
+                                      slotStartLocal: slotStartLocal.toFormat('HH:mm'),
+                                      slotEndLocal: slotEndLocal.toFormat('HH:mm'),
+                                      selectedStart: selectedStartTime,
+                                      timezone: userTimezone,
                                       slotStartMinutes,
                                       slotEndMinutes,
                                       selectedStartMinutes,
@@ -1305,7 +1291,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                       // Generate possible end times from 1 hour after start up to slot end
                                       const minEndMinutes = selectedStartMinutes + 60; // Minimum 1 hour booking
 
-                                      // Generate hourly and half-hourly end times - USE UTC TIME
+                                      // Generate hourly and half-hourly end times - LOCAL TIMEZONE
                                       for (let currentMinutes = minEndMinutes; currentMinutes <= slotEndMinutes; currentMinutes += 30) {
                                         const hour = Math.floor((currentMinutes % (24 * 60)) / 60);
                                         const min = currentMinutes % 60;
@@ -1315,8 +1301,8 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                         }
                                       }
 
-                                      // Add the exact slot end time - USE UTC TIME
-                                      const exactEnd = `${slotEndUTCHour.toString().padStart(2, '0')}:${slotEndUTCMin.toString().padStart(2, '0')}`;
+                                      // Add the exact slot end time - LOCAL TIMEZONE
+                                      const exactEnd = `${slotEndLocal.hour.toString().padStart(2, '0')}:${slotEndLocal.minute.toString().padStart(2, '0')}`;
                                       if (!availableEndTimes.includes(exactEnd)) {
                                         availableEndTimes.push(exactEnd);
                                       }
@@ -1337,7 +1323,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                 ));
                               })()}
                             </select>
-                            <ClockIcon className="absolute right-3 top-2.5 h-5 w-5 text-gray-400 pointer-events-none" />
+                            <ClockIcon className="absolute right-3 top-2.5 h-5 w-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
                           </div>
                         </div>
                       </div>
@@ -1353,12 +1339,12 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                         
                         if (selectedDateSlots.length === 0) {
                           return (
-                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                              <h4 className="font-medium text-yellow-900 mb-1">⚠️ No Times Available</h4>
-                              <p className="text-yellow-800 text-sm mb-2">
+                            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                              <h4 className="font-medium text-yellow-900 dark:text-yellow-300 mb-1">⚠️ No Times Available</h4>
+                              <p className="text-yellow-800 dark:text-yellow-300 text-sm mb-2">
                                 {caregiver.name} hasn't posted any available time slots for this date.
                               </p>
-                              <div className="text-yellow-700 text-xs">
+                              <div className="text-yellow-700 dark:text-yellow-400 text-xs">
                                 <p>• Try selecting a different date</p>
                                 <p>• Contact {caregiver.name} to ask about availability</p>
                                 <p>• Check if there are other caregivers available</p>
@@ -1382,28 +1368,13 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                         const matchingSlots = allAvailability.filter(slot => {
                           if (slot.date.split('T')[0] !== targetDate) return false;
 
-                          // TIMEZONE FIX: Force UTC interpretation for slot times
-                          let startTimeStr = slot.startTime;
-                          let endTimeStr = slot.endTime;
-                          if (!startTimeStr.endsWith('Z') && !startTimeStr.includes('+')) {
-                            startTimeStr = startTimeStr.replace(/\.\d{3}$/, '') + 'Z';
-                          }
-                          if (!endTimeStr.endsWith('Z') && !endTimeStr.includes('+')) {
-                            endTimeStr = endTimeStr.replace(/\.\d{3}$/, '') + 'Z';
-                          }
+                          // Convert UTC slot times to user's local timezone using Luxon
+                          const slotStartLocal = toLocalDateTime(slot.startTime, userTimezone);
+                          const slotEndLocal = toLocalDateTime(slot.endTime, userTimezone);
 
-                          const slotStart = new Date(startTimeStr);
-                          const slotEnd = new Date(endTimeStr);
-
-                          // Use UTC time for comparison (same as dropdown generation)
-                          const slotStartUTCHour = slotStart.getUTCHours();
-                          const slotStartUTCMin = slotStart.getUTCMinutes();
-                          const slotEndUTCHour = slotEnd.getUTCHours();
-                          const slotEndUTCMin = slotEnd.getUTCMinutes();
-
-                          // Convert to minutes since midnight for easy comparison
-                          const slotStartMinutes = slotStartUTCHour * 60 + slotStartUTCMin;
-                          let slotEndMinutes = slotEndUTCHour * 60 + slotEndUTCMin;
+                          // Use local timezone hours for comparison (matches dropdown generation)
+                          const slotStartMinutes = slotStartLocal.hour * 60 + slotStartLocal.minute;
+                          let slotEndMinutes = slotEndLocal.hour * 60 + slotEndLocal.minute;
                           // Handle overnight slots
                           if (slotEndMinutes <= slotStartMinutes) {
                             slotEndMinutes += 24 * 60;
@@ -1420,12 +1391,13 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                           bookingEndMinutes <= slotEndMinutes &&
                                           slot.availableSpots > 0;
 
-                          console.log('🔍 Validation comparison (UTC time):', {
+                          console.log('🔍 Validation comparison (LOCAL time):', {
                             slotId: slot.id,
-                            slotStartUTC: `${slotStartUTCHour}:${slotStartUTCMin.toString().padStart(2, '0')}`,
-                            slotEndUTC: `${slotEndUTCHour}:${slotEndUTCMin.toString().padStart(2, '0')}`,
+                            slotStartLocal: slotStartLocal.toFormat('HH:mm'),
+                            slotEndLocal: slotEndLocal.toFormat('HH:mm'),
                             bookingStart: `${startHour}:${startMin.toString().padStart(2, '0')}`,
                             bookingEnd: `${endHour}:${endMin.toString().padStart(2, '0')}`,
+                            timezone: userTimezone,
                             slotStartMinutes,
                             slotEndMinutes,
                             bookingStartMinutes,
@@ -1451,9 +1423,9 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                           const durationText = hours > 0 ? `${hours}h${minutes > 0 ? ` ${minutes}m` : ''}` : `${minutes}m`;
                           
                           return (
-                            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                              <h4 className="font-medium text-gray-900 mb-1">✅ Valid Booking Selection</h4>
-                              <div className="space-y-1 text-sm">
+                            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+                              <h4 className="font-medium text-gray-900 dark:text-white mb-1">✅ Valid Booking Selection</h4>
+                              <div className="space-y-1 text-sm dark:text-gray-200">
                                 <div className="flex justify-between">
                                   <span>Booking duration:</span>
                                   <span className="font-medium">{durationText}</span>
@@ -1468,16 +1440,16 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                                 </div>
                                 <div className="flex justify-between">
                                   <span>Total cost:</span>
-                                  <span className="font-medium text-green-700">{formatCAD(Math.round(duration / 60 * matchingSlot.baseRate * 100))}</span>
+                                  <span className="font-medium text-green-700 dark:text-green-400">{formatCAD(Math.round(duration / 60 * matchingSlot.baseRate * 100))}</span>
                                 </div>
                               </div>
                             </div>
                           );
                         } else {
                           return (
-                            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                              <h4 className="font-medium text-red-900 mb-1">❌ Invalid Selection</h4>
-                              <p className="text-red-700 text-sm">
+                            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                              <h4 className="font-medium text-red-900 dark:text-red-300 mb-1">❌ Invalid Selection</h4>
+                              <p className="text-red-700 dark:text-red-400 text-sm">
                                 The selected time doesn't fall within any available caregiver slots.
                               </p>
                             </div>
@@ -1491,22 +1463,22 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
 
               {/* Reservation Status */}
               {currentReservation && reservationTimer > 0 && (
-                <div className="bg-yellow-100 border border-yellow-300 rounded-lg p-3">
+                <div className="bg-yellow-100 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-800 rounded-lg p-3">
                   <div className="flex items-center space-x-2 mb-2">
-                    <ExclamationTriangleIcon className="h-5 w-5 text-yellow-600" />
-                    <span className="text-yellow-800 font-medium">
+                    <ExclamationTriangleIcon className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                    <span className="text-yellow-800 dark:text-yellow-300 font-medium">
                       Time Slot Reserved
                     </span>
                   </div>
-                  <div className="text-yellow-700 text-sm">
+                  <div className="text-yellow-700 dark:text-yellow-400 text-sm">
                     You have reserved spots for <strong>{formatTimeRemaining(reservationTimer)}</strong>
                   </div>
-                  <div className="text-yellow-600 text-xs mt-1">
+                  <div className="text-yellow-600 dark:text-yellow-400 text-xs mt-1">
                     Complete your booking before the timer expires or spots will be released
                   </div>
                   <button
                     onClick={handleCancelReservation}
-                    className="mt-2 text-red-600 hover:text-red-800 text-sm font-medium"
+                    className="mt-2 text-red-600 hover:text-red-800 dark:text-red-300 text-sm font-medium"
                   >
                     Cancel Reservation
                   </button>
@@ -1515,7 +1487,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-sm font-medium text-gray-700">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
                     Select Children
                   </label>
                   <button
@@ -1523,8 +1495,8 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                     onClick={() => setShowSpecialRequests(!showSpecialRequests)}
                     className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md transition-colors ${
                       showSpecialRequests || bookingDetails.specialRequests
-                        ? 'bg-rose-100 text-rose-700 hover:bg-rose-200'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:hover:bg-rose-900/40'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
                     }`}
                   >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1538,29 +1510,32 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                   {childProfiles.map(child => (
                     <label 
                       key={child.id} 
-                      className={`flex items-center space-x-3 p-2 border rounded-lg cursor-pointer transition-colors hover:bg-gray-50 ${
+                      className={`flex items-center space-x-3 p-2 border rounded-lg cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 ${
                         bookingDetails.selectedChildIds.includes(child.id) 
-                          ? 'border-rose-500 bg-rose-50' 
-                          : 'border-gray-200'
+                          ? 'border-rose-500 bg-rose-50 dark:bg-rose-900/20' 
+                          : 'border-gray-200 dark:border-gray-600'
                       }`}
                     >
                       <input
                         type="checkbox"
                         checked={bookingDetails.selectedChildIds.includes(child.id)}
                         onChange={(e) => handleChildSelection(child.id, e.target.checked)}
-                        className="w-4 h-4 text-rose-600 focus:ring-rose-500 border-gray-300 rounded"
+                        className="w-4 h-4 text-rose-600 focus:ring-rose-500 border-gray-300 dark:border-gray-600 rounded"
                       />
                       
                       {/* Child Photo */}
-                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-600 flex items-center justify-center">
                         {child.photoUrl ? (
-                          <img 
-                            src={child.photoUrl} 
+                          <Image
+                            src={child.photoUrl}
+                            width={32}
+                            height={32}
                             alt={`${child.firstName} ${child.lastName}`}
                             className="w-full h-full object-cover"
+                            unoptimized
                           />
                         ) : (
-                          <span className="text-gray-500 text-sm font-medium">
+                          <span className="text-gray-500 dark:text-gray-400 text-sm font-medium">
                             {child.firstName.charAt(0).toUpperCase()}
                           </span>
                         )}
@@ -1569,10 +1544,10 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                       {/* Child Info */}
                       <div className="flex-1">
                         <div className="flex items-center space-x-2">
-                          <span className="font-medium text-gray-900">
+                          <span className="font-medium text-gray-900 dark:text-white">
                             {child.firstName} {child.lastName}
                           </span>
-                          <span className="text-sm text-gray-500">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
                             Age {calculateAge(child.dateOfBirth)}
                           </span>
                         </div>
@@ -1584,22 +1559,22 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                           child.dietaryRestrictions) && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {(Array.isArray(child.allergies) ? child.allergies.length > 0 : child.allergies) && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
                                 🥜 Allergies
                               </span>
                             )}
                             {(Array.isArray(child.medications) ? child.medications.length > 0 : child.medications) && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
                                 💊 Medication
                               </span>
                             )}
                             {(Array.isArray(child.medicalConditions) ? child.medicalConditions.length > 0 : child.medicalConditions) && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300">
                                 🏥 Medical
                               </span>
                             )}
                             {child.dietaryRestrictions && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
                                 🥗 Diet
                               </span>
                             )}
@@ -1610,14 +1585,14 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                   ))}
                   
                   {childProfiles.length === 0 && (
-                    <div className="text-center py-4 text-gray-500">
+                    <div className="text-center py-4 text-gray-500 dark:text-gray-400">
                       No child profiles found. Please add children to your profile first.
                     </div>
                   )}
                 </div>
                 
                 {bookingDetails.selectedChildIds.length === 0 && (
-                  <p className="text-red-500 text-sm mt-1">Please select at least one child</p>
+                  <p className="text-red-500 dark:text-red-400 text-sm mt-1">Please select at least one child</p>
                 )}
               </div>
 
@@ -1625,13 +1600,13 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
               {showSpecialRequests && (
                 <div className="animate-in slide-in-from-top-2 duration-200">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-sm font-medium text-gray-700">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
                       Special Requests (Optional)
                     </label>
                     <button
                       type="button"
                       onClick={() => setShowSpecialRequests(false)}
-                      className="text-gray-400 hover:text-gray-600"
+                      className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1643,14 +1618,14 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                     onChange={(e) => setBookingDetails(prev => ({ ...prev, specialRequests: e.target.value }))}
                     rows={2}
                     placeholder="Any special requirements or notes for the caregiver..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-rose-500 focus:border-rose-500 resize-none text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 rounded-lg focus:ring-rose-500 focus:border-rose-500 resize-none text-sm"
                     autoFocus
                   />
                 </div>
               )}
 
               {/* Split Payment Option - HIDDEN: Feature not yet fully implemented
-              <div className="border border-gray-200 rounded-lg p-3">
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
                 <div className="flex items-center justify-between mb-1">
                   <label className="flex items-center cursor-pointer">
                     <input
@@ -1669,13 +1644,13 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                       }}
                       className="mr-2 rounded text-rose-500 focus:ring-rose-500"
                     />
-                    <span className="font-medium text-gray-700">Split Payment (Shared Custody)</span>
+                    <span className="font-medium text-gray-700 dark:text-gray-200">Split Payment (Shared Custody)</span>
                   </label>
                 </div>
 
                 {bookingDetails.isSplitPayment && (
                   <div className="mt-2 space-y-2">
-                    <p className="text-sm text-gray-600">Split the cost between multiple parties</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Split the cost between multiple parties</p>
                     {bookingDetails.splitParties.map((party, index) => (
                       <div key={index} className="grid grid-cols-3 gap-2">
                         <input
@@ -1728,9 +1703,9 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
               */}
 
               {/* Booking Summary */}
-              <div className="bg-rose-50 rounded-lg p-3">
-                <h4 className="font-medium text-gray-900 mb-1">Booking Summary</h4>
-                <div className="space-y-1 text-sm">
+              <div className="bg-rose-50 dark:bg-rose-900/20 rounded-lg p-3">
+                <h4 className="font-medium text-gray-900 dark:text-white mb-1">Booking Summary</h4>
+                <div className="space-y-1 text-sm dark:text-gray-200">
                   {bookingDetails.isMultiDay ? (
                     <>
                       <div className="flex justify-between">
@@ -1750,7 +1725,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                         <span>${caregiver.hourlyRate}/hour</span>
                       </div>
                       {calculateDays() >= 3 && (
-                        <div className="flex justify-between text-green-600">
+                        <div className="flex justify-between text-green-600 dark:text-green-400">
                           <span>Multi-day discount:</span>
                           <span>{calculateDays() >= 5 ? '10% off' : '5% off'}</span>
                         </div>
@@ -1775,12 +1750,12 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                         {getSelectedChildren().map(child => child.firstName).join(', ') || 'None selected'}
                       </span>
                       {hasSpecialNeeds() && (
-                        <div className="text-xs text-orange-600 mt-1">⚠️ Special needs noted</div>
+                        <div className="text-xs text-orange-600 dark:text-orange-400 mt-1">⚠️ Special needs noted</div>
                       )}
                     </div>
                   </div>
                   {bookingDetails.isSplitPayment && (
-                    <div className="pt-1 space-y-1 border-t border-rose-200">
+                    <div className="pt-1 space-y-1 border-t border-rose-200 dark:border-rose-800">
                       {bookingDetails.splitParties.map((party, index) => (
                         <div key={index} className="flex justify-between text-xs">
                           <span>{party.name || `Party ${index + 1}`}:</span>
@@ -1789,7 +1764,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                       ))}
                     </div>
                   )}
-                  <div className="border-t border-rose-200 pt-1 mt-2">
+                  <div className="border-t border-rose-200 dark:border-rose-800 pt-1 mt-2">
                     <div className="flex justify-between font-medium">
                       <span>Total:</span>
                       <span>{formatCAD(totalAmount)}</span>
@@ -1803,7 +1778,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
             <div className="flex justify-end space-x-3 mt-4">
               <button
                 onClick={onClose}
-                className="px-4 py-2 text-gray-700 hover:text-gray-900 transition"
+                className="px-4 py-2 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white transition"
               >
                 Cancel
               </button>
@@ -1817,7 +1792,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                   !bookingDetails.endTime || 
                   bookingDetails.selectedChildIds.length === 0
                 }
-                className="px-6 py-2 bg-rose-500 text-white rounded-lg hover:bg-rose-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+                className="px-6 py-2 bg-rose-500 text-white rounded-lg hover:bg-rose-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed transition"
                 title={
                   (bookingDetails.isMultiDay ? 
                     (!bookingDetails.startDate || !bookingDetails.endDate) : 
@@ -1842,35 +1817,35 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
           <div className="p-4">
             {/* Booking Confirmation */}
             <div className="text-center mb-4">
-              <div className="w-12 h-12 mx-auto mb-3 bg-yellow-100 rounded-full flex items-center justify-center">
+              <div className="w-12 h-12 mx-auto mb-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center">
                 <span className="text-xl">⚠️</span>
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-1">Confirm Booking Details</h3>
-              <p className="text-gray-500 text-sm">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">Confirm Booking Details</h3>
+              <p className="text-gray-500 dark:text-gray-400 text-sm">
                 Please verify you're booking with the correct caregiver
               </p>
             </div>
 
             {/* Caregiver Verification */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-              <h4 className="font-medium text-gray-900 mb-2">Caregiver Details</h4>
-              <div className="space-y-2 text-sm">
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-4">
+              <h4 className="font-medium text-gray-900 dark:text-white mb-2">Caregiver Details</h4>
+              <div className="space-y-2 text-sm dark:text-gray-200">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Name:</span>
+                  <span className="text-gray-600 dark:text-gray-300">Name:</span>
                   <span className="font-medium">{caregiver.name}</span>
                 </div>
                 {caregiver.email && (
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Email:</span>
-                    <span className="font-medium text-blue-600">{caregiver.email}</span>
+                    <span className="text-gray-600 dark:text-gray-300">Email:</span>
+                    <span className="font-medium text-blue-600 dark:text-blue-400">{caregiver.email}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Rate:</span>
+                  <span className="text-gray-600 dark:text-gray-300">Rate:</span>
                   <span className="font-medium">${caregiver.hourlyRate}/hour</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Experience:</span>
+                  <span className="text-gray-600 dark:text-gray-300">Experience:</span>
                   <span className="font-medium">{caregiver.experience}</span>
                 </div>
               </div>
@@ -1878,26 +1853,29 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
 
             {/* Selected Children Details */}
             {getSelectedChildren().length > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                <h4 className="font-medium text-gray-900 mb-2">Children in This Booking</h4>
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
+                <h4 className="font-medium text-gray-900 dark:text-white mb-2">Children in This Booking</h4>
                 <div className="space-y-2">
                   {getSelectedChildren().map(child => (
-                    <div key={child.id} className="flex items-start space-x-3 p-2 bg-white rounded-lg">
-                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center flex-shrink-0">
+                    <div key={child.id} className="flex items-start space-x-3 p-2 bg-white dark:bg-gray-700 rounded-lg">
+                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-600 flex items-center justify-center flex-shrink-0">
                         {child.photoUrl ? (
-                          <img 
-                            src={child.photoUrl} 
+                          <Image
+                            src={child.photoUrl}
+                            width={32}
+                            height={32}
                             alt={`${child.firstName}`}
                             className="w-full h-full object-cover"
+                            unoptimized
                           />
                         ) : (
-                          <span className="text-gray-500 text-sm font-medium">
+                          <span className="text-gray-500 dark:text-gray-400 text-sm font-medium">
                             {child.firstName.charAt(0).toUpperCase()}
                           </span>
                         )}
                       </div>
                       <div className="flex-1">
-                        <div className="font-medium text-gray-900">
+                        <div className="font-medium text-gray-900 dark:text-white">
                           {child.firstName} {child.lastName} (Age {calculateAge(child.dateOfBirth)})
                         </div>
                         {((Array.isArray(child.allergies) ? child.allergies.length > 0 : child.allergies) ||
@@ -1906,31 +1884,31 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                           child.dietaryRestrictions) && (
                           <div className="mt-2 space-y-1 text-xs">
                             {(Array.isArray(child.allergies) ? child.allergies.length > 0 : child.allergies) && (
-                              <div className="text-orange-700"><strong>Allergies:</strong> {
+                              <div className="text-orange-700 dark:text-orange-400"><strong>Allergies:</strong> {
                                 Array.isArray(child.allergies)
                                   ? child.allergies.map((a: any) => typeof a === 'object' ? a.name : a).join(', ')
                                   : child.allergies
                               }</div>
                             )}
                             {(Array.isArray(child.medications) ? child.medications.length > 0 : child.medications) && (
-                              <div className="text-blue-700"><strong>Medications:</strong> {
+                              <div className="text-blue-700 dark:text-blue-400"><strong>Medications:</strong> {
                                 Array.isArray(child.medications)
                                   ? child.medications.map((m: any) => typeof m === 'object' ? m.name : m).join(', ')
                                   : child.medications
                               }</div>
                             )}
                             {(Array.isArray(child.medicalConditions) ? child.medicalConditions.length > 0 : child.medicalConditions) && (
-                              <div className="text-red-700"><strong>Medical:</strong> {
+                              <div className="text-red-700 dark:text-red-400"><strong>Medical:</strong> {
                                 Array.isArray(child.medicalConditions)
                                   ? child.medicalConditions.map((c: any) => typeof c === 'object' ? c.name : c).join(', ')
                                   : child.medicalConditions
                               }</div>
                             )}
                             {child.dietaryRestrictions && (
-                              <div className="text-green-700"><strong>Diet:</strong> {child.dietaryRestrictions}</div>
+                              <div className="text-green-700 dark:text-green-400"><strong>Diet:</strong> {child.dietaryRestrictions}</div>
                             )}
                             {child.specialInstructions && (
-                              <div className="text-purple-700"><strong>Instructions:</strong> {child.specialInstructions}</div>
+                              <div className="text-purple-700 dark:text-purple-400"><strong>Instructions:</strong> {child.specialInstructions}</div>
                             )}
                           </div>
                         )}
@@ -1939,7 +1917,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                   ))}
                 </div>
                 {hasSpecialNeeds() && (
-                  <div className="mt-3 p-2 bg-orange-100 border border-orange-200 rounded text-sm text-orange-800">
+                  <div className="mt-3 p-2 bg-orange-100 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded text-sm text-orange-800 dark:text-orange-300">
                     <strong>⚠️ Important:</strong> This booking includes children with special care requirements. Please review all details carefully.
                   </div>
                 )}
@@ -1947,13 +1925,13 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
             )}
 
             {/* Booking Summary */}
-            <div className="bg-gray-50 rounded-lg p-3 mb-4">
-              <h4 className="font-medium text-gray-900 mb-2">Booking Summary</h4>
-              <div className="space-y-2 text-sm">
+            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3 mb-4">
+              <h4 className="font-medium text-gray-900 dark:text-white mb-2">Booking Summary</h4>
+              <div className="space-y-2 text-sm dark:text-gray-200">
                 {bookingDetails.isMultiDay ? (
                   <>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Start Date:</span>
+                      <span className="text-gray-600 dark:text-gray-300">Start Date:</span>
                       <span className="font-medium">
                         {new Date(bookingDetails.startDate + 'T00:00:00').toLocaleDateString('en-US', { 
                           weekday: 'short', month: 'short', day: 'numeric' 
@@ -1961,7 +1939,7 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">End Date:</span>
+                      <span className="text-gray-600 dark:text-gray-300">End Date:</span>
                       <span className="font-medium">
                         {new Date(bookingDetails.endDate + 'T00:00:00').toLocaleDateString('en-US', { 
                           weekday: 'short', month: 'short', day: 'numeric' 
@@ -1969,11 +1947,11 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Duration:</span>
+                      <span className="text-gray-600 dark:text-gray-300">Duration:</span>
                       <span className="font-medium">{calculateDays()} days × {calculateHours()} hours/day</span>
                     </div>
                     {calculateDays() >= 3 && (
-                      <div className="flex justify-between text-green-600">
+                      <div className="flex justify-between text-green-600 dark:text-green-400">
                         <span>Multi-day discount:</span>
                         <span className="font-medium">{calculateDays() >= 5 ? '10% off' : '5% off'}</span>
                       </div>
@@ -1982,40 +1960,40 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
                 ) : (
                   <>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Date:</span>
+                      <span className="text-gray-600 dark:text-gray-300">Date:</span>
                       <span className="font-medium">{bookingDetails.date}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Duration:</span>
+                      <span className="text-gray-600 dark:text-gray-300">Duration:</span>
                       <span className="font-medium">{calculateHours()} hours</span>
                     </div>
                   </>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Time:</span>
+                  <span className="text-gray-600 dark:text-gray-300">Time:</span>
                   <span className="font-medium">{bookingDetails.startTime} - {bookingDetails.endTime}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Children:</span>
+                  <span className="text-gray-600 dark:text-gray-300">Children:</span>
                   <div className="text-right">
                     <span className="font-medium">
                       {getSelectedChildren().map(child => `${child.firstName} (${calculateAge(child.dateOfBirth)})`).join(', ') || 'None selected'}
                     </span>
                     {hasSpecialNeeds() && (
-                      <div className="text-xs text-orange-600 mt-1">⚠️ Special care required</div>
+                      <div className="text-xs text-orange-600 dark:text-orange-400 mt-1">⚠️ Special care required</div>
                     )}
                   </div>
                 </div>
-                <div className="flex justify-between border-t pt-2">
-                  <span className="text-gray-900 font-medium">Total:</span>
+                <div className="flex justify-between border-t dark:border-gray-600 pt-2">
+                  <span className="text-gray-900 dark:text-white font-medium">Total:</span>
                   <span className="font-bold text-lg">{formatCAD(totalAmount)}</span>
                 </div>
               </div>
             </div>
 
             {/* Warning Message */}
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
-              <p className="text-red-800 text-sm font-medium">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-4">
+              <p className="text-red-800 dark:text-red-300 text-sm font-medium">
                 ⚠️ Please verify this is the correct caregiver before proceeding to payment.
               </p>
             </div>
@@ -2024,14 +2002,14 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
             <div className="flex space-x-3">
               <button
                 onClick={() => setStep('details')}
-                className="flex-1 px-4 py-2 text-gray-700 hover:text-gray-900 transition"
+                className="flex-1 px-4 py-2 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white transition"
               >
                 Back to Edit
               </button>
               <button
                 onClick={handleCreatePayment}
                 disabled={isCreatingPayment}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition font-medium"
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed transition font-medium"
               >
                 {isCreatingPayment ? 'Processing...' : 'Confirm & Pay'}
               </button>
@@ -2042,19 +2020,17 @@ export default function BookingModal({ caregiver, isOpen, onClose }: BookingModa
         {step === 'payment' && clientSecret && (
           // Always wrap BookingForm with Elements provider, even in demo mode
           // This ensures useStripe() and useElements() hooks work without context errors
-          <Elements 
+          <Elements
             options={clientSecret.includes('_secret_demo') ? {
               // Demo mode - use minimal options to avoid Stripe API calls
               appearance: {
-                theme: 'stripe',
+                ...stripeAppearance,
                 variables: {
                   colorPrimary: '#ef4444',
-                  colorBackground: '#ffffff',
-                  colorText: '#1f2937',
                 },
               },
             } : stripeOptions} 
-            stripe={clientSecret.includes('_secret_demo') ? Promise.resolve(null) : stripePromise}
+            stripe={clientSecret.includes('_secret_demo') ? Promise.resolve(null) : getStripePromise()}
           >
             <BookingForm
               clientSecret={clientSecret}

@@ -2,16 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { bookingOperations } from '@/lib/db';
 import { AvailabilityService } from '@/lib/availabilityService';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { logger, getClientInfo } from '@/lib/logger';
 import { DateTime } from 'luxon';
 import { getCommissionRate } from '@/lib/stripe';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
 // POST /api/bookings/slot-based - Create slot-based booking
 export async function POST(request: NextRequest) {
   const clientInfo = getClientInfo(request);
-  
+
   try {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.BOOKING);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
     // Verify authentication
     const session = await getServerSession(authOptions);
     if (!session?.user) {
@@ -20,11 +30,8 @@ export async function POST(request: NextRequest) {
         userAgent: clientInfo.userAgent,
         error: 'No session'
       });
-      
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+
+      return ApiErrors.unauthorized();
     }
 
     // Verify user is a parent
@@ -35,11 +42,8 @@ export async function POST(request: NextRequest) {
         ip: clientInfo.ip,
         userAgent: clientInfo.userAgent
       });
-      
-      return NextResponse.json(
-        { error: 'Only parents can create bookings' },
-        { status: 403 }
-      );
+
+      return ApiErrors.forbidden('Only parents can create bookings');
     }
 
     const body = await request.json();
@@ -56,14 +60,9 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!slotId || !childrenCount || !address) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Missing required fields',
-          required: ['slotId', 'childrenCount', 'address'],
-        },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Missing required fields', {
+        required: ['slotId', 'childrenCount', 'address'],
+      });
     }
 
     // Get slot information to extract booking details
@@ -74,13 +73,7 @@ export async function POST(request: NextRequest) {
     const targetSlot = slot.find(s => s.id === slotId);
     
     if (!targetSlot) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Availability slot not found or insufficient capacity',
-        },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Availability slot not found or insufficient capacity');
     }
 
     // Calculate pricing based on slot information
@@ -124,58 +117,39 @@ export async function POST(request: NextRequest) {
       ip: clientInfo.ip
     });
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        id: booking.id,
-        parentId: booking.parentId,
-        caregiverId: booking.caregiverId,
-        startTime: booking.startTime,
-        endTime: booking.endTime,
-        childrenCount: booking.childrenCount,
-        totalAmount: booking.totalAmount,
-        platformFee: booking.platformFee,
-        status: booking.status,
-        slotInfo: {
-          id: targetSlot.id,
-          totalCapacity: targetSlot.totalCapacity,
-          remainingCapacity: targetSlot.availableSpots - childrenCount
-        },
-        createdAt: booking.createdAt,
+    return apiSuccess({
+      id: booking.id,
+      parentId: booking.parentId,
+      caregiverId: booking.caregiverId,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      childrenCount: booking.childrenCount,
+      totalAmount: booking.totalAmount,
+      platformFee: booking.platformFee,
+      status: booking.status,
+      slotInfo: {
+        id: targetSlot.id,
+        totalCapacity: targetSlot.totalCapacity,
+        remainingCapacity: targetSlot.availableSpots - childrenCount
       },
-      message: 'Slot-based booking created successfully',
-    }, { status: 201 });
+      createdAt: booking.createdAt,
+    }, 'Slot-based booking created successfully', 201);
 
   } catch (error) {
     console.error('Error creating slot-based booking:', error);
-    
+
     // Handle specific booking errors
     if (error instanceof Error) {
       if (error.message.includes('Insufficient capacity')) {
-        return NextResponse.json({
-          success: false,
-          error: 'Insufficient capacity',
-          message: error.message
-        }, { status: 409 }); // Conflict
+        return ApiErrors.conflict('Insufficient capacity');
       }
-      
+
       if (error.message.includes('not found')) {
-        return NextResponse.json({
-          success: false,
-          error: 'Resource not found',
-          message: error.message
-        }, { status: 404 });
+        return ApiErrors.notFound('Resource not found');
       }
     }
-    
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to create slot-based booking',
-        message: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error',
-      },
-      { status: 500 }
-    );
+
+    return ApiErrors.internal('Failed to create slot-based booking');
   }
 }
 
@@ -187,10 +161,7 @@ export async function GET(request: NextRequest) {
     // Verify authentication
     const session = await getServerSession(authOptions);
     if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const { searchParams } = new URL(request.url);
@@ -199,13 +170,7 @@ export async function GET(request: NextRequest) {
     const minCapacity = searchParams.get('minCapacity') ? parseInt(searchParams.get('minCapacity')!) : 1;
 
     if (!caregiverId) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Missing required parameter: caregiverId',
-        },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Missing required parameter: caregiverId');
     }
 
     // Build query for available slots
@@ -252,24 +217,14 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        availableSlots: bookingOptions,
-        totalSlots: bookingOptions.length
-      }
+    return apiSuccess({
+      availableSlots: bookingOptions,
+      totalSlots: bookingOptions.length
     });
 
   } catch (error) {
     console.error('Error fetching slot-based booking options:', error);
-    
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to fetch booking options',
-        message: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error',
-      },
-      { status: 500 }
-    );
+
+    return ApiErrors.internal('Failed to fetch booking options');
   }
 }

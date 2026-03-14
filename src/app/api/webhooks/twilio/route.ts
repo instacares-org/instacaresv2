@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { prisma } from '@/lib/prisma';
 import twilio from 'twilio';
 
@@ -21,10 +22,7 @@ export async function POST(request: NextRequest) {
 
     if (!isValidSignature && process.env.NODE_ENV === 'production') {
       console.error('Invalid Twilio webhook signature');
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     // Parse form-encoded body
@@ -141,9 +139,6 @@ export async function POST(request: NextRequest) {
       console.error('Failed to log webhook error:', dbError);
     }
 
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return ApiErrors.internal();
   }
 }

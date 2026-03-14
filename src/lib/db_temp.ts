@@ -478,7 +478,7 @@ export const bookingOperations = {
         keys: cacheStats.keys
       });
 
-      const invalidatedCount = apiCache.invalidatePattern('caregivers:');
+      const invalidatedCount = await apiCache.invalidatePattern('caregivers:');
       console.log(`🗑️ Invalidated ${invalidatedCount} caregivers cache entries after booking creation`);
 
       const cacheStatsAfter = apiCache.getStats();
@@ -637,7 +637,7 @@ export const bookingOperations = {
     // Invalidate caregivers cache when booking status changes (especially cancellations)
     if (status === 'CANCELLED') {
       try {
-        const invalidatedCount = apiCache.invalidatePattern('caregivers:');
+        const invalidatedCount = await apiCache.invalidatePattern('caregivers:');
         console.log(`🗑️ Invalidated ${invalidatedCount} caregivers cache entries after booking cancellation`);
       } catch (cacheError) {
         console.warn('⚠️ Could not invalidate caregivers cache:', cacheError);

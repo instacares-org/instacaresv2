@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { prisma } from '@/lib/database';
+import { prisma } from '@/lib/db';
 import { authOptions } from '../../auth/[...nextauth]/options';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
 /**
  * GET /api/user/session-info
@@ -14,11 +15,7 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
-      return NextResponse.json({
-        success: false,
-        error: 'No active session',
-        authenticated: false
-      }, { status: 401 });
+      return ApiErrors.unauthorized('No active session');
     }
 
     // Find user in database
@@ -46,15 +43,10 @@ export async function GET(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({
-        success: false,
-        error: 'User not found in database',
-        authenticated: false
-      }, { status: 404 });
+      return ApiErrors.notFound('User not found in database');
     }
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       authenticated: true,
       user: {
         id: user.id,
@@ -91,10 +83,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Session info endpoint error:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to check session',
-      authenticated: false
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to check session');
   }
 }

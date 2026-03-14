@@ -3,9 +3,11 @@ import { bookingOperations } from '@/lib/db';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
 import { apiCache, cacheKeys, cacheTTL } from '@/lib/cache';
-import { createErrorResponse, ErrorCodes } from '@/lib/error-messages';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { DateTime } from 'luxon';
 import { getCommissionRate } from '@/lib/stripe';
+import { CreateBookingSchema, validateRequest } from '@/lib/api-validation';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 
 // GET /api/bookings - Get user's bookings
 export async function GET(request: NextRequest) {
@@ -32,7 +34,7 @@ export async function GET(request: NextRequest) {
     const offset = searchParams.get('offset') ? parseInt(searchParams.get('offset')!) : 0;
 
     if (!userId || !userType) {
-      return createErrorResponse(ErrorCodes.MISSING_REQUIRED_FIELDS, 400, {
+      return ApiErrors.badRequest('Missing required fields', {
         required: ['userId', 'userType']
       });
     }
@@ -50,7 +52,7 @@ export async function GET(request: NextRequest) {
         url: request.url
       });
       
-      return createErrorResponse(ErrorCodes.INSUFFICIENT_PERMISSIONS, 403);
+      return ApiErrors.forbidden('Insufficient permissions');
     }
 
     // Generate cache key for user bookings
@@ -59,14 +61,14 @@ export async function GET(request: NextRequest) {
     type BookingResult = Awaited<ReturnType<typeof bookingOperations.getUserBookings>>;
 
     // Try to get from cache first
-    let bookings = apiCache.get(cacheKey) as BookingResult | undefined;
+    let bookings = await apiCache.get(cacheKey) as BookingResult | undefined;
 
     if (!bookings) {
       // Cache miss - fetch from database
       bookings = await bookingOperations.getUserBookings(userId, userType);
 
       // Cache the results for 1 minute (bookings change frequently)
-      apiCache.set(cacheKey, bookings, cacheTTL.bookings);
+      await apiCache.set(cacheKey, bookings, cacheTTL.bookings);
     }
 
     // Filter by status if provided
@@ -144,15 +146,23 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Error fetching bookings:', error);
-    return createErrorResponse(error instanceof Error ? error : ErrorCodes.DATABASE_ERROR, 500);
+    return ApiErrors.internal('Failed to fetch bookings');
   }
 }
 
 // POST /api/bookings - Create new booking
 export async function POST(request: NextRequest) {
   const clientInfo = getClientInfo(request);
-  
+
   try {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.BOOKING);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
     // Verify authentication using NextAuth
     const authResult = await withAuth(request, 'PARENT');
     if (!authResult.isAuthorized) {
@@ -160,7 +170,7 @@ export async function POST(request: NextRequest) {
         ip: clientInfo.ip,
         userAgent: clientInfo.userAgent
       });
-      
+
       return authResult.response;
     }
 
@@ -168,7 +178,13 @@ export async function POST(request: NextRequest) {
     // No additional user type check needed since withAuth ensures PARENT role
 
     const body = await request.json();
-    
+
+    // Validate input using Zod schema
+    const validation = validateRequest(CreateBookingSchema, body);
+    if (!validation.success) {
+      return ApiErrors.badRequest('Invalid input', validation.errors);
+    }
+
     const {
       parentId,
       caregiverId,
@@ -179,19 +195,7 @@ export async function POST(request: NextRequest) {
       address,
       latitude,
       longitude,
-    } = body;
-
-    // Validate required fields
-    if (!parentId || !caregiverId || !startTime || !endTime || !childrenCount || !address) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Missing required fields',
-          required: ['parentId', 'caregiverId', 'startTime', 'endTime', 'childrenCount', 'address'],
-        },
-        { status: 400 }
-      );
-    }
+    } = validation.data;
 
     // Ensure the parentId matches the authenticated user
     const postUser = authResult.user!;
@@ -203,27 +207,18 @@ export async function POST(request: NextRequest) {
         userAgent: clientInfo.userAgent
       });
       
-      return NextResponse.json(
-        { error: 'You can only create bookings for yourself' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('You can only create bookings for yourself');
     }
 
     // Get parent's timezone for proper time conversion
-    const { prisma } = await import('@/lib/database');
+    const { prisma } = await import('@/lib/db');
     const parent = await prisma.user.findUnique({
       where: { id: parentId },
       include: { profile: true }
     });
 
     if (!parent || !parent.profile) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Parent profile not found',
-        },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Parent profile not found');
     }
 
     const parentTimezone = parent.profile.timezone || 'America/Toronto';
@@ -233,13 +228,7 @@ export async function POST(request: NextRequest) {
     const caregiver = await caregiverOperations.findCaregiverByUserId(caregiverId);
 
     if (!caregiver) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Caregiver not found',
-        },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Caregiver not found');
     }
 
     // Convert times from parent's timezone to UTC for database storage
@@ -248,17 +237,10 @@ export async function POST(request: NextRequest) {
     const endDt = DateTime.fromISO(endTime, { zone: parentTimezone });
 
     if (!startDt.isValid || !endDt.isValid) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Invalid date/time format',
-          details: {
-            startTime: startDt.invalidReason,
-            endTime: endDt.invalidReason
-          }
-        },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Invalid date/time format', {
+        startTime: startDt.invalidReason,
+        endTime: endDt.invalidReason
+      });
     }
 
     // Convert to UTC for storage
@@ -293,24 +275,20 @@ export async function POST(request: NextRequest) {
       totalAmount,
     });
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        id: booking.id,
-        parentId: booking.parentId,
-        caregiverId: booking.caregiverId,
-        startTime: booking.startTime,
-        endTime: booking.endTime,
-        totalAmount: booking.totalAmount,
-        platformFee: booking.platformFee,
-        status: booking.status,
-        createdAt: booking.createdAt,
-      },
-      message: 'Booking created successfully',
-    }, { status: 201 });
+    return apiSuccess({
+      id: booking.id,
+      parentId: booking.parentId,
+      caregiverId: booking.caregiverId,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      totalAmount: booking.totalAmount,
+      platformFee: booking.platformFee,
+      status: booking.status,
+      createdAt: booking.createdAt,
+    }, 'Booking created successfully', 201);
 
   } catch (error) {
     console.error('Error creating booking:', error);
-    return createErrorResponse(error instanceof Error ? error : ErrorCodes.DATABASE_ERROR, 500);
+    return ApiErrors.internal('Failed to create booking');
   }
 }

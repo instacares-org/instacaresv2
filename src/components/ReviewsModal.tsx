@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, Fragment, useEffect } from 'react';
+import Image from 'next/image';
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon, StarIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
@@ -65,7 +66,8 @@ export default function ReviewsModal({
       
       const data = await response.json();
       if (data.success) {
-        setReviews(data.data || []);
+        const reviewsData = data.data?.reviews || data.data || [];
+        setReviews(Array.isArray(reviewsData) ? reviewsData : []);
       } else {
         throw new Error(data.message || 'Failed to fetch reviews');
       }
@@ -138,7 +140,7 @@ export default function ReviewsModal({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black bg-opacity-25" />
+          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm" />
         </Transition.Child>
 
         <div className="fixed inset-0 overflow-y-auto">
@@ -214,10 +216,12 @@ export default function ReviewsModal({
                           <div className="flex items-start space-x-4">
                             <div className="flex-shrink-0">
                               {review.reviewerAvatar ? (
-                                <img
+                                <Image
                                   className="h-10 w-10 rounded-full"
                                   src={review.reviewerAvatar}
                                   alt={review.reviewerName}
+                                  width={40}
+                                  height={40}
                                 />
                               ) : (
                                 <UserCircleIcon className="h-10 w-10 text-gray-400" />

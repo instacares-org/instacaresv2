@@ -78,7 +78,7 @@ export default function AdminSecurityPage() {
   return (
     <AdminAuthLayout 
       title="Security Overview" 
-      requiredPermission="canAccessLogs"
+      requiredPermission="canViewAuditLogs"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Security Status Header */}

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 
 interface SocialLoginProps {
-  userType: 'parent' | 'caregiver';
+  userType: 'parent' | 'caregiver' | 'babysitter';
   onSocialLogin?: (provider: string, userType: string) => void;
 }
 
@@ -42,7 +42,9 @@ export default function SocialLogin({ userType, onSocialLogin }: SocialLoginProp
       // Use NextAuth.js signIn with OAuth provider
       // Redirect to appropriate dashboard based on user type where profile completion modal will show
       // Pass userType in callback URL so the system knows if this is a caregiver signup
-      const callbackUrl = userType === 'caregiver'
+      const callbackUrl = userType === 'babysitter'
+        ? '/babysitter-dashboard?oauth=true&userType=babysitter'
+        : userType === 'caregiver'
         ? '/caregiver-dashboard?oauth=true&userType=caregiver'
         : '/parent-dashboard?oauth=true&userType=parent';
 

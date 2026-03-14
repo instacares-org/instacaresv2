@@ -1,14 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { verifyAdminAuth } from '@/lib/adminAuth';
+import { requirePermission } from '@/lib/adminAuth';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify admin authentication via session (not query params)
-    const authResult = await verifyAdminAuth(request);
-    if (!authResult.success) {
-      return NextResponse.json({ error: authResult.error || 'Admin authentication required' }, { status: 401 });
-    }
+    // Require admin authentication with permission check
+    const permCheck = await requirePermission(request, 'canModerateChat');
+    if (!permCheck.authorized) return permCheck.response!;
 
     const { searchParams } = new URL(request.url);
 
@@ -37,7 +36,7 @@ export async function GET(request: NextRequest) {
       if (dateRange !== 'all') {
         const now = new Date();
         let dateThreshold: Date;
-        
+
         switch (dateRange) {
           case 'today':
             dateThreshold = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -54,7 +53,7 @@ export async function GET(request: NextRequest) {
           default:
             dateThreshold = new Date(0);
         }
-        
+
         where.lastMessageAt = { gte: dateThreshold };
       }
 
@@ -113,7 +112,7 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       // Total chat rooms
       db.chatRoom.count(),
-      
+
       // Active chat rooms (with messages in last 7 days)
       db.chatRoom.count({
         where: {
@@ -122,10 +121,10 @@ export async function GET(request: NextRequest) {
           }
         }
       }),
-      
+
       // Total messages
       db.message.count(),
-      
+
       // Messages in last 24 hours
       db.message.count({
         where: {
@@ -134,14 +133,14 @@ export async function GET(request: NextRequest) {
           }
         }
       }),
-      
+
       // Flagged chats (inactive chats)
       db.chatRoom.count({
         where: {
           isActive: false
         }
       }),
-      
+
       // Filtered chat rooms based on search criteria
       db.chatRoom.findMany({
         where: buildWhereClause(),
@@ -168,7 +167,7 @@ export async function GET(request: NextRequest) {
     // Apply message count filter on the results (since it's complex to do in SQL)
     const finalFilteredRooms = filteredChatRooms.filter(room => {
       if (messageCount === 'all') return true;
-      
+
       const count = room._count.messages;
       switch (messageCount) {
         case 'high':
@@ -220,12 +219,9 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    return NextResponse.json(overview);
+    return apiSuccess(overview);
   } catch (error) {
     console.error('Error fetching chat overview:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch chat overview' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch chat overview');
   }
 }

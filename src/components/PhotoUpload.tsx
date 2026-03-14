@@ -89,8 +89,8 @@ export default function PhotoUpload({ photos, onPhotosChange }: PhotoUploadProps
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) { // 5MB - reduced for better performance
-      alert('File size must be less than 5MB');
+    if (file.size > 50 * 1024 * 1024) { // 50MB max
+      alert('File size must be less than 50MB');
       return;
     }
 
@@ -119,9 +119,9 @@ export default function PhotoUpload({ photos, onPhotosChange }: PhotoUploadProps
       }
 
       const result = await response.json();
-      if (result.success) {
+      if (result.success && result.data?.photo) {
         // Add new photo to the list
-        onPhotosChange([...photos, result.photo]);
+        onPhotosChange([...photos, result.data.photo]);
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -274,7 +274,7 @@ export default function PhotoUpload({ photos, onPhotosChange }: PhotoUploadProps
 
       {/* Photos Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {photos.map((photo) => (
+        {photos.filter((photo) => photo?.url).map((photo) => (
           <div key={photo.id} className="relative group">
             <div className="aspect-square bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden">
               <OptimizedImage

@@ -14,6 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAvailability } from '@/hooks/useAvailability';
 import { useUserTimezone } from '@/hooks/useUserTimezone';
+import { DateTime } from 'luxon';
 
 interface TimeSlot {
   id?: string;
@@ -254,25 +255,13 @@ export default function IntuitiveScheduleManager({
 
   const formatTime = (timeString: string) => {
     try {
-      // TIMEZONE FIX: Force interpretation as UTC by ensuring 'Z' suffix
-      // Database stores times as "2025-01-15 08:00:00" which JavaScript
-      // interprets as LOCAL time, causing 5-hour shifts.
-      // We force UTC interpretation to show the exact time caregiver selected.
-      let utcTimeString = timeString;
-      if (!timeString.endsWith('Z') && !timeString.includes('+')) {
-        utcTimeString = timeString.replace(/\.\d{3}$/, '') + 'Z';
-      }
-
-      const date = new Date(utcTimeString);
-      const hours = date.getUTCHours();
-      const minutes = date.getUTCMinutes();
-
-      // Convert to 12-hour format
-      const hour12 = hours % 12 || 12;
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      const minutesStr = minutes.toString().padStart(2, '0');
-
-      return `${hour12}:${minutesStr} ${ampm}`;
+      // Convert UTC database times to user's local timezone for display
+      const utcStr = timeString.endsWith('Z') || timeString.includes('+')
+        ? timeString
+        : timeString.replace(/\.\d{3}$/, '') + 'Z';
+      const dt = DateTime.fromISO(utcStr, { zone: 'UTC' }).setZone(userTimezone);
+      if (!dt.isValid) return 'Invalid time';
+      return dt.toFormat('h:mm a');
     } catch {
       return 'Invalid time';
     }

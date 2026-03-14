@@ -85,7 +85,8 @@ export const useChat = (userId: string, userType: 'parent' | 'caregiver'): UseCh
       );
       
       if (response.ok) {
-        const roomsData = await response.json();
+        const result = await response.json();
+        const roomsData = result.success ? result.data : (Array.isArray(result) ? result : []);
         setRooms(roomsData);
       } else {
         console.error('Failed to fetch chat rooms');
@@ -108,7 +109,8 @@ export const useChat = (userId: string, userType: 'parent' | 'caregiver'): UseCh
       );
       
       if (response.ok) {
-        const data = await response.json();
+        const result = await response.json();
+        const data = result.success ? result.data : result;
         if (page === 1) {
           setMessages(data.messages || []);
         } else {
@@ -151,8 +153,9 @@ export const useChat = (userId: string, userType: 'parent' | 'caregiver'): UseCh
       });
 
       if (response.ok) {
-        const newMessage = await response.json();
-        
+        const result = await response.json();
+        const newMessage = result.success ? result.data : result;
+
         // Add message to current messages
         setMessages(prev => [...(prev || []), newMessage]);
         

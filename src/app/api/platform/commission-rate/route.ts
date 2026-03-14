@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { getCommissionRate, DEFAULT_COMMISSION_RATE } from '@/lib/stripe';
 import { withAuth } from '@/lib/auth-middleware';
 
@@ -17,8 +18,7 @@ export async function GET(request: NextRequest) {
   try {
     const commissionRate = await getCommissionRate();
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       commissionRate: commissionRate, // As decimal (e.g., 0.10 for 10%)
       commissionPercentage: Math.round(commissionRate * 100), // As percentage (e.g., 10 for 10%)
     });
@@ -26,8 +26,7 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching commission rate:', error);
 
     // Return default rate on error (don't expose internal errors)
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       commissionRate: DEFAULT_COMMISSION_RATE,
       commissionPercentage: Math.round(DEFAULT_COMMISSION_RATE * 100),
     });

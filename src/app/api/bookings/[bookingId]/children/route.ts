@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth-middleware';
-import { prisma } from '@/lib/database';
+import { db as prisma } from '@/lib/db';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
 // GET /api/bookings/[bookingId]/children - Get children for a specific booking
 // Caregivers can view children info for bookings they are assigned to
@@ -29,10 +30,7 @@ export async function GET(
     });
 
     if (!booking) {
-      return NextResponse.json(
-        { success: false, error: 'Booking not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Booking not found');
     }
 
     // Security: Only allow the parent or caregiver of this booking to view children
@@ -42,10 +40,7 @@ export async function GET(
     const isAdmin = authUser.userType === 'ADMIN';
 
     if (!isParent && !isCaregiver && !isAdmin) {
-      return NextResponse.json(
-        { success: false, error: 'You do not have access to this booking\'s children' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('You do not have access to this booking\'s children');
     }
 
     // Fetch all children for the parent of this booking
@@ -71,7 +66,17 @@ export async function GET(
       orderBy: { createdAt: 'asc' }
     });
 
-    // Calculate age for each child
+    // Safely coerce Json fields that may be strings into arrays
+    const ensureArray = (val: unknown): unknown[] => {
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'string') {
+        if (!val.trim()) return [];
+        try { const p = JSON.parse(val); return Array.isArray(p) ? p : []; } catch { return [val]; }
+      }
+      return [];
+    };
+
+    // Calculate age and normalize Json fields for each child
     const childrenWithAge = children.map(child => {
       const today = new Date();
       const birthDate = new Date(child.dateOfBirth);
@@ -82,6 +87,11 @@ export async function GET(
       }
       return {
         ...child,
+        allergies: ensureArray(child.allergies),
+        medications: ensureArray(child.medications),
+        medicalConditions: ensureArray(child.medicalConditions),
+        dietaryRestrictions: ensureArray(child.dietaryRestrictions),
+        emergencyContacts: ensureArray(child.emergencyContacts),
         age,
       };
     });
@@ -94,9 +104,6 @@ export async function GET(
 
   } catch (error) {
     console.error('Error fetching booking children:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch children' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch children');
   }
 }

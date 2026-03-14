@@ -22,9 +22,12 @@ export default function PrivacyPolicy() {
     'collection',
     'caregiverInfo',
     'parentInfo',
+    'childrenData',
     'cookies',
     'sharing',
+    'dataProcessors',
     'retention',
+    'dataRights',
     'consent',
     'security',
     'emailRisks',
@@ -89,8 +92,26 @@ export default function PrivacyPolicy() {
           </div>
         </div>
 
+        {/* Data Deletion Request */}
+        <div className="mt-12">
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+              Request Data Deletion
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4 text-sm">
+              Under PIPEDA, you have the right to request deletion of your personal information. To request that your account and all associated data be permanently deleted, please email us with the subject line &quot;Data Deletion Request&quot;. We will process your request within 30 days.
+            </p>
+            <a
+              href="mailto:info@instacares.com?subject=Data%20Deletion%20Request&body=I%20would%20like%20to%20request%20the%20deletion%20of%20my%20personal%20data%20and%20account.%0A%0AAccount%20email%3A%20%0A%0APlease%20confirm%20once%20my%20data%20has%20been%20deleted."
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 transition-colors"
+            >
+              Request Data Deletion
+            </a>
+          </div>
+        </div>
+
         {/* Footer */}
-        <div className="mt-12 text-center">
+        <div className="mt-8 text-center">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
               {t('privacy.questionsTitle')}

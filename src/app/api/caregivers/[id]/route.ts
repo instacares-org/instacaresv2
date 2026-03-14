@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
 import { smartCaregiverOperations } from '@/lib/db-fallback';
+import { getToken } from 'next-auth/jwt';
 
 interface Params {
   id: string;
@@ -18,25 +20,36 @@ export async function GET(
     const caregiver = await smartCaregiverOperations.findCaregiverById(id);
 
     if (!caregiver) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Caregiver not found',
-        },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Caregiver not found');
+    }
+
+    // Check if the requester is the caregiver themselves (to include private fields)
+    let isOwner = false;
+    try {
+      const token = await getToken({
+        req: request,
+        secret: process.env.NEXTAUTH_SECRET,
+        secureCookie: process.env.NODE_ENV === 'production',
+      });
+      const userId = (token?.userId as string) || token?.sub;
+      if (userId && 'userId' in caregiver && caregiver.userId === userId) {
+        isOwner = true;
+      }
+    } catch {
+      // Not authenticated or token error - treat as public request
     }
 
     // Format caregiver data for frontend (handle both database and fallback formats)
     let formattedCaregiver;
-    
+
     if ('user' in caregiver && caregiver.user) {
       // Database format
       formattedCaregiver = {
         id: caregiver.id,
         userId: caregiver.userId,
         name: `${caregiver.user.profile?.firstName} ${caregiver.user.profile?.lastName}`,
-        // PII (email, phone, street, earnings, stripe) omitted from public endpoint
+        // Include stripeAccountId only for the owner
+        ...(isOwner && { stripeAccountId: caregiver.stripeAccountId }),
         hourlyRate: caregiver.hourlyRate,
         experienceYears: caregiver.experienceYears,
         bio: caregiver.bio,
@@ -137,22 +150,11 @@ export async function GET(
       };
     }
 
-    return NextResponse.json({
-      success: true,
-      caregiver: formattedCaregiver,  // Changed from 'data' to 'caregiver' to match dashboard expectation
-    });
+    return apiSuccess({ caregiver: formattedCaregiver });
 
   } catch (error) {
     console.error('Error fetching caregiver:', error);
-    
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to fetch caregiver',
-        message: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error',
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch caregiver');
   }
 }
 
@@ -176,10 +178,7 @@ export async function PUT(
 
     const user = authResult.user;
     if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
     const { id } = await params;
     const body = await request.json();
@@ -187,13 +186,7 @@ export async function PUT(
     // Check if caregiver exists and verify ownership
     const existingCaregiver = await smartCaregiverOperations.findCaregiverById(id);
     if (!existingCaregiver) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Caregiver not found',
-        },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Caregiver not found');
     }
 
     // Verify ownership - user can only update their own caregiver profile
@@ -204,10 +197,7 @@ export async function PUT(
         targetCaregiverId: id,
         targetUserId: caregiverUserId
       });
-      return NextResponse.json(
-        { success: false, error: 'You can only update your own profile' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('You can only update your own profile');
     }
 
     // Update caregiver using Prisma directly
@@ -239,23 +229,11 @@ export async function PUT(
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      data: updatedCaregiver,
-      message: 'Caregiver profile updated successfully',
-    });
+    return apiSuccess(updatedCaregiver, 'Caregiver profile updated successfully');
 
   } catch (error) {
     console.error('Error updating caregiver:', error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to update caregiver',
-        message: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error',
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to update caregiver');
   }
 }
 
@@ -279,10 +257,7 @@ export async function PATCH(
 
     const user = authResult.user;
     if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
     const { id } = await params;
     const body = await request.json();
@@ -290,13 +265,7 @@ export async function PATCH(
     // Check if caregiver exists and verify ownership
     const existingCaregiver = await smartCaregiverOperations.findCaregiverById(id);
     if (!existingCaregiver) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Caregiver not found',
-        },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Caregiver not found');
     }
 
     // Verify ownership
@@ -307,10 +276,7 @@ export async function PATCH(
         targetCaregiverId: id,
         targetUserId: caregiverUserId
       });
-      return NextResponse.json(
-        { success: false, error: 'You can only update your own profile' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('You can only update your own profile');
     }
 
     // Update caregiver using Prisma directly
@@ -342,22 +308,10 @@ export async function PATCH(
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      caregiver: updatedCaregiver,
-      message: 'Caregiver profile updated successfully',
-    });
+    return apiSuccess({ caregiver: updatedCaregiver }, 'Caregiver profile updated successfully');
 
   } catch (error) {
     console.error('Error updating caregiver (PATCH):', error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to update caregiver',
-        message: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal server error',
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to update caregiver');
   }
 }

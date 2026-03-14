@@ -31,7 +31,11 @@ export default function StripeConnectOnboarding({
         const err = await response.json().catch(() => ({ error: 'Failed to fetch client secret' }));
         throw new Error(err.error || 'Failed to fetch client secret');
       }
-      const { clientSecret } = await response.json();
+      const json = await response.json();
+      const clientSecret = json.data?.clientSecret ?? json.clientSecret;
+      if (!clientSecret) {
+        throw new Error('No client secret in response');
+      }
       return clientSecret;
     };
 

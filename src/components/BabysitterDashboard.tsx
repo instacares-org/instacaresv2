@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { DateTime } from 'luxon';
 import { useUserTimezone } from '@/hooks/useUserTimezone';
@@ -165,21 +165,22 @@ export default function BabysitterDashboard() {
 
       if (profileRes.ok) {
         const data = await profileRes.json();
-        setProfile(data.babysitter);
-        if (data.babysitter?.hourlyRate) {
-          setHourlyRate(data.babysitter.hourlyRate);
-          setTempRate(data.babysitter.hourlyRate);
+        const babysitter = data.data?.babysitter || data.babysitter;
+        setProfile(babysitter);
+        if (babysitter?.hourlyRate) {
+          setHourlyRate(babysitter.hourlyRate);
+          setTempRate(babysitter.hourlyRate);
         }
       }
 
       if (bookingsRes.ok) {
         const data = await bookingsRes.json();
-        setBookings(data.bookings || []);
+        setBookings(data.data?.bookings || data.bookings || []);
       }
 
       if (availRes.ok) {
         const data = await availRes.json();
-        setAvailability(data.slots || []);
+        setAvailability(data.data?.slots || data.slots || []);
       }
     } catch (error) {
       console.error('Failed to fetch babysitter data:', error);
@@ -200,7 +201,7 @@ export default function BabysitterDashboard() {
     }
   }, [user?.profile?.avatar]);
 
-  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -209,8 +210,8 @@ export default function BabysitterDashboard() {
       alert('Please upload a valid image file (JPEG, PNG, or WebP)');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB');
+    if (file.size > 50 * 1024 * 1024) {
+      alert('File size must be less than 50MB');
       return;
     }
 
@@ -241,12 +242,36 @@ export default function BabysitterDashboard() {
       setUploadingAvatar(false);
       if (event.target) event.target.value = '';
     }
-  };
+  }, []);
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
     fetchData();
-  };
+  }, [fetchData]);
+
+  const checkStripeStatus = useCallback(async (accountId: string) => {
+    try {
+      const response = await fetch('/api/stripe/connect/babysitter-status', {
+        method: 'POST',
+        headers: addCSRFHeader({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ accountId }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Update profile state with new Stripe status
+        if (data.detailsSubmitted || data.isDemo) {
+          setProfile((prev: any) => prev ? {
+            ...prev,
+            stripeOnboarded: data.detailsSubmitted ?? false,
+            stripeConnectId: accountId,
+          } : prev);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check Stripe status:', error);
+    }
+  }, []);
 
   // Check URL params for Stripe setup return
   useEffect(() => {
@@ -288,7 +313,7 @@ export default function BabysitterDashboard() {
     }
   }, [profile?.stripeConnectId]);
 
-  const startStripeOnboarding = async () => {
+  const startStripeOnboarding = useCallback(async () => {
     setStripeLoading(true);
     try {
       const response = await fetch('/api/stripe/connect/babysitter-onboard', {
@@ -328,9 +353,9 @@ export default function BabysitterDashboard() {
     } finally {
       setStripeLoading(false);
     }
-  };
+  }, []);
 
-  const handleOnboardingComplete = () => {
+  const handleOnboardingComplete = useCallback(() => {
     setShowInlineOnboarding(false);
     setInlineAccountId(null);
     setShowSuccessModal(true);
@@ -338,34 +363,10 @@ export default function BabysitterDashboard() {
     if (savedId) {
       checkStripeStatus(savedId);
     }
-  };
-
-  const checkStripeStatus = async (accountId: string) => {
-    try {
-      const response = await fetch('/api/stripe/connect/babysitter-status', {
-        method: 'POST',
-        headers: addCSRFHeader({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ accountId }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        // Update profile state with new Stripe status
-        if (data.detailsSubmitted || data.isDemo) {
-          setProfile((prev: any) => prev ? {
-            ...prev,
-            stripeOnboarded: data.detailsSubmitted ?? false,
-            stripeConnectId: accountId,
-          } : prev);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to check Stripe status:', error);
-    }
-  };
+  }, [stripeAccountId, checkStripeStatus]);
 
   // Handle booking actions
-  const handleBookingAction = async (bookingId: string, action: 'confirm' | 'cancel' | 'start' | 'complete') => {
+  const handleBookingAction = useCallback(async (bookingId: string, action: 'confirm' | 'cancel' | 'start' | 'complete') => {
     try {
       const res = await fetch(`/api/babysitter/booking/${bookingId}`, {
         method: 'PATCH',
@@ -383,20 +384,20 @@ export default function BabysitterDashboard() {
       console.error('Booking action error:', error);
       alert('Failed to update booking');
     }
-  };
+  }, [fetchData]);
 
   // Handle rate edit
-  const handleRateEdit = () => {
+  const handleRateEdit = useCallback(() => {
     setTempRate(hourlyRate);
     setIsEditingRate(true);
-  };
+  }, [hourlyRate]);
 
-  const cancelRateEdit = () => {
+  const cancelRateEdit = useCallback(() => {
     setTempRate(hourlyRate);
     setIsEditingRate(false);
-  };
+  }, [hourlyRate]);
 
-  const saveRate = async () => {
+  const saveRate = useCallback(async () => {
     try {
       const res = await fetch('/api/babysitter/profile', {
         method: 'PATCH',
@@ -412,10 +413,10 @@ export default function BabysitterDashboard() {
     } catch (error) {
       console.error('Failed to update rate:', error);
     }
-  };
+  }, [tempRate, fetchData]);
 
   // Handle document upload
-  const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>, documentType: string) => {
+  const handleDocumentUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>, documentType: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -463,19 +464,19 @@ export default function BabysitterDashboard() {
       // Reset the file input
       e.target.value = '';
     }
-  };
+  }, [fetchData]);
 
   // Phone verification handlers
-  const openPhoneModal = () => {
+  const openPhoneModal = useCallback(() => {
     setPhoneNumber('');
     setVerificationCode('');
     setPhoneStep('enter');
     setPhoneError(null);
     setPhoneSuccess(null);
     setShowPhoneModal(true);
-  };
+  }, []);
 
-  const sendVerificationCode = async () => {
+  const sendVerificationCode = useCallback(async () => {
     if (!phoneNumber.trim()) {
       setPhoneError('Please enter your phone number');
       return;
@@ -500,9 +501,9 @@ export default function BabysitterDashboard() {
     } finally {
       setPhoneSending(false);
     }
-  };
+  }, [phoneNumber]);
 
-  const verifyPhoneCode = async () => {
+  const verifyPhoneCode = useCallback(async () => {
     if (!verificationCode.trim() || verificationCode.length !== 6) {
       setPhoneError('Please enter the 6-digit code');
       return;
@@ -529,23 +530,41 @@ export default function BabysitterDashboard() {
     } finally {
       setPhoneSending(false);
     }
-  };
+  }, [verificationCode, fetchData]);
 
   // Filter bookings
-  const filteredBookings = bookings.filter(b => {
+  const filteredBookings = useMemo(() => bookings.filter(b => {
     if (bookingFilter === 'ALL') return true;
     return b.status === bookingFilter;
-  });
+  }), [bookings, bookingFilter]);
 
   // Calculate stats
-  const stats = {
+  const stats = useMemo(() => ({
     pendingBookings: bookings.filter(b => b.status === 'PENDING').length,
     upcomingBookings: bookings.filter(b => ['CONFIRMED', 'IN_PROGRESS'].includes(b.status)).length,
     completedBookings: bookings.filter(b => b.status === 'COMPLETED').length,
     totalEarnings: bookings
       .filter(b => b.status === 'COMPLETED')
       .reduce((sum, b) => sum + b.subtotal, 0),
-  };
+  }), [bookings]);
+
+  // Pending bookings preview (first 3)
+  const pendingBookingsPreview = useMemo(() =>
+    bookings.filter(b => b.status === 'PENDING').slice(0, 3),
+    [bookings]
+  );
+
+  // Upcoming bookings preview (first 3)
+  const upcomingBookingsPreview = useMemo(() =>
+    bookings.filter(b => ['CONFIRMED', 'IN_PROGRESS'].includes(b.status)).slice(0, 3),
+    [bookings]
+  );
+
+  // Total hours worked (for analytics tab)
+  const totalHoursWorked = useMemo(() =>
+    bookings.filter(b => b.status === 'COMPLETED').reduce((sum, b) => sum + b.totalHours, 0),
+    [bookings]
+  );
 
   // Format time for display
   const formatTime = (isoString: string) => {
@@ -601,7 +620,7 @@ export default function BabysitterDashboard() {
                 {user && (
                   <div className="w-8 h-8 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center overflow-hidden">
                     {profilePhoto ? (
-                      <img src={profilePhoto} alt="Profile" className="w-8 h-8 rounded-full object-cover" />
+                      <Image src={profilePhoto} alt="Profile" width={32} height={32} className="w-8 h-8 rounded-full object-cover" />
                     ) : (
                       <span className="text-green-600 dark:text-green-300 font-medium text-sm">
                         {user.profile?.firstName?.charAt(0) || 'B'}
@@ -629,7 +648,7 @@ export default function BabysitterDashboard() {
             <div className="flex items-center space-x-4">
               <div className="w-16 h-16 rounded-full flex items-center justify-center overflow-hidden bg-green-100 dark:bg-green-900">
                 {profilePhoto ? (
-                  <img src={profilePhoto} alt="Profile" className="w-16 h-16 rounded-full object-cover" />
+                  <Image src={profilePhoto} alt="Profile" width={64} height={64} className="w-16 h-16 rounded-full object-cover" />
                 ) : (
                   <span className="text-2xl font-semibold text-green-600 dark:text-green-300">
                     {user?.profile?.firstName?.charAt(0) || 'B'}
@@ -643,8 +662,8 @@ export default function BabysitterDashboard() {
                 <div className="flex items-center mt-1">
                   <MapPinIcon className="h-4 w-4 text-gray-400 mr-1" />
                   <span className="text-gray-600 dark:text-gray-300">
-                    {user?.profile?.city && user?.profile?.province
-                      ? `${user.profile.city}, ${user.profile.province}`
+                    {user?.profile?.city && user?.profile?.state
+                      ? `${user.profile.city}, ${user.profile.state}`
                       : 'Location not provided'}
                   </span>
                 </div>
@@ -907,16 +926,13 @@ export default function BabysitterDashboard() {
                   Pending Requests ({stats.pendingBookings})
                 </h3>
                 <div className="space-y-4">
-                  {bookings
-                    .filter(b => b.status === 'PENDING')
-                    .slice(0, 3)
-                    .map((booking) => (
+                  {pendingBookingsPreview.map((booking) => (
                       <div key={booking.id} className="border dark:border-gray-700 rounded-lg p-4">
                         <div className="flex items-start justify-between">
                           <div className="flex items-center space-x-3">
                             <div className="w-10 h-10 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
                               {booking.parent.avatar ? (
-                                <img src={booking.parent.avatar} alt="" className="w-10 h-10 rounded-full" />
+                                <Image src={booking.parent.avatar} alt="" width={40} height={40} className="w-10 h-10 rounded-full" />
                               ) : (
                                 <span className="text-green-600 dark:text-green-300 font-medium">
                                   {booking.parent.firstName?.charAt(0)}
@@ -979,10 +995,7 @@ export default function BabysitterDashboard() {
                   Upcoming Bookings ({stats.upcomingBookings})
                 </h3>
                 <div className="space-y-4">
-                  {bookings
-                    .filter(b => ['CONFIRMED', 'IN_PROGRESS'].includes(b.status))
-                    .slice(0, 3)
-                    .map((booking) => {
+                  {upcomingBookingsPreview.map((booking) => {
                       const StatusIcon = STATUS_COLORS[booking.status]?.icon || CheckCircleIcon;
                       return (
                         <div key={booking.id} className="border dark:border-gray-700 rounded-lg p-4">
@@ -990,7 +1003,7 @@ export default function BabysitterDashboard() {
                             <div className="flex items-center space-x-3">
                               <div className="w-10 h-10 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
                                 {booking.parent.avatar ? (
-                                  <img src={booking.parent.avatar} alt="" className="w-10 h-10 rounded-full" />
+                                  <Image src={booking.parent.avatar} alt="" width={40} height={40} className="w-10 h-10 rounded-full" />
                                 ) : (
                                   <span className="text-green-600 dark:text-green-300 font-medium">
                                     {booking.parent.firstName?.charAt(0)}
@@ -1089,7 +1102,7 @@ export default function BabysitterDashboard() {
                         <div className="flex items-center space-x-3">
                           <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
                             {booking.parent.avatar ? (
-                              <img src={booking.parent.avatar} alt="" className="w-12 h-12 rounded-full" />
+                              <Image src={booking.parent.avatar} alt="" width={48} height={48} className="w-12 h-12 rounded-full" />
                             ) : (
                               <span className="text-green-600 dark:text-green-300 font-medium text-lg">
                                 {booking.parent.firstName?.charAt(0)}
@@ -1185,7 +1198,7 @@ export default function BabysitterDashboard() {
                 <div className="relative">
                   <div className="w-24 h-24 rounded-full overflow-hidden bg-green-100 dark:bg-green-900 flex items-center justify-center">
                     {profilePhoto ? (
-                      <img src={profilePhoto} alt="Profile" className="w-24 h-24 rounded-full object-cover" />
+                      <Image src={profilePhoto} alt="Profile" width={96} height={96} className="w-24 h-24 rounded-full object-cover" />
                     ) : (
                       <span className="text-3xl font-semibold text-green-600 dark:text-green-300">
                         {user?.profile?.firstName?.charAt(0) || 'B'}
@@ -1342,7 +1355,7 @@ export default function BabysitterDashboard() {
             completedBookings={stats.completedBookings}
             totalEarnings={stats.totalEarnings}
             averageRating={profile?.averageRating ?? null}
-            totalHoursWorked={bookings.filter(b => b.status === 'COMPLETED').reduce((sum, b) => sum + b.totalHours, 0)}
+            totalHoursWorked={totalHoursWorked}
           />
         )}
 

@@ -74,7 +74,17 @@ interface ChildProfileProps {
 }
 
 export default function ChildProfile({ child, onSave, onCancel, isOpen }: ChildProfileProps) {
-  const [formData, setFormData] = useState<Child>(child || {
+  // HTML <input type="date"> requires yyyy-MM-dd, but DB stores ISO timestamps
+  const formatDateForInput = (dateString: string | undefined): string => {
+    if (!dateString) return '';
+    if (dateString.includes('T')) return dateString.split('T')[0];
+    return dateString;
+  };
+
+  const [formData, setFormData] = useState<Child>(child ? {
+    ...child,
+    dateOfBirth: formatDateForInput(child.dateOfBirth),
+  } : {
     firstName: '',
     lastName: '',
     dateOfBirth: '',
@@ -84,7 +94,7 @@ export default function ChildProfile({ child, onSave, onCancel, isOpen }: ChildP
     medicalConditions: [],
     emergencyMedicalInfo: '',
     bloodType: '',
-    emergencyContacts: [],
+    emergencyContacts: [{ id: Date.now().toString(), name: '', relationship: '', phone: '', email: '', canPickup: false }],
     dietaryRestrictions: [],
     specialInstructions: '',
     pickupInstructions: '',
@@ -93,6 +103,7 @@ export default function ChildProfile({ child, onSave, onCancel, isOpen }: ChildP
 
   const [activeTab, setActiveTab] = useState<'basic' | 'medical' | 'emergency' | 'preferences'>('basic');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [medicalConsent, setMedicalConsent] = useState(!!child);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -212,10 +223,42 @@ export default function ChildProfile({ child, onSave, onCancel, isOpen }: ChildP
   };
 
 
+  const hasValidEmergencyContacts = () => {
+    if (formData.emergencyContacts.length === 0) return false;
+    return formData.emergencyContacts.every(
+      c => c.name.trim() && c.relationship.trim() && c.phone.trim().length >= 7
+    );
+  };
+
+  const hasIncompleteEmergencyContacts = () => {
+    if (formData.emergencyContacts.length === 0) return true;
+    return formData.emergencyContacts.some(
+      c => !c.name.trim() || !c.relationship.trim() || !c.phone.trim() || c.phone.trim().length < 7
+    );
+  };
+
   const handleSave = () => {
     // Validate required fields
     if (!formData.firstName || !formData.lastName || !formData.dateOfBirth) {
       alert('Please fill in all required fields');
+      return;
+    }
+
+    // Validate emergency contacts
+    if (formData.emergencyContacts.length === 0) {
+      alert('At least one emergency contact is required.');
+      setActiveTab('emergency');
+      return;
+    }
+
+    if (!hasValidEmergencyContacts()) {
+      alert('Please complete all emergency contact fields (name, relationship, and phone are required).');
+      setActiveTab('emergency');
+      return;
+    }
+
+    if (!medicalConsent) {
+      alert('Please accept the medical data consent to save your child\'s profile.');
       return;
     }
 
@@ -243,19 +286,22 @@ export default function ChildProfile({ child, onSave, onCancel, isOpen }: ChildP
           {[
             { id: 'basic', label: 'Basic Info' },
             { id: 'medical', label: 'Medical Info' },
-            { id: 'emergency', label: 'Emergency' },
+            { id: 'emergency', label: 'Emergency *' },
             { id: 'preferences', label: 'Preferences' }
           ].map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`px-6 py-3 text-sm font-medium transition ${
+              className={`px-6 py-3 text-sm font-medium transition relative ${
                 activeTab === tab.id
                   ? 'text-green-600 dark:text-green-400 border-b-2 border-green-600 dark:border-green-400'
                   : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
               {tab.label}
+              {tab.id === 'emergency' && hasIncompleteEmergencyContacts() && (
+                <span className="absolute top-2 right-1 h-2 w-2 rounded-full bg-red-500" />
+              )}
             </button>
           ))}
         </div>
@@ -275,6 +321,7 @@ export default function ChildProfile({ child, onSave, onCancel, isOpen }: ChildP
                         alt={`${formData.firstName} ${formData.lastName}`}
                         width={80}
                         height={80}
+                        unoptimized
                         className="w-full h-full object-cover"
                       />
                     ) : (
@@ -576,7 +623,10 @@ export default function ChildProfile({ child, onSave, onCancel, isOpen }: ChildP
           {activeTab === 'emergency' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Emergency Contacts</h3>
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">Emergency Contacts</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">At least one emergency contact is required.</p>
+                </div>
                 <button
                   onClick={addEmergencyContact}
                   className="bg-green-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-green-700 transition flex items-center"
@@ -585,47 +635,81 @@ export default function ChildProfile({ child, onSave, onCancel, isOpen }: ChildP
                   Add Contact
                 </button>
               </div>
-              
+
+              {formData.emergencyContacts.length === 0 && (
+                <div className="border-2 border-dashed border-red-300 dark:border-red-700 rounded-lg p-6 text-center">
+                  <ExclamationTriangleIcon className="h-8 w-8 text-red-400 mx-auto mb-2" />
+                  <p className="text-red-600 dark:text-red-400 font-medium">No emergency contacts added</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">You must add at least one emergency contact before saving.</p>
+                  <button
+                    onClick={addEmergencyContact}
+                    className="mt-3 bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 transition"
+                  >
+                    Add Emergency Contact
+                  </button>
+                </div>
+              )}
+
               {formData.emergencyContacts.map((contact, index) => (
                 <div key={contact.id || index} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">Contact {index + 1}</span>
+                    {formData.emergencyContacts.length > 1 && (
+                      <button
+                        onClick={() => removeEmergencyContact(index)}
+                        className="text-red-600 dark:text-red-400 text-xs hover:text-red-800 dark:hover:text-red-300 flex items-center"
+                      >
+                        <TrashIcon className="h-3 w-3 mr-1" />
+                        Remove
+                      </button>
+                    )}
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Name
+                        Name <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         value={contact.name}
                         onChange={(e) => updateEmergencyContact(index, 'name', e.target.value)}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
+                        className={`w-full px-2 py-1 text-sm border dark:bg-gray-700 dark:text-white rounded ${
+                          !contact.name.trim() ? 'border-red-300 dark:border-red-600' : 'border-gray-300 dark:border-gray-600'
+                        }`}
+                        placeholder="Full name"
                       />
                     </div>
-                    
+
                     <div>
                       <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Relationship
+                        Relationship <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
                         value={contact.relationship}
                         onChange={(e) => updateEmergencyContact(index, 'relationship', e.target.value)}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
+                        className={`w-full px-2 py-1 text-sm border dark:bg-gray-700 dark:text-white rounded ${
+                          !contact.relationship.trim() ? 'border-red-300 dark:border-red-600' : 'border-gray-300 dark:border-gray-600'
+                        }`}
                         placeholder="e.g., Grandmother, Uncle"
                       />
                     </div>
-                    
+
                     <div>
                       <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Phone
+                        Phone <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="tel"
                         value={contact.phone}
                         onChange={(e) => updateEmergencyContact(index, 'phone', e.target.value)}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
+                        className={`w-full px-2 py-1 text-sm border dark:bg-gray-700 dark:text-white rounded ${
+                          !contact.phone.trim() || contact.phone.trim().length < 7 ? 'border-red-300 dark:border-red-600' : 'border-gray-300 dark:border-gray-600'
+                        }`}
+                        placeholder="Phone number"
                       />
                     </div>
-                    
+
                     <div>
                       <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                         Email
@@ -635,9 +719,10 @@ export default function ChildProfile({ child, onSave, onCancel, isOpen }: ChildP
                         value={contact.email}
                         onChange={(e) => updateEmergencyContact(index, 'email', e.target.value)}
                         className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded"
+                        placeholder="Optional"
                       />
                     </div>
-                    
+
                     <div className="md:col-span-2">
                       <label className="flex items-center">
                         <input
@@ -652,14 +737,6 @@ export default function ChildProfile({ child, onSave, onCancel, isOpen }: ChildP
                       </label>
                     </div>
                   </div>
-                  
-                  <button
-                    onClick={() => removeEmergencyContact(index)}
-                    className="mt-2 text-red-600 dark:text-red-400 text-xs hover:text-red-800 dark:hover:text-red-300 flex items-center"
-                  >
-                    <TrashIcon className="h-3 w-3 mr-1" />
-                    Remove
-                  </button>
                 </div>
               ))}
             </div>
@@ -697,6 +774,24 @@ export default function ChildProfile({ child, onSave, onCancel, isOpen }: ChildP
           )}
         </div>
 
+        {/* Medical Data Consent */}
+        <div className="px-6 py-4 bg-blue-50 dark:bg-blue-900/20 border-t border-gray-200 dark:border-gray-700">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={medicalConsent}
+              onChange={(e) => setMedicalConsent(e.target.checked)}
+              className="mt-1 h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500 shrink-0"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              I consent to InstaCares collecting and storing my child&apos;s personal and medical information (including allergies, medications, medical conditions, and emergency contacts) for the purpose of providing safe childcare services. This information will only be shared with caregivers I book through the platform. I can update or request deletion of this data at any time.{' '}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-green-600 dark:text-green-400 underline hover:text-green-700">
+                Privacy Policy
+              </a>
+            </span>
+          </label>
+        </div>
+
         {/* Footer */}
         <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700">
           <button
@@ -707,7 +802,8 @@ export default function ChildProfile({ child, onSave, onCancel, isOpen }: ChildP
           </button>
           <button
             onClick={handleSave}
-            className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition"
+            disabled={!medicalConsent}
+            className={`px-6 py-2 rounded-lg transition ${medicalConsent ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-300 text-gray-500 cursor-not-allowed'}`}
           >
             {child ? 'Update Profile' : 'Create Profile'}
           </button>

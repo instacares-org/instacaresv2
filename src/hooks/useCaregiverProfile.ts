@@ -36,8 +36,8 @@ export function useCaregiverProfile() {
           const data = await response.json();
           console.log('Caregiver profile data:', data);
 
-          if (data.success && data.caregiver?.id) {
-            setCaregiverId(data.caregiver.id);
+          if (data.success && data.data?.caregiver?.id) {
+            setCaregiverId(data.data.caregiver.id);
             setError(null);
           } else {
             setError('No caregiver profile found');

@@ -1,12 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { apiCache, cacheKeys, cacheTTL } from '@/lib/cache';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 export async function GET(request: NextRequest) {
   try {
-    // ✅ STEP 1: Require authentication (REMOVE userId/userType query param vulnerability)
+    // STEP 1: Require authentication (REMOVE userId/userType query param vulnerability)
     const authResult = await withAuth(request, 'ANY');
     if (!authResult.isAuthorized) {
       const clientInfo = getClientInfo(request);
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
 
     const user = authResult.user!;
 
-    // ✅ Use authenticated user ID and type (not query params)
+    // Use authenticated user ID and type (not query params)
     const userId = user.id;
     const userType = user.userType.toLowerCase();
 
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     // Try to get from cache first
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let chatRooms: any[] | null = apiCache.get<any[]>(cacheKey);
+    let chatRooms: any[] | null = await apiCache.get<any[]>(cacheKey);
 
     if (!chatRooms) {
       // Cache miss - fetch from database
@@ -88,7 +89,7 @@ export async function GET(request: NextRequest) {
     });
 
         // Cache the results for 2 minutes
-        apiCache.set(cacheKey, chatRooms, cacheTTL.chatRooms);
+        await apiCache.set(cacheKey, chatRooms, cacheTTL.chatRooms);
       } catch (error) {
         console.error('Error fetching chat rooms with booking data, returning empty array:', error);
         logger.error('Chat rooms fetch error', { error, userId });
@@ -148,13 +149,10 @@ export async function GET(request: NextRequest) {
       roomCount: formattedRooms.length
     });
 
-    return NextResponse.json(formattedRooms);
+    return apiSuccess(formattedRooms);
   } catch (error) {
     console.error('Error fetching chat rooms:', error);
     logger.error('Chat rooms error', { error });
-    return NextResponse.json(
-      { error: 'Failed to fetch chat rooms' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch chat rooms');
   }
 }

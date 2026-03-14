@@ -1,7 +1,7 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'About InstaCares - Canadian Childcare Platform',
+  title: 'About Us',
   description: 'Learn about InstaCares mission to connect Canadian families with trusted, verified childcare providers across Canada.'
 }
 

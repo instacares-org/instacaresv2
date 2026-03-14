@@ -1,23 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
-import { prisma } from '@/lib/database';
+import { prisma } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
-    if (session.user.userType !== 'CAREGIVER') {
-      return NextResponse.json(
-        { error: 'Only caregivers can access this endpoint' },
-        { status: 403 }
-      );
+    if (session.user.userType !== 'CAREGIVER' && !session.user.isCaregiver) {
+      return ApiErrors.forbidden('Only caregivers can access this endpoint');
     }
 
     // Find or create the caregiver record
@@ -57,8 +52,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       caregiver: {
         id: caregiver.id,
         userId: caregiver.userId,
@@ -82,9 +76,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Error fetching caregiver profile:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to fetch caregiver profile'
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to fetch caregiver profile');
   }
 }

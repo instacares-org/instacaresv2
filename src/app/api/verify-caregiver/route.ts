@@ -1,6 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+import { z } from 'zod';
 import { verifyAdminAuth } from '@/lib/adminAuth';
 import { logAuditEvent } from '@/lib/audit-log';
+
+const verifyCaregiverSchema = z.object({
+  email: z.string().min(1, 'Email is required').email('Must be a valid email address'),
+});
 
 // API endpoint to verify caregiver accounts (ADMIN ONLY)
 export async function POST(request: NextRequest) {
@@ -8,20 +14,15 @@ export async function POST(request: NextRequest) {
     // Require admin authentication
     const authResult = await verifyAdminAuth(request);
     if (!authResult.success || !authResult.user) {
-      return NextResponse.json(
-        { error: authResult.error || 'Admin authentication required' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized(authResult.error || 'Admin authentication required');
     }
 
     const body = await request.json();
-    const { email } = body;
-
-    if (!email) {
-      return NextResponse.json({
-        error: 'Email is required'
-      }, { status: 400 });
+    const parsed = verifyCaregiverSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
     }
+    const { email } = parsed.data;
 
     const { db } = await import('@/lib/db');
 
@@ -35,27 +36,21 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({
-        error: 'User not found'
-      }, { status: 404 });
+      return ApiErrors.notFound('User not found');
     }
 
     if (!user.caregiver) {
-      return NextResponse.json({
-        error: 'User is not a caregiver'
-      }, { status: 400 });
+      return ApiErrors.badRequest('User is not a caregiver');
     }
 
     if (user.caregiver.isVerified) {
-      return NextResponse.json({
-        success: true,
-        message: 'Caregiver is already verified',
+      return apiSuccess({
         caregiver: {
           email: user.email,
           name: `${user.profile?.firstName} ${user.profile?.lastName}`,
           isVerified: user.caregiver.isVerified
         }
-      });
+      }, 'Caregiver is already verified');
     }
 
     // Update caregiver to verified status AND approve user
@@ -127,7 +122,7 @@ export async function POST(request: NextRequest) {
 
     // Clear cache to refresh search results
     const { apiCache } = await import('@/lib/cache');
-    apiCache.clear();
+    await apiCache.clear();
     console.log('Cache cleared after caregiver verification');
 
     // Log the admin action
@@ -144,21 +139,17 @@ export async function POST(request: NextRequest) {
       request,
     });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Caregiver verified successfully',
+    return apiSuccess({
       caregiver: {
         email: updatedCaregiver.user.email,
         name: `${updatedCaregiver.user.profile?.firstName} ${updatedCaregiver.user.profile?.lastName}`,
         isVerified: updatedCaregiver.isVerified,
         verifiedAt: new Date().toISOString()
       }
-    });
+    }, 'Caregiver verified successfully');
 
   } catch (error) {
     console.error('Verify caregiver error:', error);
-    return NextResponse.json({
-      error: 'Failed to verify caregiver',
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to verify caregiver');
   }
 }

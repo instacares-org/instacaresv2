@@ -78,7 +78,7 @@ export default function AdminCaregiverWarnings() {
       const response = await fetch('/api/admin/caregivers');
       if (response.ok) {
         const data = await response.json();
-        setCaregivers(data.caregivers || []);
+        setCaregivers(data.data?.caregivers || data.caregivers || []);
       }
     } catch (error) {
       console.error('Error fetching caregivers:', error);

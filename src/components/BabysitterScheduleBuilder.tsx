@@ -165,14 +165,17 @@ export default function BabysitterScheduleBuilder({
     repeatInterval: 1,
   });
 
-  // Fetch existing availability
-  const fetchAvailability = useCallback(async () => {
+  // Fetch existing availability — returns the fetched slots
+  const fetchAvailability = useCallback(async (): Promise<AvailabilitySlot[]> => {
     try {
       setIsLoading(true);
       const response = await fetch('/api/babysitter/availability');
       if (response.ok) {
         const data = await response.json();
-        setExistingSlots(data.slots || []);
+        const result = data.data || data;
+        const slots = result.slots || [];
+        setExistingSlots(slots);
+        return slots;
       }
     } catch (err) {
       console.error('Failed to fetch availability:', err);
@@ -180,6 +183,7 @@ export default function BabysitterScheduleBuilder({
     } finally {
       setIsLoading(false);
     }
+    return [];
   }, []);
 
   useEffect(() => {
@@ -320,8 +324,8 @@ export default function BabysitterScheduleBuilder({
       if (response.ok) {
         setSuccess('Schedule saved successfully!');
         setScheduleSlots([]);
-        fetchAvailability();
-        onScheduleUpdate?.(existingSlots);
+        const freshSlots = await fetchAvailability();
+        onScheduleUpdate?.(freshSlots);
         setTimeout(() => setSuccess(null), 3000);
       } else {
         const data = await response.json();

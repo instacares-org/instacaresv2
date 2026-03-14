@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+import { z } from 'zod';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
+
+const addResponseSchema = z.object({
+  message: z.string().min(1, 'Message is required').max(5000, 'Message must be 5000 characters or less'),
+  isInternal: z.boolean().optional().default(false),
+  attachments: z.any().optional(),
+});
 
 // POST - Add a response to a ticket
 export async function POST(
@@ -12,19 +20,16 @@ export async function POST(
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const { ticketId } = await params;
     const body = await request.json();
-    const { message, isInternal, attachments } = body;
-
-    if (!message || message.trim() === '') {
-      return NextResponse.json(
-        { error: 'Message is required' },
-        { status: 400 }
-      );
+    const parsed = addResponseSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
     }
+    const { message, isInternal, attachments } = parsed.data;
 
     // Get user to check if admin
     const user = await db.user.findUnique({
@@ -40,12 +45,12 @@ export async function POST(
     });
 
     if (!ticket) {
-      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 });
+      return ApiErrors.notFound('Ticket not found');
     }
 
     // Non-admins can only respond to their own tickets
     if (!isAdmin && ticket.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+      return ApiErrors.forbidden('Not authorized');
     }
 
     // Only admins can create internal notes
@@ -73,16 +78,10 @@ export async function POST(
 
     logger.info(`Response added to ticket ${ticket.ticketNumber} by ${session.user.id}`);
 
-    return NextResponse.json({
-      success: true,
-      data: response
-    });
+    return apiSuccess(response);
   } catch (error) {
     logger.error('Error adding ticket response:', error);
-    return NextResponse.json(
-      { error: 'Failed to add response' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to add response');
   }
 }
 
@@ -94,7 +93,7 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const { ticketId } = await params;
@@ -113,12 +112,12 @@ export async function GET(
     });
 
     if (!ticket) {
-      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 });
+      return ApiErrors.notFound('Ticket not found');
     }
 
     // Non-admins can only view their own tickets
     if (!isAdmin && ticket.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+      return ApiErrors.forbidden('Not authorized');
     }
 
     const responses = await db.ticketResponse.findMany({
@@ -130,15 +129,9 @@ export async function GET(
       orderBy: { createdAt: 'asc' }
     });
 
-    return NextResponse.json({
-      success: true,
-      data: responses
-    });
+    return apiSuccess(responses);
   } catch (error) {
     logger.error('Error fetching ticket responses:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch responses' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch responses');
   }
 }

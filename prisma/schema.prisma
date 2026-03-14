@@ -15,6 +15,7 @@ model User {
   approvalStatus          ApprovalStatus           @default(PENDING)
   phoneVerified           Boolean                  @default(false)
   isActive                Boolean                  @default(true)
+  mustChangePassword      Boolean                  @default(false)
   lastLogin               DateTime?
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
@@ -22,6 +23,9 @@ model User {
   image                   String?
   emailVerified           DateTime?
   stripeCustomerId        String?                  // Stripe Customer ID for saved payment methods
+  // Two-Factor Authentication (TOTP)
+  twoFactorSecret         String?                  // Encrypted TOTP secret for 2FA
+  twoFactorEnabled        Boolean                  @default(false)
   // Dual role support - user can be both parent and caregiver
   isParent                Boolean                  @default(false)
   isCaregiver             Boolean                  @default(false)
@@ -47,6 +51,7 @@ model User {
   profile                 UserProfile?
   supportTickets          SupportTicket[]
   parentBabysitterBookings BabysitterBooking[]     @relation("ParentBabysitterBookings")  // New: Parent's babysitter bookings
+  supervisorPermission     SupervisorPermission?
 
   @@index([userType, approvalStatus])
   @@index([isActive, approvalStatus])
@@ -742,6 +747,7 @@ enum UserType {
   CAREGIVER
   BABYSITTER
   ADMIN
+  SUPERVISOR
 }
 
 enum ApprovalStatus {
@@ -1048,6 +1054,8 @@ model BookingExtension {
   paidAt                DateTime?
   parentNotifiedAt      DateTime?           // When parent was notified
   parentViewedAt        DateTime?           // When parent viewed the notification
+  lastReminderSentAt    DateTime?           // When last payment reminder was sent
+  reminderCount         Int                 @default(0) // Number of reminders sent
   reason                String?             // Optional reason for extension
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
@@ -1331,4 +1339,29 @@ model AuditLog {
   @@index([resource, resourceId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+model SupervisorPermission {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  canApproveUsers        Boolean  @default(false)
+  canManageUsers         Boolean  @default(false)
+  canModerateReviews     Boolean  @default(false)
+  canModerateChat        Boolean  @default(false)
+  canViewFinancials      Boolean  @default(false)
+  canProcessPayouts      Boolean  @default(false)
+  canManageExtensions    Boolean  @default(false)
+  canViewAnalytics       Boolean  @default(false)
+  canViewAuditLogs       Boolean  @default(false)
+  canManageSupport       Boolean  @default(false)
+  canManageWarnings      Boolean  @default(false)
+  canManageNotifications Boolean  @default(false)
+
+  createdBy              String
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@map("supervisor_permissions")
 }

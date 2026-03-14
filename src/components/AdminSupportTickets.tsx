@@ -82,7 +82,7 @@ export default function AdminSupportTickets() {
 
       if (response.ok) {
         const data = await response.json();
-        setTickets(data.data.tickets);
+        setTickets(data.data?.tickets || data.tickets || []);
       } else {
         console.error("Failed to fetch tickets");
       }

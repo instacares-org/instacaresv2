@@ -34,7 +34,7 @@ export default function LoginModal({ isOpen, onClose, userType }: LoginModalProp
     setIsSubmitting(true);
     
     try {
-      const result = await login(formData.email, formData.password, (userType === 'babysitter' ? 'caregiver' : userType) || 'parent');
+      const result = await login(formData.email, formData.password, userType || 'parent');
       
       if (result.success) {
         onClose();
@@ -183,7 +183,7 @@ export default function LoginModal({ isOpen, onClose, userType }: LoginModalProp
               </div>
             </div>
             <SocialLogin
-              userType={userType === 'babysitter' ? 'caregiver' : (userType || 'parent')}
+              userType={userType || 'parent'}
               onSocialLogin={(provider, userType) => {
                 console.log(`Social login successful with ${provider} as ${userType}`);
                 onClose();

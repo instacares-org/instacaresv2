@@ -22,11 +22,20 @@ interface AdminUser {
   };
   lastLogin?: string;
   permissions?: {
-    canModerateReviews: boolean;
+    canApproveUsers: boolean;
     canManageUsers: boolean;
+    canModerateReviews: boolean;
+    canModerateChat: boolean;
     canViewFinancials: boolean;
-    canAccessLogs: boolean;
-    canManageSystem: boolean;
+    canProcessPayouts: boolean;
+    canManageExtensions: boolean;
+    canViewAnalytics: boolean;
+    canViewAuditLogs: boolean;
+    canManageSupport: boolean;
+    canManageWarnings: boolean;
+    canManageNotifications: boolean;
+    canManageSupervisors: boolean;
+    canManageSettings: boolean;
   };
 }
 
@@ -59,7 +68,7 @@ const AdminAuthLayout: React.FC<AdminAuthLayoutProps> = ({
       
       if (response.ok) {
         const data = await response.json();
-        const user = data.admin;
+        const user = data.data?.admin || data.admin;
         
         setAdminUser(user);
         
@@ -218,6 +227,13 @@ const AdminAuthLayout: React.FC<AdminAuthLayoutProps> = ({
                 <div className="flex items-center space-x-2">
                   <div className="text-sm text-gray-500">
                     Welcome, <span className="font-medium">{adminUser.profile?.firstName} {adminUser.profile?.lastName}</span>
+                    <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                      adminUser.userType === 'ADMIN'
+                        ? 'bg-purple-100 text-purple-800'
+                        : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {adminUser.userType === 'ADMIN' ? 'Admin' : 'Supervisor'}
+                    </span>
                   </div>
                   <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
                     <span className="text-indigo-700 font-medium text-sm">

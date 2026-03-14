@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
 interface NominatimRequest {
   query: string;
@@ -28,10 +29,7 @@ export async function POST(request: NextRequest) {
     const { query, country = 'CA' } = body;
 
     if (!query || query.length < 3) {
-      return NextResponse.json(
-        { error: 'Query must be at least 3 characters long' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Query must be at least 3 characters long');
     }
 
     console.log('🌍 Geocoding request:', { query, country });
@@ -62,10 +60,7 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       console.error('❌ Nominatim API error:', response.status, response.statusText);
-      return NextResponse.json(
-        { error: `Geocoding service error: ${response.status}` },
-        { status: response.status }
-      );
+      return apiError(`Geocoding service error: ${response.status}`, response.status);
     }
 
     const results: NominatimResult[] = await response.json();
@@ -105,16 +100,10 @@ export async function POST(request: NextRequest) {
     console.error('❌ Geocoding API error:', error);
     
     if (error instanceof Error && error.name === 'AbortError') {
-      return NextResponse.json(
-        { error: 'Request timeout - please try again' },
-        { status: 408 }
-      );
+      return apiError('Request timeout - please try again', 408);
     }
 
-    return NextResponse.json(
-      { error: 'Internal geocoding error' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Internal geocoding error');
   }
 }
 
@@ -154,8 +143,5 @@ function standardizeProvince(province: string): string {
 }
 
 export async function GET() {
-  return NextResponse.json(
-    { error: 'Use POST method with query parameter' },
-    { status: 405 }
-  );
+  return apiError('Use POST method with query parameter', 405);
 }

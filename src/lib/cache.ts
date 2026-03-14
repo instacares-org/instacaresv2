@@ -1,5 +1,9 @@
-// Simple in-memory cache with TTL for API performance optimization
-// In production, replace with Redis for better scalability
+// Hybrid cache: Upstash Redis (primary) with in-memory Map fallback.
+// All mutating methods are async so call sites can `await` them uniformly.
+
+import { getRedisClient } from './redis';
+
+const REDIS_PREFIX = 'cache:';
 
 interface CacheItem<T> {
   data: T;
@@ -19,11 +23,13 @@ class MemoryCache {
   private evictions = 0;
   private oversizedSkips = 0;
 
-  set<T>(key: string, data: T, ttlSeconds = 300): void {
+  async set<T>(key: string, data: T, ttlSeconds = 300): Promise<void> {
     // Estimate size of data (rough approximation)
+    let serialized: string;
     let estimatedSize = 0;
     try {
-      estimatedSize = JSON.stringify(data).length;
+      serialized = JSON.stringify(data);
+      estimatedSize = serialized.length;
 
       // Skip caching if single item exceeds size limit
       if (estimatedSize > this.maxItemSize) {
@@ -37,6 +43,18 @@ class MemoryCache {
       return;
     }
 
+    // Try Redis first
+    try {
+      const redis = getRedisClient();
+      if (redis) {
+        await redis.set(REDIS_PREFIX + key, serialized!, { ex: ttlSeconds });
+        return;
+      }
+    } catch (err) {
+      console.warn('⚠️ Redis set failed, falling back to memory:', (err as Error).message);
+    }
+
+    // Fallback: in-memory Map
     // Clean up if cache is getting too large (LRU eviction)
     if (this.cache.size >= this.maxSize) {
       const oldestKey = this.cache.keys().next().value;
@@ -54,7 +72,32 @@ class MemoryCache {
     });
   }
 
-  get<T>(key: string): T | null {
+  async get<T>(key: string): Promise<T | null> {
+    // Try Redis first
+    try {
+      const redis = getRedisClient();
+      if (redis) {
+        const raw = await redis.get<string>(REDIS_PREFIX + key);
+        if (raw === null || raw === undefined) {
+          this.misses++;
+          return null;
+        }
+        this.hits++;
+        // @upstash/redis auto-deserializes JSON, so raw may already be an object
+        if (typeof raw === 'string') {
+          try {
+            return JSON.parse(raw) as T;
+          } catch {
+            return raw as unknown as T;
+          }
+        }
+        return raw as unknown as T;
+      }
+    } catch (err) {
+      console.warn('⚠️ Redis get failed, falling back to memory:', (err as Error).message);
+    }
+
+    // Fallback: in-memory Map
     const item = this.cache.get(key);
 
     if (!item) {
@@ -73,16 +116,78 @@ class MemoryCache {
     return item.data as T;
   }
 
-  delete(key: string): void {
+  async delete(key: string): Promise<void> {
+    // Try Redis first
+    try {
+      const redis = getRedisClient();
+      if (redis) {
+        await redis.del(REDIS_PREFIX + key);
+        return;
+      }
+    } catch (err) {
+      console.warn('⚠️ Redis delete failed, falling back to memory:', (err as Error).message);
+    }
+
+    // Fallback: in-memory Map
     this.cache.delete(key);
   }
 
-  clear(): void {
+  async clear(): Promise<void> {
+    // Try Redis first
+    try {
+      const redis = getRedisClient();
+      if (redis) {
+        // Use SCAN-based iteration to find all cache keys, then delete them.
+        // @upstash/redis .scan() returns [cursor, keys].
+        let cursor = 0;
+        do {
+          const result = await redis.scan(cursor, {
+            match: REDIS_PREFIX + '*',
+            count: 100,
+          });
+          cursor = Number(result[0]);
+          const keys = result[1] as string[];
+          if (keys.length > 0) {
+            await redis.del(...keys);
+          }
+        } while (cursor !== 0);
+        return;
+      }
+    } catch (err) {
+      console.warn('⚠️ Redis clear failed, falling back to memory:', (err as Error).message);
+    }
+
+    // Fallback: in-memory Map
     this.cache.clear();
   }
 
   // Invalidate all keys matching a pattern
-  invalidatePattern(pattern: string): number {
+  async invalidatePattern(pattern: string): Promise<number> {
+    // Try Redis first
+    try {
+      const redis = getRedisClient();
+      if (redis) {
+        let count = 0;
+        let cursor = 0;
+        do {
+          const result = await redis.scan(cursor, {
+            match: REDIS_PREFIX + '*' + pattern + '*',
+            count: 100,
+          });
+          cursor = Number(result[0]);
+          const keys = result[1] as string[];
+          if (keys.length > 0) {
+            await redis.del(...keys);
+            count += keys.length;
+          }
+        } while (cursor !== 0);
+        return count;
+      }
+    } catch (err) {
+      console.warn('⚠️ Redis invalidatePattern failed, falling back to memory:', (err as Error).message);
+    }
+
+    // Fallback: in-memory Map
     let count = 0;
     for (const key of this.cache.keys()) {
       if (key.includes(pattern)) {
@@ -93,7 +198,7 @@ class MemoryCache {
     return count;
   }
 
-  // Clean up expired entries
+  // Clean up expired entries (in-memory only; Redis handles TTL natively)
   cleanup(): void {
     const now = Date.now();
     for (const [key, item] of this.cache.entries()) {
@@ -150,17 +255,17 @@ export const cacheKeys = {
     }, {} as Record<string, any>);
     return `caregivers:${JSON.stringify(sorted)}`;
   },
-  
+
   caregiver: (id: string) => `caregiver:${id}`,
-  
-  bookings: (userId: string, status?: string) => 
+
+  bookings: (userId: string, status?: string) =>
     `bookings:${userId}${status ? `:${status}` : ''}`,
-  
-  chatRooms: (userId: string, userType: string) => 
+
+  chatRooms: (userId: string, userType: string) =>
     `chat-rooms:${userId}:${userType}`,
-  
+
   notifications: (userId: string) => `notifications:${userId}`,
-  
+
   reviews: (caregiverId: string) => `reviews:${caregiverId}`,
 };
 

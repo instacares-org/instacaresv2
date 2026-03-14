@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { registrationSchema, sanitizeString, normalizePhoneNumber, checkRateLimit } from '@/lib/validation';
 import { logger, getClientInfo } from '@/lib/logger';
-import { prisma, withTransaction } from '@/lib/database';
+import { prisma, withTransaction } from '@/lib/db';
 import { geocodeAddress } from '@/lib/geocoding';
 import { getTimezoneFromLocation } from '@/lib/timezone';
 import { validateFileUpload, generateSecureFilename } from '@/lib/file-upload-validation';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
+import sharp from 'sharp';
 import { emailService } from '@/lib/notifications/email.service';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
 export async function POST(request: NextRequest) {
   const clientInfo = getClientInfo(request);
@@ -17,7 +19,7 @@ export async function POST(request: NextRequest) {
 
   try {
     // Rate limiting check
-    const rateLimitResult = checkRateLimit(clientInfo.ip, 3, 15 * 60 * 1000); // 3 attempts per 15 minutes
+    const rateLimitResult = await checkRateLimit(clientInfo.ip, 3, 15 * 60 * 1000); // 3 attempts per 15 minutes
     if (!rateLimitResult.success) {
       logger.security('Registration rate limit exceeded', {
         ip: clientInfo.ip,
@@ -26,7 +28,7 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json(
-        { error: rateLimitResult.error },
+        { success: false, error: rateLimitResult.error },
         {
           status: 429,
           headers: {
@@ -70,10 +72,7 @@ export async function POST(request: NextRequest) {
       }
     } catch (error) {
       logger.warn('Invalid request format', { ip: clientInfo.ip });
-      return NextResponse.json(
-        { error: 'Invalid request format' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Invalid request format');
     }
 
     // Validate input using Zod schema
@@ -85,26 +84,20 @@ export async function POST(request: NextRequest) {
         return acc;
       }, {} as Record<string, string>);
 
-      // Enhanced logging for debugging
+      // Log validation errors only (no request body — may contain passwords)
       console.log('Registration validation failed:', {
-        receivedData: requestBody,
         validationErrors: errors,
-        allIssues: validationResult.error.issues
       });
 
       logger.info('Registration validation failed', {
         errors,
         ip: clientInfo.ip,
-        email: requestBody.email,
         receivedFields: Object.keys(requestBody || {}),
         missingFields: ['firstName', 'lastName', 'email', 'password', 'confirmPassword', 'phone', 'userType', 'agreeToTerms']
           .filter(field => !requestBody?.[field])
       });
 
-      return NextResponse.json(
-        { error: 'Validation failed', details: errors },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Validation failed', errors);
     }
 
     const {
@@ -145,10 +138,7 @@ export async function POST(request: NextRequest) {
         ip: clientInfo.ip
       });
 
-      return NextResponse.json(
-        { error: 'An account with this email already exists' },
-        { status: 409 }
-      );
+      return ApiErrors.conflict('An account with this email already exists');
     }
 
     // Hash password with higher cost for production security
@@ -168,7 +158,7 @@ export async function POST(request: NextRequest) {
         // Validate the avatar file
         const validation = await validateFileUpload(avatarFile, {
           allowedTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
-          maxSizeBytes: 5 * 1024 * 1024, // 5MB
+          maxSizeBytes: 50 * 1024 * 1024, // 50MB - modern phone photos can be very large
           checkMagicBytes: true
         });
 
@@ -187,18 +177,36 @@ export async function POST(request: NextRequest) {
           const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'avatars');
           await mkdir(uploadDir, { recursive: true });
 
-          // Save file to disk
-          const filePath = path.join(uploadDir, filename);
+          // Process image: crop to square and resize with sharp
           const bytes = await avatarFile.arrayBuffer();
-          const buffer = Buffer.from(bytes);
-          await writeFile(filePath, buffer);
+          const inputBuffer = Buffer.from(bytes);
+
+          const metadata = await sharp(inputBuffer).metadata();
+          const { width: imgW = 0, height: imgH = 0 } = metadata;
+
+          const size = Math.min(imgW, imgH);
+          const left = Math.floor((imgW - size) / 2);
+          const top = Math.floor((imgH - size) / 2);
+
+          const processedBuffer = await sharp(inputBuffer)
+            .extract({ left, top, width: size, height: size })
+            .resize(512, 512, { fit: 'cover', position: 'center' })
+            .jpeg({ quality: 85 })
+            .toBuffer();
+
+          // Save processed file (change extension to .jpg)
+          const jpgFilename = filename.replace(/\.[^.]+$/, '.jpg');
+          const filePath = path.join(uploadDir, jpgFilename);
+          await writeFile(filePath, processedBuffer);
 
           // Add avatar URL to profile data
-          profileData.avatar = `/uploads/avatars/${filename}`;
+          profileData.avatar = `/uploads/avatars/${jpgFilename}`;
 
           logger.info('Avatar uploaded during registration', {
             email: email,
-            filename: filename
+            filename: jpgFilename,
+            originalSize: avatarFile.size,
+            processedSize: processedBuffer.length,
           });
         }
       } catch (avatarError) {
@@ -275,6 +283,10 @@ export async function POST(request: NextRequest) {
         email: email.toLowerCase(),
         passwordHash,
         userType: mappedUserType,
+        activeRole: mappedUserType,
+        isParent: mappedUserType === 'PARENT',
+        isCaregiver: mappedUserType === 'CAREGIVER',
+        isBabysitter: isBabysitter,
         approvalStatus: shouldAutoApprove ? 'APPROVED' : 'PENDING', // Auto-approve based on admin settings
         emailVerified: null, // Use null instead of false for DateTime field
         profile: {
@@ -400,11 +412,11 @@ export async function POST(request: NextRequest) {
     });
 
     // Return success response (never include password hash)
-    return NextResponse.json({
-      success: true,
-      message: shouldAutoApprove
-        ? 'Account created successfully. You can now log in.'
-        : 'Account created successfully. Your account is pending approval.',
+    const successMessage = shouldAutoApprove
+      ? 'Account created successfully. You can now log in.'
+      : 'Account created successfully. Your account is pending approval.';
+
+    return apiSuccess({
       user: {
         id: result.id,
         email: result.email,
@@ -425,12 +437,7 @@ export async function POST(request: NextRequest) {
           longitude: result.profile?.longitude
         }
       }
-    }, {
-      status: 201,
-      headers: {
-        'X-RateLimit-Remaining': rateLimitResult.remaining?.toString() || '2'
-      }
-    });
+    }, successMessage, 201);
 
   } catch (error: any) {
     // Handle specific known errors - USER_EXISTS is now handled above
@@ -445,9 +452,6 @@ export async function POST(request: NextRequest) {
     });
 
     // Generic error response (don't expose internal details)
-    return NextResponse.json(
-      { error: 'Unable to create account. Please try again later.' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Unable to create account. Please try again later.');
   }
 }

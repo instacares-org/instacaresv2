@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
 import { z } from 'zod';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 // Validation schema for babysitter registration (Step 1: Basic info)
 const registerSchema = z.object({
@@ -29,10 +30,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const userId = session.user.id;
@@ -47,10 +45,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (existingBabysitter) {
-      return NextResponse.json(
-        { error: 'Babysitter profile already exists' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Babysitter profile already exists');
     }
 
     // Create or update user profile
@@ -99,27 +94,19 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Babysitter registration started',
+    return apiSuccess({
       babysitterId: babysitter.id,
       nextStep: 'documents'
-    });
+    }, 'Babysitter registration started');
 
   } catch (error) {
     console.error('Babysitter registration error:', error);
 
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.issues },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Validation error', error.issues);
     }
 
-    return NextResponse.json(
-      { error: 'Failed to register babysitter' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to register babysitter');
   }
 }
 
@@ -129,10 +116,7 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const babysitter = await db.babysitter.findUnique({
@@ -148,7 +132,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!babysitter) {
-      return NextResponse.json({
+      return apiSuccess({
         registered: false,
         message: 'No babysitter profile found'
       });
@@ -173,7 +157,7 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    return NextResponse.json({
+    return apiSuccess({
       registered: true,
       babysitter: {
         id: babysitter.id,
@@ -196,9 +180,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Get babysitter status error:', error);
-    return NextResponse.json(
-      { error: 'Failed to get babysitter status' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to get babysitter status');
   }
 }

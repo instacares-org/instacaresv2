@@ -1,37 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { Prisma } from '@prisma/client';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/auth-middleware';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 // Prevent pre-rendering during build time
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-// Type definitions for the included relations used in queries
-type BookingWithIncludes = Prisma.BookingGetPayload<{
-  include: {
-    parent: { include: { profile: true } };
-    caregiverUser: { include: { profile: true } };
-    caregiverProfile: true;
-    payments: true;
-    reviews: true;
-  };
-}>;
-
-type ReviewWithIncludes = Prisma.ReviewGetPayload<{
-  include: {
-    reviewer: { include: { profile: true } };
-    reviewee: { include: { profile: true } };
-    booking: true;
-  };
-}>;
-
-type SupportTicketWithIncludes = Prisma.SupportTicketGetPayload<{
-  include: {
-    user: { include: { profile: true } };
-    responses: true;
-  };
-}>;
 
 // GET /api/admin/dashboard - Get admin dashboard data with real users
 export async function GET(request: NextRequest) {
@@ -43,139 +17,158 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if database is available during build time
-    let users;
     try {
-      // Fetch real users from database
-      users = await db.user.findMany({
+      await db.$queryRaw`SELECT 1`;
+    } catch (dbError) {
+      console.warn('Database not available during build, returning empty data:', dbError);
+      return apiSuccess({
+        stats: {
+          totalUsers: 0,
+          totalBookings: 0,
+          totalCaregivers: 0,
+          totalParents: 0,
+          totalAdmins: 0,
+          activeBookings: 0,
+          completedBookings: 0,
+          pendingApprovals: 0,
+          activeUsers: 0,
+          totalRevenue: 0,
+          totalPlatformFees: 0,
+          totalPayouts: 0,
+          pendingPayouts: 0,
+          completedRevenue: 0,
+          completedPlatformFees: 0,
+          pendingReviews: 0,
+          newUsersThisWeek: 0,
+          supportTickets: 0
+        },
+        users: [],
+        bookings: [],
+        reviews: [],
+        pendingApprovals: [],
+        recentChats: [],
+        supportTickets: []
+      });
+    }
+
+    // Date threshold for "new users this week"
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
+    // Run all independent count/aggregate queries and list fetches in parallel
+    const [
+      // User stats (count queries)
+      totalUsers,
+      totalCaregivers,
+      totalParents,
+      totalAdmins,
+      pendingApprovals,
+      activeUsers,
+      newUsersThisWeek,
+      // Booking stats (count queries)
+      totalBookings,
+      completedBookings,
+      activeBookings,
+      // Revenue aggregations (completed bookings)
+      completedRevenueAgg,
+      // Revenue aggregations (all bookings with PAID payments)
+      paidBookingRevenueAgg,
+      // Pending payouts (CONFIRMED/IN_PROGRESS with PAID payments)
+      pendingPayoutAgg,
+      // Review stats
+      pendingReviews,
+      // Support ticket stats
+      openSupportTickets,
+      // List data for display (with limits)
+      users,
+      bookings,
+      reviews,
+      supportTickets,
+    ] = await Promise.all([
+      // User count queries
+      db.user.count(),
+      db.user.count({ where: { userType: 'CAREGIVER' } }),
+      db.user.count({ where: { userType: 'PARENT' } }),
+      db.user.count({ where: { userType: 'ADMIN' } }),
+      db.user.count({ where: { approvalStatus: 'PENDING' } }),
+      db.user.count({ where: { isActive: true } }),
+      db.user.count({ where: { createdAt: { gt: weekAgo } } }),
+      // Booking count queries
+      db.booking.count(),
+      db.booking.count({ where: { status: 'COMPLETED' } }),
+      db.booking.count({ where: { status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] } } }),
+      // Revenue from COMPLETED bookings
+      db.booking.aggregate({
+        where: { status: 'COMPLETED' },
+        _sum: { totalAmount: true, platformFee: true },
+      }),
+      // Revenue from ALL bookings that have at least one PAID payment
+      db.booking.aggregate({
+        where: { payments: { some: { status: 'PAID' } } },
+        _sum: { totalAmount: true, platformFee: true },
+      }),
+      // Pending payouts: CONFIRMED/IN_PROGRESS bookings with PAID payments
+      db.booking.aggregate({
+        where: {
+          status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
+          payments: { some: { status: 'PAID' } },
+        },
+        _sum: { totalAmount: true, platformFee: true },
+      }),
+      // Pending reviews count
+      db.review.count({ where: { isApproved: false } }),
+      // Open/in-progress support tickets count
+      db.supportTicket.count({ where: { status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
+      // User list for display (limited to 50 most recent)
+      db.user.findMany({
         include: {
           profile: true,
           caregiver: true,
         },
-        orderBy: {
-          createdAt: 'desc'
-        }
-      });
-    } catch (dbError) {
-      console.warn('Database not available during build, returning empty data:', dbError);
-      // Return empty data during build time
-      return NextResponse.json({
-        success: true,
-        data: {
-          stats: {
-            totalUsers: 0,
-            totalBookings: 0,
-            totalCaregivers: 0,
-            totalParents: 0,
-            totalAdmins: 0,
-            activeBookings: 0,
-            completedBookings: 0,
-            pendingApprovals: 0,
-            activeUsers: 0,
-            totalRevenue: 0,
-            totalPlatformFees: 0,
-            totalPayouts: 0,
-            pendingPayouts: 0,
-            completedRevenue: 0,
-            completedPlatformFees: 0,
-            pendingReviews: 0,
-            newUsersThisWeek: 0,
-            supportTickets: 0
-          },
-          users: [],
-          bookings: [],
-          reviews: [],
-          pendingApprovals: [],
-          recentChats: [],
-          supportTickets: []
-        }
-      });
-    }
-
-    // Fetch real bookings with error handling
-    let bookings: BookingWithIncludes[] = [];
-    let reviews: ReviewWithIncludes[] = [];
-    let supportTickets: SupportTicketWithIncludes[] = [];
-
-    try {
-      bookings = await db.booking.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      // Recent bookings for display
+      db.booking.findMany({
         include: {
           parent: { include: { profile: true } },
           caregiverUser: { include: { profile: true } },
           caregiverProfile: true,
           payments: true,
-          reviews: true
+          reviews: true,
         },
-        orderBy: {
-          createdAt: 'desc'
-        },
-        take: 20
-      });
-
-      // Fetch real reviews
-      reviews = await db.review.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      // Recent reviews for display
+      db.review.findMany({
         include: {
           reviewer: { include: { profile: true } },
           reviewee: { include: { profile: true } },
-          booking: true
+          booking: true,
         },
-        orderBy: {
-          createdAt: 'desc'
-        },
-        take: 10
-      });
-
-      // Fetch support tickets
-      supportTickets = await db.supportTicket.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+      // Recent support tickets for display
+      db.supportTicket.findMany({
         include: {
           user: { include: { profile: true } },
-          responses: true
+          responses: true,
         },
-        orderBy: {
-          createdAt: 'desc'
-        },
-        take: 20
-      });
-    } catch (dbError) {
-      console.warn('Database error fetching bookings/reviews:', dbError);
-      bookings = [];
-      reviews = [];
-      supportTickets = [];
-    }
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ]);
 
-    // Calculate stats
-    const totalUsers = users.length;
-    const totalCaregivers = users.filter(u => u.userType === 'CAREGIVER').length;
-    const totalParents = users.filter(u => u.userType === 'PARENT').length;
-    const totalAdmins = users.filter(u => u.userType === 'ADMIN').length;
-    const pendingApprovals = users.filter(u => u.approvalStatus === 'PENDING').length;
-    const activeUsers = users.filter(u => u.isActive).length;
-    const completedBookings = bookings.filter(b => b.status === 'COMPLETED').length;
-    const activeBookings = bookings.filter(b => ['PENDING', 'CONFIRMED', 'IN_PROGRESS'].includes(b.status)).length;
-
-    // Calculate revenue from COMPLETED bookings
-    const completedRevenue = bookings
-      .filter(b => b.status === 'COMPLETED')
-      .reduce((sum, b) => sum + b.totalAmount, 0);
-    const completedPlatformFees = bookings
-      .filter(b => b.status === 'COMPLETED')
-      .reduce((sum, b) => sum + b.platformFee, 0);
-
-    // Calculate revenue from ALL paid bookings (includes CONFIRMED, IN_PROGRESS, COMPLETED)
-    // This shows actual money collected via payments
-    const paidBookings = bookings.filter(b =>
-      b.payments && b.payments.length > 0 &&
-      b.payments.some((p: { status: string }) => p.status === 'PAID')
-    );
-    const totalRevenue = paidBookings.reduce((sum, b) => sum + b.totalAmount, 0);
-    const totalPlatformFees = paidBookings.reduce((sum, b) => sum + b.platformFee, 0);
-
-    // Calculate pending payouts (CONFIRMED/IN_PROGRESS bookings with PAID payments - not yet completed)
-    const pendingPayoutBookings = bookings.filter(b =>
-      ['CONFIRMED', 'IN_PROGRESS'].includes(b.status) &&
-      b.payments && b.payments.length > 0 &&
-      b.payments.some((p: { status: string }) => p.status === 'PAID')
-    );
-    const pendingPayouts = pendingPayoutBookings.reduce((sum, b) => sum + (b.totalAmount - b.platformFee), 0);
+    // Extract aggregated revenue values
+    const completedRevenue = completedRevenueAgg._sum.totalAmount ?? 0;
+    const completedPlatformFees = completedRevenueAgg._sum.platformFee ?? 0;
+    const totalRevenue = paidBookingRevenueAgg._sum.totalAmount ?? 0;
+    const totalPlatformFees = paidBookingRevenueAgg._sum.platformFee ?? 0;
+    const pendingPayoutTotal = pendingPayoutAgg._sum.totalAmount ?? 0;
+    const pendingPayoutFees = pendingPayoutAgg._sum.platformFee ?? 0;
+    const pendingPayouts = pendingPayoutTotal - pendingPayoutFees;
 
     // Transform users for frontend
     const transformedUsers = users.map(user => ({
@@ -216,7 +209,7 @@ export async function GET(request: NextRequest) {
     const dashboardData = {
       stats: {
         totalUsers,
-        totalBookings: bookings.length,
+        totalBookings,
         totalCaregivers,
         totalParents,
         totalAdmins,
@@ -230,13 +223,9 @@ export async function GET(request: NextRequest) {
         pendingPayouts,
         completedRevenue,
         completedPlatformFees,
-        pendingReviews: reviews.filter(r => !r.isApproved).length,
-        newUsersThisWeek: users.filter(u => {
-          const weekAgo = new Date();
-          weekAgo.setDate(weekAgo.getDate() - 7);
-          return u.createdAt > weekAgo;
-        }).length,
-        supportTickets: supportTickets.filter(t => t.status === 'OPEN' || t.status === 'IN_PROGRESS').length
+        pendingReviews,
+        newUsersThisWeek,
+        supportTickets: openSupportTickets
       },
       users: transformedUsers,
       bookings: transformedBookings,
@@ -272,16 +261,10 @@ export async function GET(request: NextRequest) {
       }))
     };
 
-    return NextResponse.json({
-      success: true,
-      data: dashboardData
-    });
+    return apiSuccess(dashboardData);
 
   } catch (error) {
     console.error('Error fetching admin dashboard data:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch dashboard data' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch dashboard data');
   }
 }

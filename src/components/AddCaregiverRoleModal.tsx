@@ -92,7 +92,7 @@ export default function AddCaregiverRoleModal({ isOpen, onClose }: AddCaregiverR
         router.push('/caregiver-dashboard');
       } else {
         const data = await response.json();
-        setError(data.error || 'Failed to add caregiver role');
+        setError(data.data?.error || data.error || 'Failed to add caregiver role');
       }
     } catch (err) {
       console.error('Error adding caregiver role:', err);

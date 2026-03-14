@@ -28,6 +28,8 @@ interface Extension {
   reason: string | null;
   stripePaymentIntentId: string | null;
   paidAt: string | null;
+  reminderCount: number;
+  lastReminderSentAt: string | null;
   createdAt: string;
   parent: {
     id: string;
@@ -87,8 +89,8 @@ export default function AdminExtensionsManagement() {
 
       if (response.ok) {
         const data = await response.json();
-        setExtensions(data.extensions || []);
-        setStats(data.stats || {});
+        setExtensions(data.data?.extensions || data.extensions || []);
+        setStats(data.data?.stats || data.stats || {});
       } else {
         const errData = await response.json();
         setError(errData.error || 'Failed to fetch extensions');
@@ -149,7 +151,7 @@ export default function AdminExtensionsManagement() {
 
       const data = await response.json();
       if (response.ok && data.success) {
-        alert(`Extension approved. Payment status: ${data.status}`);
+        alert(data.message || `Extension approved. Payment status: ${data.data?.status || 'processed'}`);
         fetchExtensions();
       } else {
         alert(`Failed: ${data.error || 'Unknown error'}`);
@@ -269,7 +271,8 @@ export default function AdminExtensionsManagement() {
   const totalPaid = stats.PAID?.totalAmount || 0;
   const totalPaidCount = stats.PAID?.count || 0;
   const totalFailed = stats.FAILED?.count || 0;
-  const totalPending = (stats.PENDING?.count || 0) + (stats.PAYMENT_PENDING?.count || 0);
+  const totalPendingApproval = stats.PENDING?.count || 0;
+  const totalPaymentPending = (stats.PAYMENT_PENDING?.count || 0) + totalFailed;
   const totalPlatformFees = (stats.PAID as any)?.totalPlatformFees || 0;
 
   if (loading) {
@@ -299,9 +302,9 @@ export default function AdminExtensionsManagement() {
         <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-yellow-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Pending</p>
-              <p className="text-2xl font-bold text-yellow-600">{totalPending}</p>
-              <p className="text-sm text-gray-500">awaiting approval</p>
+              <p className="text-sm text-gray-600">Pending Approval</p>
+              <p className="text-2xl font-bold text-yellow-600">{totalPendingApproval}</p>
+              <p className="text-sm text-gray-500">awaiting admin action</p>
             </div>
             <ClockIcon className="h-10 w-10 text-yellow-500" />
           </div>
@@ -310,11 +313,11 @@ export default function AdminExtensionsManagement() {
         <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-red-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Failed</p>
-              <p className="text-2xl font-bold text-red-600">{totalFailed}</p>
-              <p className="text-sm text-gray-500">payment issues</p>
+              <p className="text-sm text-gray-600">Unpaid</p>
+              <p className="text-2xl font-bold text-red-600">{totalPaymentPending}</p>
+              <p className="text-sm text-gray-500">awaiting parent payment</p>
             </div>
-            <XCircleIcon className="h-10 w-10 text-red-500" />
+            <ExclamationTriangleIcon className="h-10 w-10 text-red-500" />
           </div>
         </div>
 
@@ -354,9 +357,11 @@ export default function AdminExtensionsManagement() {
             >
               <option value="all">All Status</option>
               <option value="PAID">Paid</option>
-              <option value="PENDING">Pending</option>
+              <option value="PENDING">Pending Approval</option>
+              <option value="PAYMENT_PENDING">Payment Pending</option>
               <option value="FAILED">Failed</option>
               <option value="CANCELLED">Cancelled</option>
+              <option value="DECLINED">Declined</option>
             </select>
           </div>
 
@@ -430,8 +435,31 @@ export default function AdminExtensionsManagement() {
                   <td className="px-3 py-3">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${getStatusBadge(ext.status)}`}>
                       {getStatusIcon(ext.status)}
-                      {ext.status === 'PAYMENT_PENDING' ? 'PENDING' : ext.status}
+                      {ext.status === 'PAYMENT_PENDING' ? 'PAY PENDING' : ext.status}
                     </span>
+                    {(ext.status === 'PAYMENT_PENDING' || ext.status === 'FAILED') && (() => {
+                      const ageHours = (Date.now() - new Date(ext.createdAt).getTime()) / (1000 * 60 * 60);
+                      const isOverdue = ageHours >= 72;
+                      const isUrgent = ageHours >= 168;
+                      return (
+                        <div className="mt-1 space-y-0.5">
+                          {isUrgent ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-red-200 text-red-800">
+                              <ExclamationTriangleIcon className="h-3 w-3" /> URGENT
+                            </span>
+                          ) : isOverdue ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-orange-200 text-orange-800">
+                              <ExclamationTriangleIcon className="h-3 w-3" /> OVERDUE
+                            </span>
+                          ) : null}
+                          {ext.reminderCount > 0 && (
+                            <p className="text-[10px] text-gray-500">
+                              {ext.reminderCount} reminder{ext.reminderCount !== 1 ? 's' : ''} sent
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-3 py-3">
                     <p className="text-sm font-medium text-gray-900">#{ext.bookingId.slice(-8)}</p>

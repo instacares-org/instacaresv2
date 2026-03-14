@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
 import { z } from 'zod';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -48,10 +49,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const userId = session.user.id;
@@ -62,10 +60,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!babysitter) {
-      return NextResponse.json(
-        { error: 'Babysitter profile not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Babysitter profile not found');
     }
 
     const slots = Array.isArray(body) ? body : [body];
@@ -89,10 +84,7 @@ export async function POST(request: NextRequest) {
     // Validate endTime > startTime
     for (const slot of parsedSlots) {
       if (slot.startTime >= slot.endTime) {
-        return NextResponse.json(
-          { error: 'End time must be after start time' },
-          { status: 400 }
-        );
+        return ApiErrors.badRequest('End time must be after start time');
       }
     }
 
@@ -104,10 +96,7 @@ export async function POST(request: NextRequest) {
         const slotDate = new Date(slot.specificDate);
         slotDate.setHours(0, 0, 0, 0);
         if (slotDate < today) {
-          return NextResponse.json(
-            { error: 'One-time availability date cannot be in the past' },
-            { status: 400 }
-          );
+          return ApiErrors.badRequest('One-time availability date cannot be in the past');
         }
       }
     }
@@ -173,26 +162,18 @@ export async function POST(request: NextRequest) {
       })
     );
 
-    return NextResponse.json({
-      success: true,
-      message: `${results.length} availability slot(s) saved`,
+    return apiSuccess({
       slots: results,
-    });
+    }, `${results.length} availability slot(s) saved`);
 
   } catch (error) {
     console.error('Save availability error:', error);
 
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.issues },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Validation error', error.issues);
     }
 
-    return NextResponse.json(
-      { error: 'Failed to save availability' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to save availability');
   }
 }
 
@@ -254,7 +235,7 @@ export async function GET(request: NextRequest) {
         ],
       });
 
-      return NextResponse.json({
+      return apiSuccess({
         slots: slots.map(formatSlot),
       });
     }
@@ -263,10 +244,7 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const babysitter = await db.babysitter.findUnique({
@@ -286,22 +264,16 @@ export async function GET(request: NextRequest) {
     });
 
     if (!babysitter) {
-      return NextResponse.json(
-        { error: 'Babysitter profile not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Babysitter profile not found');
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       slots: babysitter.availabilitySlots.map(formatSlot),
     });
 
   } catch (error) {
     console.error('Get availability error:', error);
-    return NextResponse.json(
-      { error: 'Failed to get availability' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to get availability');
   }
 }
 
@@ -311,20 +283,14 @@ export async function DELETE(request: NextRequest) {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const { searchParams } = new URL(request.url);
     const slotId = searchParams.get('id');
 
     if (!slotId) {
-      return NextResponse.json(
-        { error: 'Slot ID is required' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Slot ID is required');
     }
 
     const babysitter = await db.babysitter.findUnique({
@@ -332,10 +298,7 @@ export async function DELETE(request: NextRequest) {
     });
 
     if (!babysitter) {
-      return NextResponse.json(
-        { error: 'Babysitter profile not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Babysitter profile not found');
     }
 
     const slot = await db.babysitterAvailability.findFirst({
@@ -346,10 +309,7 @@ export async function DELETE(request: NextRequest) {
     });
 
     if (!slot) {
-      return NextResponse.json(
-        { error: 'Availability slot not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Availability slot not found');
     }
 
     await db.babysitterAvailability.update({
@@ -357,16 +317,10 @@ export async function DELETE(request: NextRequest) {
       data: { isActive: false }
     });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Availability slot removed'
-    });
+    return apiSuccess(undefined, 'Availability slot removed');
 
   } catch (error) {
     console.error('Delete availability error:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete availability' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to delete availability');
   }
 }

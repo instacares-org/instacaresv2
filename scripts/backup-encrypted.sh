@@ -7,7 +7,7 @@
 # Usage:
 #   ./scripts/backup-encrypted.sh
 #
-# Environment (reads from .env.production):
+# Environment (reads from .env.production, .env, or PM2 process env):
 #   DATABASE_URL        - PostgreSQL connection string
 #   FIELD_ENCRYPTION_KEY - Used to derive the backup encryption key
 #
@@ -27,10 +27,27 @@ CHECKSUM_FILE="instacares_prod_${TIMESTAMP}.sha256"
 LOG_FILE="${BACKUP_DIR}/backup.log"
 
 # ---- Load environment ----
+# Try .env files first, then fill gaps from PM2 process environment
 if [ -f "${APP_DIR}/.env.production" ]; then
   set -a
   source "${APP_DIR}/.env.production"
   set +a
+elif [ -f "${APP_DIR}/.env" ]; then
+  set -a
+  source "${APP_DIR}/.env"
+  set +a
+fi
+
+# Fill any missing vars from PM2 (secrets live in PM2, not .env)
+if command -v pm2 &>/dev/null; then
+  if [ -z "${DATABASE_URL:-}" ]; then
+    PM2_DB_URL=$(pm2 env 1 2>/dev/null | grep '^DATABASE_URL:' | sed 's/^DATABASE_URL: *//')
+    [ -n "${PM2_DB_URL}" ] && export DATABASE_URL="${PM2_DB_URL}"
+  fi
+  if [ -z "${FIELD_ENCRYPTION_KEY:-}" ]; then
+    PM2_ENC_KEY=$(pm2 env 1 2>/dev/null | grep '^FIELD_ENCRYPTION_KEY:' | sed 's/^FIELD_ENCRYPTION_KEY: *//')
+    [ -n "${PM2_ENC_KEY}" ] && export FIELD_ENCRYPTION_KEY="${PM2_ENC_KEY}"
+  fi
 fi
 
 # Validate required env vars
@@ -48,10 +65,6 @@ fi
 
 # ---- Parse connection URL ----
 # Format: postgresql://user:password@host:port/dbname
-DB_USER=$(echo "$BACKUP_URL" | sed -n 's|.*://\([^:]*\):.*|\1|p')
-DB_PASS=$(echo "$BACKUP_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
-DB_HOST=$(echo "$BACKUP_URL" | sed -n 's|.*@\([^:]*\):.*|\1|p')
-DB_PORT=$(echo "$BACKUP_URL" | sed -n 's|.*:\([0-9]*\)/.*|\1|p')
 DB_NAME=$(echo "$BACKUP_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
 
 # ---- Setup ----
@@ -62,17 +75,12 @@ log() {
 }
 
 log "=== Starting encrypted backup ==="
-log "Database: ${DB_NAME}@${DB_HOST}:${DB_PORT}"
+log "Database: ${DB_NAME}"
 
 # ---- Create encrypted backup ----
+# Use sudo -u postgres for peer auth (avoids RLS restrictions)
 # pg_dump → gzip → openssl AES-256-CBC encryption
-# The encryption passphrase is derived from FIELD_ENCRYPTION_KEY
-export PGPASSWORD="${DB_PASS}"
-
-pg_dump \
-  -h "${DB_HOST}" \
-  -p "${DB_PORT}" \
-  -U "${DB_USER}" \
+sudo -u postgres pg_dump \
   -d "${DB_NAME}" \
   --no-owner \
   --no-privileges \
@@ -84,8 +92,6 @@ pg_dump \
 | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
     -pass "env:FIELD_ENCRYPTION_KEY" \
     -out "${BACKUP_DIR}/${BACKUP_FILE}"
-
-unset PGPASSWORD
 
 if [ ! -f "${BACKUP_DIR}/${BACKUP_FILE}" ]; then
   log "[ERROR] Backup file was not created"

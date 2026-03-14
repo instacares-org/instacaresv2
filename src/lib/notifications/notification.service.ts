@@ -1,6 +1,6 @@
 import { emailService } from './email.service';
 import { smsService } from './sms.service';
-import { prisma } from '@/lib/database';
+import { prisma } from '@/lib/db';
 import { createInvoiceData, generateInvoiceHTML } from './invoice.service';
 
 export type NotificationType =
@@ -13,7 +13,9 @@ export type NotificationType =
   | 'payment_pending'
   | 'review_requested'
   | 'account_approved'
-  | 'account_suspended';
+  | 'account_rejected'
+  | 'account_suspended'
+  | 'supervisor_welcome';
 
 export interface NotificationData {
   userId: string;
@@ -160,7 +162,27 @@ export class NotificationService {
           );
           break;
 
-        // Add more cases as needed
+        case 'account_approved':
+          result = await emailService.sendAccountApprovalEmail(
+            user.email,
+            notification.data as any
+          );
+          break;
+
+        case 'account_rejected':
+          result = await emailService.sendAccountRejectionEmail(
+            user.email,
+            notification.data as any
+          );
+          break;
+
+        case 'supervisor_welcome':
+          result = await emailService.sendSupervisorWelcomeEmail(
+            user.email,
+            notification.data as any
+          );
+          break;
+
         default:
           console.log('Email template not implemented for:', notification.type);
           return;
@@ -258,18 +280,104 @@ export class NotificationService {
    */
   private async logNotification(notification: NotificationData, user?: any, channel?: string): Promise<void> {
     try {
-      // Log to notification table
+      const { title, message } = this.formatNotificationForDisplay(notification.type, notification.data);
+
       await prisma.notification.create({
         data: {
           userId: notification.userId,
           type: notification.type,
-          title: notification.data?.title || notification.type,
-          message: typeof notification.data === 'object' ? JSON.stringify(notification.data) : String(notification.data || ''),
+          title,
+          message,
           createdAt: new Date(),
         },
       });
     } catch (error) {
       console.error('Failed to log notification:', error);
+    }
+  }
+
+  /**
+   * Generate human-readable title and message for in-app notification display
+   */
+  private formatNotificationForDisplay(type: NotificationType, data: Record<string, any>): { title: string; message: string } {
+    switch (type) {
+      case 'booking_confirmed':
+        return {
+          title: 'Booking Confirmed',
+          message: `Your booking with ${data.caregiverName || 'your caregiver'} on ${data.date || ''} from ${data.startTime || data.time || ''} to ${data.endTime || ''} has been confirmed. Total: $${data.totalAmount || ''}`,
+        };
+
+      case 'new_booking_caregiver':
+        return {
+          title: 'New Booking Request',
+          message: `${data.parentName || 'A parent'} has booked you on ${data.date || ''} from ${data.startTime || data.time || ''} to ${data.endTime || ''} for ${data.childrenCount || 1} child${(data.childrenCount || 1) > 1 ? 'ren' : ''}. Earnings: $${data.totalAmount || ''}`,
+        };
+
+      case 'booking_cancelled':
+        return {
+          title: 'Booking Cancelled',
+          message: `A booking on ${data.date || ''} has been cancelled.${data.reason ? ` Reason: ${data.reason}` : ''}`,
+        };
+
+      case 'booking_reminder':
+        return {
+          title: 'Upcoming Booking Reminder',
+          message: `You have a booking ${data.date ? `on ${data.date}` : 'coming up'} at ${data.startTime || data.time || ''}. Don't forget!`,
+        };
+
+      case 'payment_received':
+        return {
+          title: 'Payment Received',
+          message: `You received a payment of $${data.amount || data.totalAmount || '0'}${data.date ? ` for your booking on ${data.date}` : ''}.`,
+        };
+
+      case 'payment_pending':
+        return {
+          title: 'Payment Pending',
+          message: `A payment of $${data.amount || data.totalAmount || '0'} is being processed.`,
+        };
+
+      case 'review_requested':
+        return {
+          title: 'Leave a Review',
+          message: `How was your experience${data.caregiverName ? ` with ${data.caregiverName}` : ''}? Please leave a review.`,
+        };
+
+      case 'account_approved':
+        return {
+          title: 'Account Approved',
+          message: 'Your account has been approved! You can now start accepting bookings.',
+        };
+
+      case 'account_rejected':
+        return {
+          title: 'Account Not Approved',
+          message: `Your account application was not approved.${data.reason ? ` Reason: ${data.reason}` : ' Please contact support for more information.'}`,
+        };
+
+      case 'account_suspended':
+        return {
+          title: 'Account Suspended',
+          message: `Your account has been suspended.${data.reason ? ` Reason: ${data.reason}` : ' Please contact support.'}`,
+        };
+
+      case 'new_message':
+        return {
+          title: 'New Message',
+          message: `You have a new message${data.senderName ? ` from ${data.senderName}` : ''}.`,
+        };
+
+      case 'supervisor_welcome':
+        return {
+          title: 'Welcome to InstaCares',
+          message: 'Your supervisor account has been created. Please log in and change your password.',
+        };
+
+      default:
+        return {
+          title: 'Notification',
+          message: data.message || 'You have a new notification.',
+        };
     }
   }
 
@@ -295,7 +403,9 @@ export class NotificationService {
         payment_pending: 'PAYMENT_FAILED',
         review_requested: 'REVIEW_REQUEST',
         account_approved: 'ACCOUNT_APPROVED',
+        account_rejected: 'ACCOUNT_APPROVED',
         account_suspended: 'SECURITY_ALERT',
+        supervisor_welcome: 'ACCOUNT_APPROVED',
       };
 
       const eventType = typeMapping[notification.type] || 'SYSTEM_MAINTENANCE';
@@ -366,7 +476,9 @@ export class NotificationService {
       payment_pending: ['email'],
       review_requested: ['email'],
       account_approved: ['email'],
+      account_rejected: ['email'],
       account_suspended: ['email', 'sms'],
+      supervisor_welcome: ['email'],
     };
 
     // Override with user preferences if available

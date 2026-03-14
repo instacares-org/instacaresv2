@@ -1,4 +1,4 @@
-import { PrismaClient, ServiceType } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { apiCache } from "./cache";
 import { applyFieldEncryption } from "./field-encryption";
 
@@ -51,69 +51,46 @@ if (process.env.NODE_ENV !== "production") {
 // Apply field-level encryption extension for sensitive data (medical info, PII).
 // The base client is cached globally; the extension wraps it transparently.
 export const db = applyFieldEncryption(basePrisma);
+
+// Backward-compatible alias — files that previously imported { prisma } from '@/lib/database'
+// now get the same encrypted client.
+export const prisma = db;
+
+// Transaction helper with retry logic (exponential backoff).
+// Moved from the now-deleted database.ts to consolidate on a single encrypted client.
+export async function withTransaction<T>(
+  operations: (tx: Parameters<Parameters<typeof db.$transaction>[0]>[0]) => Promise<T>,
+  maxRetries: number = 3
+): Promise<T> {
+  let lastError: Error;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await db.$transaction(operations, {
+        timeout: 10000,
+        isolationLevel: 'ReadCommitted',
+      });
+    } catch (error) {
+      lastError = error as Error;
+
+      if (attempt === maxRetries) {
+        throw lastError;
+      }
+
+      // Wait before retrying (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+    }
+  }
+
+  throw lastError!;
+}
+
 // Utility functions for common database operations
 
-// User operations
-export async function getUserById(id: string) {
-  return await db.user.findUnique({
-    where: { id },
-    include: {
-      profile: true,
-      caregiver: true,
-    },
-  });
-}
 export const userOperations = {
-  async createUser(data: {
-    email: string;
-    passwordHash?: string;
-    userType: 'PARENT' | 'CAREGIVER' | 'ADMIN';
-    profile: {
-      firstName: string;
-      lastName: string;
-      phone?: string;
-      streetAddress?: string;
-      city?: string;
-      state?: string;
-      zipCode?: string;
-      latitude?: number;
-      longitude?: number;
-    };
-  }) {
-    return db.user.create({
-      data: {
-        email: data.email,
-        passwordHash: data.passwordHash,
-        userType: data.userType,
-        profile: {
-          create: data.profile,
-        },
-      },
-      include: {
-        profile: true,
-      },
-    });
-  },
-
   async findUserByEmail(email: string) {
     return db.user.findUnique({
       where: { email },
-      include: {
-        profile: true,
-        caregiver: {
-          include: {
-            certifications: true,
-            services: true,
-            photos: true,
-          },
-        },
-      },
-    });
-  },
-
-  async findUserById(id: string) {
-    return db.user.findUnique({
-      where: { id },
       include: {
         profile: true,
         caregiver: {
@@ -130,77 +107,6 @@ export const userOperations = {
 
 // Caregiver operations
 export const caregiverOperations = {
-  async createCaregiver(userId: string, data: {
-    hourlyRate: number;
-    experienceYears?: number;
-    bio?: string;
-    languages?: string[];
-    maxChildren?: number;
-    minAge?: number;
-    maxAge?: number;
-    services?: Array<{
-      serviceType: 'BABYSITTING' | 'NANNY' | 'DAYCARE' | 'AFTER_SCHOOL' | 'OVERNIGHT' | 'SPECIAL_NEEDS' | 'TUTORING';
-      rate?: number;
-      description?: string;
-    }>;
-  }) {
-    return db.caregiver.create({
-      data: {
-        userId,
-        hourlyRate: data.hourlyRate,
-        experienceYears: data.experienceYears || 0,
-        bio: data.bio,
-        languages: data.languages,
-        maxChildren: data.maxChildren || 3,
-        minAge: data.minAge || 0,
-        maxAge: data.maxAge || 144,
-        services: {
-          create: data.services?.map(service => ({
-            serviceType: service.serviceType,
-            rate: service.rate,
-            description: service.description,
-          })) || [],
-        },
-      },
-      include: {
-        user: {
-          include: {
-            profile: true,
-          },
-        },
-        services: true,
-        certifications: true,
-        photos: true,
-      },
-    });
-  },
-
-  async findCaregiverById(id: string) {
-    return db.caregiver.findUnique({
-      where: { id },
-      include: {
-        user: {
-          include: {
-            profile: true,
-          },
-        },
-        services: true,
-        certifications: true,
-        photos: true,
-        caregiverBookings: {
-          include: {
-            parent: {
-              include: {
-                profile: true,
-              },
-            },
-            reviews: true,
-          },
-        },
-      },
-    });
-  },
-
   async findCaregiverByUserId(userId: string) {
     return db.caregiver.findUnique({
       where: { userId },
@@ -213,71 +119,6 @@ export const caregiverOperations = {
         services: true,
         certifications: true,
         photos: true,
-      },
-    });
-  },
-
-  async searchCaregivers(params: {
-    latitude?: number;
-    longitude?: number;
-    radius?: number; // in kilometers
-    serviceType?: string;
-    minRate?: number;
-    maxRate?: number;
-    minRating?: number;
-    isAvailable?: boolean;
-    limit?: number;
-    offset?: number;
-  }) {
-    // Note: For production, you'd want to use a proper geospatial search
-    // This is a simplified version
-    return db.caregiver.findMany({
-      where: {
-        // Only show caregivers whose users are approved
-        user: {
-          approvalStatus: 'APPROVED',
-          isActive: true,
-        },
-        isAvailable: params.isAvailable ?? true,
-        hourlyRate: {
-          gte: params.minRate,
-          lte: params.maxRate,
-        },
-        averageRating: params.minRating ? { gte: params.minRating } : undefined,
-        services: params.serviceType ? {
-          some: {
-            serviceType: params.serviceType as ServiceType,
-            isOffered: true,
-          },
-        } : undefined,
-      },
-      include: {
-        user: {
-          include: {
-            profile: true,
-          },
-        },
-        services: true,
-        photos: {
-          where: { isProfile: true },
-          take: 1,
-        },
-      },
-      take: params.limit || 20,
-      skip: params.offset || 0,
-      orderBy: {
-        averageRating: 'desc',
-      },
-    });
-  },
-
-  async updateCaregiverStripeAccount(caregiverId: string, stripeAccountId: string, canReceivePayments: boolean) {
-    return db.caregiver.update({
-      where: { id: caregiverId },
-      data: {
-        stripeAccountId,
-        stripeOnboarded: true,
-        canReceivePayments,
       },
     });
   },
@@ -506,7 +347,7 @@ export const bookingOperations = {
         keys: cacheStats.keys
       });
 
-      const invalidatedCount = apiCache.invalidatePattern('caregivers:');
+      const invalidatedCount = await apiCache.invalidatePattern('caregivers:');
       console.log(`🗑️ Invalidated ${invalidatedCount} caregivers cache entries after booking creation`);
 
       const cacheStatsAfter = apiCache.getStats();
@@ -539,28 +380,6 @@ export const bookingOperations = {
         caregiverProfile: true,
         payments: true,
         reviews: true,
-      },
-    });
-  },
-
-  async findBookingById(id: string) {
-    return db.booking.findUnique({
-      where: { id },
-      include: {
-        parent: {
-          include: {
-            profile: true,
-          },
-        },
-        caregiverUser: {
-          include: {
-            profile: true,
-          },
-        },
-        caregiverProfile: true,
-        payments: true,
-        reviews: true,
-        invoices: true,
       },
     });
   },
@@ -670,7 +489,7 @@ export const bookingOperations = {
     // Invalidate caregivers cache when booking status changes (especially cancellations)
     if (status === 'CANCELLED') {
       try {
-        const invalidatedCount = apiCache.invalidatePattern('caregivers:');
+        const invalidatedCount = await apiCache.invalidatePattern('caregivers:');
         console.log(`🗑️ Invalidated ${invalidatedCount} caregivers cache entries after booking cancellation`);
       } catch (cacheError) {
         console.warn('⚠️ Could not invalidate caregivers cache:', cacheError);
@@ -737,59 +556,6 @@ export const paymentOperations = {
         booking: true,
       },
     });
-  },
-};
-
-// Review operations
-export const reviewOperations = {
-  async createReview(data: {
-    bookingId: string;
-    reviewerId: string;
-    revieweeId: string;
-    rating: number;
-    comment?: string;
-  }) {
-    // First create the review
-    const review = await db.review.create({
-      data,
-      include: {
-        reviewer: {
-          include: {
-            profile: true,
-          },
-        },
-        reviewee: {
-          include: {
-            profile: true,
-            caregiver: true,
-          },
-        },
-      },
-    });
-
-    // Update caregiver's average rating if the reviewee is a caregiver
-    if (review.reviewee.caregiver) {
-      const avgRating = await db.review.aggregate({
-        where: {
-          revieweeId: data.revieweeId,
-          isApproved: true,
-        },
-        _avg: {
-          rating: true,
-        },
-      });
-
-      if (avgRating._avg.rating) {
-        await db.caregiver.update({
-          where: { userId: data.revieweeId },
-          data: {
-            averageRating: avgRating._avg.rating,
-          },
-        });
-      }
-    }
-
-    return review;
   },
 };
 

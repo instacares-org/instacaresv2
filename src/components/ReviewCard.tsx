@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import Image from 'next/image';
 import { ClockIcon, CheckBadgeIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import StarRating from './StarRating';
 
@@ -80,9 +81,11 @@ const ReviewCard: React.FC<ReviewCardProps> = ({
         <div className="flex items-center space-x-3">
           {/* Reviewer Avatar */}
           {review.reviewer.avatar ? (
-            <img
+            <Image
               src={review.reviewer.avatar}
               alt={review.reviewer.name}
+              width={40}
+              height={40}
               className="h-10 w-10 rounded-full object-cover"
             />
           ) : (

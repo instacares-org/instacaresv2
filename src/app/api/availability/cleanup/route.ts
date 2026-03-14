@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { AvailabilityService } from '@/lib/availabilityService';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
@@ -28,24 +29,17 @@ export async function GET(request: NextRequest) {
 
     const cleanedCount = await AvailabilityService.cleanupExpiredReservations();
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        cleanedReservations: cleanedCount,
-        cleanupTime: new Date().toISOString()
-      },
-      message: `Cleaned up ${cleanedCount} expired reservations`
-    });
+    return apiSuccess({
+      cleanedReservations: cleanedCount,
+      cleanupTime: new Date().toISOString()
+    }, `Cleaned up ${cleanedCount} expired reservations`);
 
   } catch (error) {
     console.error('Error cleaning up expired reservations:', error);
     logger.error('Failed to cleanup expired reservations', {
       error: error instanceof Error ? error.message : 'Unknown error'
     });
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to cleanup expired reservations'
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to cleanup expired reservations');
   }
 }
 

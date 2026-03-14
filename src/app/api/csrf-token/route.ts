@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { generateCSRFToken, setCSRFToken } from '@/lib/csrf';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
@@ -26,10 +27,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error generating CSRF token:', error);
     
-    return NextResponse.json(
-      { error: 'Failed to generate CSRF token' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to generate CSRF token');
   }
 }
 

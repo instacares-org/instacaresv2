@@ -1,8 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+import { z } from 'zod';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
+
+const ticketCategories = [
+  'BOOKING_ISSUE',
+  'PAYMENT_ISSUE',
+  'REFUND_REQUEST',
+  'CAREGIVER_NO_SHOW',
+  'PARENT_NO_SHOW',
+  'ACCOUNT_ISSUE',
+  'TECHNICAL_ISSUE',
+  'SAFETY_CONCERN',
+  'COMPLAINT',
+  'GENERAL_INQUIRY',
+  'OTHER',
+] as const;
+
+const createTicketSchema = z.object({
+  category: z.enum(ticketCategories),
+  subject: z.string().min(1, 'Subject is required').max(200, 'Subject must be 200 characters or less'),
+  description: z.string().min(1, 'Description is required').max(5000, 'Description must be 5000 characters or less'),
+  bookingId: z.string().nullable().optional(),
+  priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).optional().default('NORMAL'),
+  attachments: z.any().optional(),
+});
 
 // Generate ticket number
 function generateTicketNumber(): string {
@@ -17,7 +43,7 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const { searchParams } = new URL(request.url);
@@ -92,45 +118,40 @@ export async function GET(request: NextRequest) {
       db.supportTicket.count({ where })
     ]);
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        tickets,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit)
-        }
+    return apiSuccess({
+      tickets,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
       }
     });
   } catch (error) {
     logger.error('Error fetching support tickets:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch tickets' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch tickets');
   }
 }
 
 // POST - Create a new support ticket
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.API_WRITE);
+    if (!rateLimitResult.success) {
+      return ApiErrors.tooManyRequests('Too many requests. Please try again later.');
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const body = await request.json();
-    const { category, subject, description, bookingId, priority, attachments } = body;
-
-    // Validate required fields
-    if (!category || !subject || !description) {
-      return NextResponse.json(
-        { error: 'Category, subject, and description are required' },
-        { status: 400 }
-      );
+    const parsed = createTicketSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
     }
+    const { category, subject, description, bookingId, priority, attachments } = parsed.data;
 
     // Get user type
     const user = await db.user.findUnique({
@@ -139,7 +160,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return ApiErrors.notFound('User not found');
     }
 
     // If bookingId provided, verify it belongs to the user
@@ -155,10 +176,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (!booking) {
-        return NextResponse.json(
-          { error: 'Booking not found or not authorized' },
-          { status: 404 }
-        );
+        return ApiErrors.notFound('Booking not found or not authorized');
       }
     }
 
@@ -203,16 +221,9 @@ export async function POST(request: NextRequest) {
 
     logger.info(`Support ticket created: ${ticket.ticketNumber} by user ${session.user.id}`);
 
-    return NextResponse.json({
-      success: true,
-      data: ticket,
-      message: `Ticket ${ticket.ticketNumber} created successfully`
-    });
+    return apiSuccess(ticket, `Ticket ${ticket.ticketNumber} created successfully`);
   } catch (error) {
     logger.error('Error creating support ticket:', error);
-    return NextResponse.json(
-      { error: 'Failed to create ticket' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to create ticket');
   }
 }

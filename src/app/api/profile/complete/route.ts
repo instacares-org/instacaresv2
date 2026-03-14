@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/options';
-import { prisma } from '@/lib/database';
+import { getToken } from 'next-auth/jwt';
+import { prisma } from '@/lib/db';
 import { VerificationStatus } from '@prisma/client';
 import { z } from 'zod';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+
+export const dynamic = 'force-dynamic';
 
 /**
  * Geocode an address using Mapbox API
@@ -43,11 +46,11 @@ async function geocodeAddress(address: {
 
     if (data.features && data.features.length > 0) {
       const [longitude, latitude] = data.features[0].center;
-      console.log(`[GEOCODE] Successfully geocoded address: ${searchQuery} -> (${latitude}, ${longitude})`);
+      console.log(`[GEOCODE] Successfully geocoded address -> (${latitude}, ${longitude})`);
       return { latitude, longitude };
     }
 
-    console.warn(`[GEOCODE] No results found for address: ${searchQuery}`);
+    console.warn(`[GEOCODE] No results found for address`);
     return null;
   } catch (error) {
     console.error('[GEOCODE] Error geocoding address:', error);
@@ -98,14 +101,23 @@ const profileCompleteSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    // Get session
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.email) {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.PROFILE_UPDATE);
+    if (!rateLimitResult.success) {
       return NextResponse.json(
-        { error: 'Unauthorized. Please sign in.' },
-        { status: 401 }
+        { success: false, error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
       );
+    }
+
+    // Auth via JWT token (reliable in Next.js 15 App Router)
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+      secureCookie: process.env.NODE_ENV === 'production',
+    });
+
+    if (!token?.email) {
+      return ApiErrors.unauthorized('Unauthorized. Please sign in.');
     }
 
     // Parse request body
@@ -115,25 +127,19 @@ export async function POST(request: NextRequest) {
     const validationResult = profileCompleteSchema.safeParse(body);
     if (!validationResult.success) {
       const errors = validationResult.error.flatten();
-      return NextResponse.json(
-        { error: 'Validation failed', details: errors.fieldErrors },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Validation failed', errors.fieldErrors);
     }
 
     const data = validationResult.data;
 
     // Find the user
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
+      where: { email: token.email as string },
       include: { profile: true }
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('User not found');
     }
 
     // Update or create profile
@@ -219,7 +225,12 @@ export async function POST(request: NextRequest) {
       if (user.userType !== 'CAREGIVER') {
         await prisma.user.update({
           where: { id: user.id },
-          data: { userType: 'CAREGIVER' }
+          data: {
+            userType: 'CAREGIVER',
+            approvalStatus: 'PENDING', // Caregivers need admin approval
+            isCaregiver: true,
+            activeRole: 'CAREGIVER',
+          }
         });
       }
 
@@ -336,42 +347,34 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Profile completed successfully'
-    });
+    return apiSuccess(undefined, 'Profile completed successfully');
 
   } catch (error) {
     console.error('Profile completion error:', error);
-    return NextResponse.json(
-      { error: 'Failed to complete profile. Please try again.' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to complete profile. Please try again.');
   }
 }
 
 // GET endpoint to check if profile is complete
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+      secureCookie: process.env.NODE_ENV === 'production',
+    });
 
-    if (!session?.user?.email) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+    if (!token?.email) {
+      return ApiErrors.unauthorized();
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
+      where: { email: token.email as string },
       include: { profile: true }
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('User not found');
     }
 
     // Check if profile is complete
@@ -389,7 +392,7 @@ export async function GET(request: NextRequest) {
       profile.zipCode &&
       profile.zipCode.length > 0;
 
-    return NextResponse.json({
+    return apiSuccess({
       isComplete,
       profile: profile ? {
         firstName: profile.firstName,
@@ -407,9 +410,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Profile check error:', error);
-    return NextResponse.json(
-      { error: 'Failed to check profile status' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to check profile status');
   }
 }

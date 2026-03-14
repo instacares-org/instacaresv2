@@ -1,32 +1,29 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
+import { requirePermission } from '@/lib/adminAuth';
 import { logAuditEvent, AuditActions } from '@/lib/audit-log';
+import { z } from 'zod';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+
+const settingsBodySchema = z.object({
+  platformCommissionRate: z.number()
+    .min(0, 'Platform commission rate must be at least 0')
+    .max(100, 'Platform commission rate must be at most 100')
+    .optional(),
+  minimumHourlyRate: z.number()
+    .min(0, 'Minimum hourly rate must be a positive number')
+    .optional(),
+  autoApproveCaregivers: z.boolean({ error: 'autoApproveCaregivers must be a boolean' }).optional(),
+  autoApproveParents: z.boolean({ error: 'autoApproveParents must be a boolean' }).optional(),
+  showCaregiverContactInfo: z.boolean({ error: 'showCaregiverContactInfo must be a boolean' }).optional(),
+});
 
 // GET /api/admin/settings - Get current platform settings
 export async function GET(request: NextRequest) {
   try {
-    // Verify admin authentication
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    // Check if user is admin
-    const adminUser = await db.user.findUnique({
-      where: { id: session.user.id }
-    });
-
-    if (!adminUser || adminUser.userType !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Admin access required' },
-        { status: 403 }
-      );
-    }
+    // Verify admin authentication and permission
+    const permCheck = await requirePermission(request, 'canManageSettings');
+    if (!permCheck.authorized) return permCheck.response!;
 
     // Fetch or create default settings
     let settings = await db.platformSettings.findFirst();
@@ -44,8 +41,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       settings: {
         platformCommissionRate: settings.platformCommissionRate,
         minimumHourlyRate: settings.minimumHourlyRate,
@@ -57,87 +53,30 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Error fetching platform settings:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch platform settings' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch platform settings');
   }
 }
 
 // PATCH /api/admin/settings - Update platform settings
 export async function PATCH(request: NextRequest) {
   try {
-    // Verify admin authentication
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    // Check if user is admin
-    const adminUser = await db.user.findUnique({
-      where: { id: session.user.id }
-    });
-
-    if (!adminUser || adminUser.userType !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Admin access required' },
-        { status: 403 }
-      );
-    }
+    // Verify admin authentication and permission
+    const permCheck = await requirePermission(request, 'canManageSettings');
+    if (!permCheck.authorized) return permCheck.response!;
 
     const body = await request.json();
+    const parsed = settingsBodySchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
+    }
+
     const {
       platformCommissionRate,
       minimumHourlyRate,
       autoApproveCaregivers,
       autoApproveParents,
       showCaregiverContactInfo
-    } = body;
-
-    // Validate commission rate
-    if (platformCommissionRate !== undefined) {
-      if (typeof platformCommissionRate !== 'number' || platformCommissionRate < 0 || platformCommissionRate > 100) {
-        return NextResponse.json(
-          { error: 'Platform commission rate must be between 0 and 100' },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Validate minimum hourly rate
-    if (minimumHourlyRate !== undefined) {
-      if (typeof minimumHourlyRate !== 'number' || minimumHourlyRate < 0) {
-        return NextResponse.json(
-          { error: 'Minimum hourly rate must be a positive number' },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Validate boolean fields
-    if (autoApproveCaregivers !== undefined && typeof autoApproveCaregivers !== 'boolean') {
-      return NextResponse.json(
-        { error: 'autoApproveCaregivers must be a boolean' },
-        { status: 400 }
-      );
-    }
-
-    if (autoApproveParents !== undefined && typeof autoApproveParents !== 'boolean') {
-      return NextResponse.json(
-        { error: 'autoApproveParents must be a boolean' },
-        { status: 400 }
-      );
-    }
-
-    if (showCaregiverContactInfo !== undefined && typeof showCaregiverContactInfo !== 'boolean') {
-      return NextResponse.json(
-        { error: 'showCaregiverContactInfo must be a boolean' },
-        { status: 400 }
-      );
-    }
+    } = parsed.data;
 
     // Check if settings exist
     let settings = await db.platformSettings.findFirst();
@@ -151,13 +90,13 @@ export async function PATCH(request: NextRequest) {
           autoApproveCaregivers: autoApproveCaregivers ?? false,
           autoApproveParents: autoApproveParents ?? false,
           showCaregiverContactInfo: showCaregiverContactInfo ?? false,
-          updatedBy: adminUser.id,
+          updatedBy: permCheck.user!.id,
         }
       });
     } else {
       // Update existing settings
       const updateData: any = {
-        updatedBy: adminUser.id,
+        updatedBy: permCheck.user!.id,
         updatedAt: new Date(),
       };
 
@@ -185,8 +124,8 @@ export async function PATCH(request: NextRequest) {
 
     // Persistent audit log
     logAuditEvent({
-      adminId: adminUser.id,
-      adminEmail: adminUser.email,
+      adminId: permCheck.user!.id,
+      adminEmail: permCheck.user!.email,
       action: AuditActions.SETTINGS_UPDATED,
       resource: 'settings',
       resourceId: settings.id,
@@ -200,9 +139,7 @@ export async function PATCH(request: NextRequest) {
       request,
     });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Platform settings updated successfully',
+    return apiSuccess({
       settings: {
         platformCommissionRate: settings.platformCommissionRate,
         minimumHourlyRate: settings.minimumHourlyRate,
@@ -210,13 +147,10 @@ export async function PATCH(request: NextRequest) {
         autoApproveParents: settings.autoApproveParents,
         showCaregiverContactInfo: settings.showCaregiverContactInfo ?? false,
       }
-    });
+    }, 'Platform settings updated successfully');
 
   } catch (error) {
     console.error('Error updating platform settings:', error);
-    return NextResponse.json(
-      { error: 'Failed to update platform settings' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to update platform settings');
   }
 }

@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { AvailabilityService } from '@/lib/availabilityService';
 
 // GET /api/availability/realtime - Get real-time availability for a caregiver
@@ -7,39 +8,28 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const caregiverId = searchParams.get('caregiverId');
     const date = searchParams.get('date');
+    const userTimezone = searchParams.get('userTimezone') || 'America/Toronto';
 
     if (!caregiverId || !date) {
-      return NextResponse.json(
-        { error: 'caregiverId and date are required' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('caregiverId and date are required');
     }
 
-    // Parse date string to local date to avoid timezone issues
-    const [year, month, day] = date.split('-').map(Number);
-    const localDate = new Date(year, month - 1, day); // month is 0-indexed
-    
     const availability = await AvailabilityService.getRealTimeAvailability(
       caregiverId,
-      localDate
+      date,
+      userTimezone
     );
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        caregiverId,
-        date,
-        slots: availability,
-        totalSlotsAvailable: availability.filter(slot => slot.realTimeAvailable > 0).length,
-        totalSpotsAvailable: availability.reduce((sum, slot) => sum + slot.realTimeAvailable, 0)
-      }
+    return apiSuccess({
+      caregiverId,
+      date,
+      slots: availability,
+      totalSlotsAvailable: availability.filter(slot => slot.realTimeAvailable > 0).length,
+      totalSpotsAvailable: availability.reduce((sum, slot) => sum + slot.realTimeAvailable, 0)
     });
 
   } catch (error) {
     console.error('Error fetching real-time availability:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to fetch real-time availability'
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to fetch real-time availability');
   }
 }

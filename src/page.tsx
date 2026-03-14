@@ -641,9 +641,11 @@ const ParentDashboardContent: React.FC = () => {
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2">
                   {profile.profilePhoto ? (
-                    <img 
-                      src={profile.profilePhoto} 
-                      alt="Profile" 
+                    <Image
+                      src={profile.profilePhoto}
+                      alt="Profile"
+                      width={32}
+                      height={32}
                       className="h-8 w-8 rounded-full object-cover"
                     />
                   ) : (
@@ -930,9 +932,11 @@ const OverviewTab: React.FC<{
               {upcomingBookings.slice(0, 3).map((booking) => (
                 <div key={booking.id} className="flex items-center p-3 border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                   {booking.caregiverPhoto ? (
-                    <img 
-                      src={booking.caregiverPhoto} 
+                    <Image
+                      src={booking.caregiverPhoto}
                       alt={booking.caregiverName}
+                      width={40}
+                      height={40}
                       className="h-10 w-10 rounded-full object-cover"
                     />
                   ) : (
@@ -1122,9 +1126,11 @@ const ProfileTab: React.FC<{
             <div className="text-center">
               <div className="relative inline-block">
                 {formData.profilePhoto ? (
-                  <img 
-                    src={formData.profilePhoto} 
-                    alt="Profile" 
+                  <Image
+                    src={formData.profilePhoto}
+                    alt="Profile"
+                    width={128}
+                    height={128}
                     className="h-32 w-32 rounded-full object-cover border-4 border-white shadow-lg"
                   />
                 ) : (
@@ -1568,9 +1574,11 @@ const BookingsTab: React.FC<{
                     {/* Caregiver Photo */}
                     <div className="flex-shrink-0">
                       {booking.caregiverPhoto ? (
-                        <img 
-                          src={booking.caregiverPhoto} 
+                        <Image
+                          src={booking.caregiverPhoto}
                           alt={booking.caregiverName}
+                          width={64}
+                          height={64}
                           className="h-16 w-16 rounded-full object-cover"
                         />
                       ) : (
@@ -1910,10 +1918,13 @@ const ChildrenTab: React.FC<{
                   <div className="flex space-x-4">
                     <div className="flex-shrink-0">
                       {child.photoUrl ? (
-                        <img 
-                          src={child.photoUrl} 
+                        <Image
+                          src={child.photoUrl}
                           alt={`${child.firstName} ${child.lastName}`}
+                          width={64}
+                          height={64}
                           className="h-16 w-16 rounded-full object-cover ring-2 ring-purple-200 dark:ring-purple-700"
+                          unoptimized
                         />
                       ) : (
                         <div className="h-16 w-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center ring-2 ring-purple-200 dark:ring-purple-700">

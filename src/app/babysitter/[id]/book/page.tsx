@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect, use } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import { useAuth } from '@/contexts/AuthContext';
 import { addCSRFHeader } from '@/lib/csrf';
 import { loadStripe } from '@stripe/stripe-js';
+import type { Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import {
   Calendar,
@@ -23,9 +25,16 @@ import {
   ShieldCheck
 } from 'lucide-react';
 
-const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.startsWith('pk_')
-  ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
-  : Promise.resolve(null);
+// Lazy-load Stripe.js only when needed (not at module level)
+let stripePromise: Promise<Stripe | null> | null = null;
+const getStripePromise = () => {
+  if (!stripePromise) {
+    stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.startsWith('pk_')
+      ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
+      : Promise.resolve(null);
+  }
+  return stripePromise;
+};
 
 interface BabysitterProfile {
   id: string;
@@ -184,8 +193,8 @@ export default function BookBabysitterPage({ params }: { params: Promise<{ id: s
         const res = await fetch(`/api/babysitter/profile?id=${id}`);
         if (res.ok) {
           const data = await res.json();
-          setBabysitter(data);
-          if (!data.acceptsOnsitePayment && data.stripeOnboarded) {
+          setBabysitter(data.data);
+          if (!data.data?.acceptsOnsitePayment && data.data?.stripeOnboarded) {
             setForm(prev => ({ ...prev, paymentMethod: 'PLATFORM' }));
           }
         }
@@ -463,7 +472,7 @@ export default function BookBabysitterPage({ params }: { params: Promise<{ id: s
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
             {step === 'payment' && clientSecret ? (
-              <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'stripe' } }}>
+              <Elements stripe={getStripePromise()} options={{ clientSecret, appearance: { theme: 'stripe' } }}>
                 <PlatformFeePaymentForm
                   platformFee={Math.round(pricing.platformFee * 100)}
                   onSuccess={handlePaymentSuccess}
@@ -706,8 +715,10 @@ export default function BookBabysitterPage({ params }: { params: Promise<{ id: s
               <div className="flex items-center pb-4 border-b">
                 <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center mr-3">
                   {babysitter.avatar ? (
-                    <img
+                    <Image
                       src={babysitter.avatar}
+                      width={48}
+                      height={48}
                       alt={babysitter.firstName}
                       className="w-12 h-12 rounded-full"
                     />

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/auth-middleware';
 
@@ -39,10 +40,7 @@ export async function PATCH(
     });
     
     if (!review) {
-      return NextResponse.json(
-        { error: 'Review not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Review not found');
     }
     
     // Update the review
@@ -92,17 +90,11 @@ export async function PATCH(
       });
     }
     
-    return NextResponse.json({
-      success: true,
-      review: updatedReview
-    });
-    
+    return apiSuccess({ review: updatedReview });
+
   } catch (error) {
     console.error('Error updating review:', error);
-    return NextResponse.json(
-      { error: 'Failed to update review', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to update review');
   }
 }
 
@@ -141,10 +133,7 @@ export async function DELETE(
     });
     
     if (!review) {
-      return NextResponse.json(
-        { error: 'Review not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Review not found');
     }
     
     const caregiverId = review.reviewee?.caregiver?.id;
@@ -184,16 +173,10 @@ export async function DELETE(
       });
     }
     
-    return NextResponse.json({
-      success: true,
-      message: 'Review deleted successfully'
-    });
-    
+    return apiSuccess(undefined, 'Review deleted successfully');
+
   } catch (error) {
     console.error('Error deleting review:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete review', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to delete review');
   }
 }

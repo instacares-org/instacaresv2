@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import { NextRequest } from 'next/server';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+import { withAuth } from '@/lib/auth-middleware';
 import { AvailabilityService } from '@/lib/availabilityService';
-import { SlotStatus } from '@prisma/client';
 
 // GET /api/availability/slots - Get available slots
 export async function GET(request: NextRequest) {
@@ -13,6 +12,7 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const minAvailableSpots = searchParams.get('minAvailableSpots');
+    const includeExpired = searchParams.get('includeExpired');
     const userTimezone = searchParams.get("userTimezone") || "America/Toronto"; // Default to EST
 
     const query: any = {};
@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
     if (endDate) query.endDate = endDate;
     if (userTimezone) query.userTimezone = userTimezone;
     if (minAvailableSpots) query.minAvailableSpots = parseInt(minAvailableSpots);
+    if (includeExpired === 'true') query.includeExpired = true;
 
     console.log('🔍 Availability Slots Query:', {
       caregiverId,
@@ -42,36 +43,20 @@ export async function GET(request: NextRequest) {
       }))
     });
 
-    return NextResponse.json({
-      success: true,
-      data: slots
-    });
+    return apiSuccess(slots);
 
   } catch (error) {
     console.error('Error fetching availability slots:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to fetch availability slots'
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to fetch availability slots');
   }
 }
 
 // POST /api/availability/slots - Create new availability slot (caregivers only)
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Authentication required. Please log in again.' },
-        { status: 401 }
-      );
-    }
-
-    if (session.user.userType !== 'CAREGIVER') {
-      return NextResponse.json(
-        { error: 'Only caregivers can create availability slots' },
-        { status: 403 }
-      );
+    const authResult = await withAuth(request, 'CAREGIVER');
+    if (!authResult.isAuthorized || !authResult.user) {
+      return authResult.response;
     }
 
     const body = await request.json();
@@ -88,16 +73,12 @@ export async function POST(request: NextRequest) {
     } = body;
 
     if (!date || !startTime || !endTime) {
-      return NextResponse.json(
-        { error: 'Date, start time, and end time are required' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Date, start time, and end time are required');
     }
 
-    // First find the caregiver record and user profile (with timezone) for this user
-    const { prisma } = await import('@/lib/database');
+    const { prisma } = await import('@/lib/db');
     const caregiver = await prisma.caregiver.findUnique({
-      where: { userId: session.user.id },
+      where: { userId: authResult.user.id },
       include: {
         user: {
           include: {
@@ -108,26 +89,20 @@ export async function POST(request: NextRequest) {
     });
 
     if (!caregiver) {
-      // If caregiver record doesn't exist, create it
       const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
+        where: { id: authResult.user.id },
         include: { profile: true }
       });
 
       if (!user || !user.profile) {
-        return NextResponse.json(
-          { error: 'User profile not found. Please complete your profile setup first.' },
-          { status: 404 }
-        );
+        return ApiErrors.notFound('User profile not found. Please complete your profile setup first.');
       }
 
-      // Get user's timezone from profile (defaults to America/Toronto)
       const userTimezone = user.profile.timezone || 'America/Toronto';
 
-      // Create caregiver record with default values
       const newCaregiver = await prisma.caregiver.create({
         data: {
-          userId: session.user.id,
+          userId: authResult.user.id,
           hourlyRate: baseRate || 25.00,
           experienceYears: 0,
           bio: '',
@@ -143,10 +118,10 @@ export async function POST(request: NextRequest) {
 
       const slot = await AvailabilityService.createSlot({
         caregiverId: newCaregiver.id,
-        date: date, // Date string in YYYY-MM-DD format
-        startTime: startTime, // Time string in HH:MM format
-        endTime: endTime, // Time string in HH:MM format
-        userTimezone: userTimezone, // REQUIRED: User's timezone for proper conversion
+        date,
+        startTime,
+        endTime,
+        userTimezone,
         totalCapacity: totalCapacity || 3,
         baseRate: baseRate || 25.00,
         isRecurring,
@@ -155,23 +130,17 @@ export async function POST(request: NextRequest) {
         notes
       });
 
-      return NextResponse.json({
-        success: true,
-        data: slot,
-        message: 'Availability slot created successfully'
-      });
+      return apiSuccess(slot, 'Availability slot created successfully');
     }
 
-    // Get user's timezone from profile (defaults to America/Toronto)
     const userTimezone = caregiver.user.profile?.timezone || 'America/Toronto';
 
-    console.log("🕐 Creating slot with timezone conversion:", { caregiverId: caregiver.id, userTimezone, date, startTime, endTime, timezone: caregiver.user.profile?.timezone });
     const slot = await AvailabilityService.createSlot({
-      caregiverId: caregiver.id, // Use caregiver record ID
-      date: date, // Date string in YYYY-MM-DD format
-      startTime: startTime, // Time string in HH:MM format
-      endTime: endTime, // Time string in HH:MM format
-      userTimezone: userTimezone, // REQUIRED: User's timezone for proper conversion
+      caregiverId: caregiver.id,
+      date,
+      startTime,
+      endTime,
+      userTimezone,
       totalCapacity: totalCapacity || 3,
       baseRate: baseRate || caregiver.hourlyRate,
       isRecurring,
@@ -180,37 +149,20 @@ export async function POST(request: NextRequest) {
       notes
     });
 
-    return NextResponse.json({
-      success: true,
-      data: slot,
-      message: 'Availability slot created successfully'
-    });
+    return apiSuccess(slot, 'Availability slot created successfully');
 
   } catch (error) {
     console.error('Error creating availability slot:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to create availability slot'
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to create availability slot');
   }
 }
 
 // PUT /api/availability/slots - Update existing availability slot
 export async function PUT(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    if (session.user.userType !== 'CAREGIVER') {
-      return NextResponse.json(
-        { error: 'Only caregivers can update availability slots' },
-        { status: 403 }
-      );
+    const authResult = await withAuth(request, 'CAREGIVER');
+    if (!authResult.isAuthorized || !authResult.user) {
+      return authResult.response;
     }
 
     const body = await request.json();
@@ -225,23 +177,16 @@ export async function PUT(request: NextRequest) {
     } = body;
 
     if (!slotId) {
-      return NextResponse.json(
-        { error: 'Slot ID is required for updates' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Slot ID is required for updates');
     }
 
-    // First find the caregiver record for this user
-    const { prisma } = await import('@/lib/database');
+    const { prisma } = await import('@/lib/db');
     const caregiver = await prisma.caregiver.findUnique({
-      where: { userId: session.user.id }
+      where: { userId: authResult.user.id }
     });
 
     if (!caregiver) {
-      return NextResponse.json(
-        { error: 'Caregiver profile not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Caregiver profile not found');
     }
 
     // Verify the slot belongs to this caregiver
@@ -253,10 +198,7 @@ export async function PUT(request: NextRequest) {
     });
 
     if (!existingSlot) {
-      return NextResponse.json(
-        { error: 'Slot not found or not owned by this caregiver' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Slot not found or not owned by this caregiver');
     }
 
     // Validate and sanitize rate if provided
@@ -272,10 +214,7 @@ export async function PUT(request: NextRequest) {
 
       // Validate reasonable range ($5 - $500/hr)
       if (rate < 5 || rate > 500) {
-        return NextResponse.json(
-          { error: `Invalid hourly rate: $${rate}. Rate must be between $5 and $500 per hour.` },
-          { status: 400 }
-        );
+        return ApiErrors.badRequest(`Invalid hourly rate: $${rate}. Rate must be between $5 and $500 per hour.`);
       }
 
       validatedRate = rate;
@@ -297,60 +236,36 @@ export async function PUT(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({
-      success: true,
-      data: updatedSlot,
-      message: 'Availability slot updated successfully'
-    });
+    return apiSuccess(updatedSlot, 'Availability slot updated successfully');
 
   } catch (error) {
     console.error('Error updating availability slot:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to update availability slot'
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to update availability slot');
   }
 }
 
 // DELETE /api/availability/slots - Delete availability slot
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    if (session.user.userType !== 'CAREGIVER') {
-      return NextResponse.json(
-        { error: 'Only caregivers can delete availability slots' },
-        { status: 403 }
-      );
+    const authResult = await withAuth(request, 'CAREGIVER');
+    if (!authResult.isAuthorized || !authResult.user) {
+      return authResult.response;
     }
 
     const { searchParams } = new URL(request.url);
     const slotId = searchParams.get('slotId');
 
     if (!slotId) {
-      return NextResponse.json(
-        { error: 'Slot ID is required' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Slot ID is required');
     }
 
-    // First find the caregiver record for this user
-    const { prisma } = await import('@/lib/database');
+    const { prisma } = await import('@/lib/db');
     const caregiver = await prisma.caregiver.findUnique({
-      where: { userId: session.user.id }
+      where: { userId: authResult.user.id }
     });
 
     if (!caregiver) {
-      return NextResponse.json(
-        { error: 'Caregiver profile not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Caregiver profile not found');
     }
 
     // Verify the slot belongs to this caregiver and check for existing bookings
@@ -370,25 +285,16 @@ export async function DELETE(request: NextRequest) {
     });
 
     if (!existingSlot) {
-      return NextResponse.json(
-        { error: 'Slot not found or not owned by this caregiver' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Slot not found or not owned by this caregiver');
     }
 
     // Check if slot has active bookings or reservations
     if (existingSlot.slotBookings.length > 0) {
-      return NextResponse.json(
-        { error: 'Cannot delete slot with existing bookings' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Cannot delete slot with existing bookings');
     }
 
     if (existingSlot.reservations.length > 0) {
-      return NextResponse.json(
-        { error: 'Cannot delete slot with active reservations' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Cannot delete slot with active reservations');
     }
 
     // Delete the slot
@@ -396,16 +302,10 @@ export async function DELETE(request: NextRequest) {
       where: { id: slotId }
     });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Availability slot deleted successfully'
-    });
+    return apiSuccess(undefined, 'Availability slot deleted successfully');
 
   } catch (error) {
     console.error('Error deleting availability slot:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to delete availability slot'
-    }, { status: 500 });
+    return ApiErrors.internal('Failed to delete availability slot');
   }
 }

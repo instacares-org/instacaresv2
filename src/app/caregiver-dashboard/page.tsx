@@ -1,7 +1,7 @@
 "use client";
 import dynamic from "next/dynamic";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useMemo, useCallback } from "react";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { DateTime } from "luxon";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -35,7 +35,6 @@ import Chat from "../../components/Chat";
 import ChatWebSocket from "../../components/ChatWebSocket";
 import OrganizedMessagesContainer from "../../components/OrganizedMessagesContainer";
 import { SocketProvider } from "../../context/SocketContext";
-import NotificationSettings from "../../components/NotificationSettings";
 import NotificationInitializer from "../../components/NotificationInitializer";
 import { useNotificationStorage } from "../../hooks/useNotificationStorage";
 import { useUnreadMessageCount } from "../../hooks/useUnreadMessageCount";
@@ -241,25 +240,25 @@ function CaregiverDashboardContent() {
   } = useBookingUnreadCounts();
 
   // Calculate notification badge counts
-  const unreadBookingCount = notifications.filter(n =>
+  const unreadBookingCount = useMemo(() => notifications.filter(n =>
     !n.read && (n.type === 'booking' || n.type === 'caregiver')
-  ).length;
+  ).length, [notifications]);
   
 
   // Use real unread message count from chat rooms
   const unreadMessageCount = realUnreadMessageCount;
 
   // Helper function to check if a booking start time has passed (timezone-aware)
-  const isBookingExpired = (startTime: string | Date): boolean => {
+  const isBookingExpired = useCallback((startTime: string | Date): boolean => {
     const bookingStart = DateTime.fromJSDate(new Date(startTime), { zone: 'utc' }).setZone(userTimezone);
     const now = DateTime.now().setZone(userTimezone);
     return bookingStart < now;
-  };
+  }, [userTimezone]);
 
   // Badge counts calculated
 
   // Mark message notifications as read when messages tab is viewed
-  const handleTabChange = (tab: 'profile' | 'schedule' | 'bookings' | 'messages' | 'preferences' | 'photos' | 'payments' | 'analytics' | 'support' | 'notifications') => {
+  const handleTabChange = useCallback((tab: 'profile' | 'schedule' | 'bookings' | 'messages' | 'preferences' | 'photos' | 'payments' | 'analytics' | 'support' | 'notifications') => {
     setActiveTab(tab);
 
     if (tab === 'messages') {
@@ -267,7 +266,7 @@ function CaregiverDashboardContent() {
       const unreadMessageNotifications = notifications.filter(n =>
         !n.read && n.type === 'message'
       );
-      
+
       unreadMessageNotifications.forEach(notification => {
         markAsRead(notification.id);
       });
@@ -275,7 +274,7 @@ function CaregiverDashboardContent() {
       // Refresh real message count when opening messages tab
       refreshMessageCount();
     }
-  };
+  }, [notifications, markAsRead, refreshMessageCount]);
   const [hourlyRate, setHourlyRate] = useState(25);
   const [isEditingRate, setIsEditingRate] = useState(false);
   const [tempRate, setTempRate] = useState(25);
@@ -343,50 +342,55 @@ function CaregiverDashboardContent() {
   }, [user]);
 
   // Fetch caregiver bio and experience
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchCaregiverProfile references functions defined later; deps intentionally omitted to avoid reordering
   const fetchCaregiverProfile = async () => {
     if (!caregiverId) return;
-    
+
     try {
       const response = await fetch(`/api/caregivers/${caregiverId}`);
       if (!response.ok) throw new Error('Failed to fetch caregiver profile');
-      
+
       const data = await response.json();
-      if (data.caregiver) {
-        setBio(data.caregiver.bio || '');
-        setExperienceYears(data.caregiver.experienceYears || 0);
-        if (data.caregiver.hourlyRate) {
-          setHourlyRate(data.caregiver.hourlyRate);
+      const caregiver = data.data?.caregiver;
+      if (caregiver) {
+        setBio(caregiver.bio || '');
+        setExperienceYears(caregiver.experienceYears || 0);
+        if (caregiver.hourlyRate) {
+          setHourlyRate(caregiver.hourlyRate);
         }
 
         // Load services if available
-        if (data.caregiver.services && Array.isArray(data.caregiver.services)) {
+        if (caregiver.services && Array.isArray(caregiver.services)) {
           setServices(prev => prev.map(service => ({
             ...service,
-            selected: data.caregiver.services.some((s: any) => s.type === service.type && s.isOffered)
+            selected: caregiver.services.some((s: any) => s.type === service.type && s.isOffered)
           })));
         }
 
         // Load age groups if available
-        if (data.caregiver.ageGroups && Array.isArray(data.caregiver.ageGroups)) {
+        if (caregiver.ageGroups && Array.isArray(caregiver.ageGroups)) {
           setAgeGroups(prev => prev.map(group => ({
             ...group,
-            selected: data.caregiver.ageGroups.some((g: any) => g.id === group.id)
+            selected: caregiver.ageGroups.some((g: any) => g.id === group.id)
           })));
         }
 
         // Load specialties if available
-        if (data.caregiver.specialties && Array.isArray(data.caregiver.specialties)) {
+        if (caregiver.specialties && Array.isArray(caregiver.specialties)) {
           setSpecialties(prev => prev.map(specialty => ({
             ...specialty,
-            selected: data.caregiver.specialties.includes(specialty.name)
+            selected: caregiver.specialties.includes(specialty.name)
           })));
         }
 
-        // Load Stripe account ID from database if available (overrides localStorage)
-        if (data.caregiver.stripeAccountId) {
-          updateStripeAccountId(data.caregiver.stripeAccountId);
+        // Load Stripe account ID from database (overrides localStorage)
+        if (caregiver.stripeAccountId) {
+          updateStripeAccountId(caregiver.stripeAccountId);
           // Also fetch the latest status for this account
-          checkStripeAccountStatus(data.caregiver.stripeAccountId);
+          checkStripeAccountStatus(caregiver.stripeAccountId);
+        } else {
+          // DB has no Stripe account — clear any stale localStorage value
+          clearStripeData();
         }
       }
     } catch (error) {
@@ -402,21 +406,21 @@ function CaregiverDashboardContent() {
   }, [caregiverId]);
 
   // Fetch caregiver bookings
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
     if (!user?.id) return;
-    
+
     try {
       setLoadingBookings(true);
       setBookingError(null);
-      
+
       const response = await fetch(`/api/bookings?userId=${user.id}&userType=caregiver`);
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch bookings');
       }
-      
+
       const result = await response.json();
-      
+
       if (result.success && result.data) {
         setBookings(result.data);
       } else {
@@ -428,35 +432,35 @@ function CaregiverDashboardContent() {
     } finally {
       setLoadingBookings(false);
     }
-  };
+  }, [user?.id]);
 
   // Fetch caregiver photos
-  const fetchPhotos = async () => {
+  const fetchPhotos = useCallback(async () => {
     if (!user?.id) return;
-    
+
     try {
       setLoadingPhotos(true);
-      
+
       const response = await fetch('/api/caregivers/photos');
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch photos');
       }
-      
+
       const result = await response.json();
-      
-      if (result.photos) {
-        setPhotos(result.photos);
+
+      if (result.data?.photos) {
+        setPhotos(result.data.photos);
       }
     } catch (error) {
       console.error('Error fetching photos:', error);
     } finally {
       setLoadingPhotos(false);
     }
-  };
+  }, [user?.id]);
 
   // Update booking status
-  const updateBookingStatus = async (bookingId: string, status: string) => {
+  const updateBookingStatus = useCallback(async (bookingId: string, status: string) => {
     try {
       const response = await fetch(`/api/bookings/${bookingId}/status`, {
         method: 'PATCH',
@@ -476,9 +480,10 @@ function CaregiverDashboardContent() {
       console.error('Error updating booking status:', error);
       alert('Failed to update booking status. Please try again.');
     }
-  };
+  }, [fetchBookings]);
 
   // Handle booking extension request
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- references state declared later in component
   const handleExtendBooking = async () => {
     if (!selectedExtendBooking) return;
 
@@ -510,8 +515,8 @@ function CaregiverDashboardContent() {
       setExtensionReason('');
       fetchBookings();
 
-      if (data.extension?.status === 'PAID') {
-        alert(`Booking extended by ${extensionMinutes} minutes. Parent has been charged $${(data.extension.extensionAmount / 100).toFixed(2)}.`);
+      if (data.data?.extension?.status === 'PAID') {
+        alert(`Booking extended by ${extensionMinutes} minutes. Parent has been charged $${(data.data.extension.extensionAmount / 100).toFixed(2)}.`);
       } else {
         alert('Extension requested. Waiting for payment confirmation.');
       }
@@ -637,7 +642,7 @@ function CaregiverDashboardContent() {
   }, []);
 
   // Save Stripe account ID to localStorage whenever it changes
-  const updateStripeAccountId = (accountId: string) => {
+  const updateStripeAccountId = useCallback((accountId: string) => {
     setStripeAccountId(accountId);
     try {
       if (accountId) {
@@ -648,20 +653,20 @@ function CaregiverDashboardContent() {
     } catch (error) {
       console.error('Failed to save Stripe account ID to localStorage:', error);
     }
-  };
+  }, []);
 
   // Save Stripe status to localStorage whenever it changes
-  const updateStripeAccountStatus = (status: typeof stripeAccountStatus) => {
+  const updateStripeAccountStatus = useCallback((status: typeof stripeAccountStatus) => {
     setStripeAccountStatus(status);
     try {
       localStorage.setItem('stripeAccountStatus', JSON.stringify(status));
     } catch (error) {
       console.error('Failed to save Stripe status to localStorage:', error);
     }
-  };
+  }, []);
 
   // Clear all Stripe data (for testing)
-  const clearStripeData = () => {
+  const clearStripeData = useCallback(() => {
     updateStripeAccountId('');
     updateStripeAccountStatus({
       canReceivePayments: false,
@@ -671,7 +676,7 @@ function CaregiverDashboardContent() {
     });
     localStorage.removeItem('stripeAccountId');
     localStorage.removeItem('stripeAccountStatus');
-  };
+  }, [updateStripeAccountId, updateStripeAccountStatus]);
   
   const [ageGroups, setAgeGroups] = useState<AgeGroup[]>([
     { id: '1', name: 'Infants', description: '0-12 months', selected: true },
@@ -780,43 +785,53 @@ function CaregiverDashboardContent() {
   const [extensionError, setExtensionError] = useState<string | null>(null);
 
   // Calculate booking counts by status
-  const pendingBookingCount = bookings.filter(b => b.status === "PENDING").length;
-  const confirmedBookingCount = bookings.filter(b => b.status === "CONFIRMED").length;
-  const inProgressBookingCount = bookings.filter(b => b.status === "IN_PROGRESS").length;
-  const completedBookingCount = bookings.filter(b => b.status === "COMPLETED").length;
-  const cancelledBookingCount = bookings.filter(b => b.status === "CANCELLED").length;
+  const pendingBookingCount = useMemo(() => bookings.filter(b => b.status === "PENDING").length, [bookings]);
+  const confirmedBookingCount = useMemo(() => bookings.filter(b => b.status === "CONFIRMED").length, [bookings]);
+  const inProgressBookingCount = useMemo(() => bookings.filter(b => b.status === "IN_PROGRESS").length, [bookings]);
+  const completedBookingCount = useMemo(() => bookings.filter(b => b.status === "COMPLETED").length, [bookings]);
+  const cancelledBookingCount = useMemo(() => bookings.filter(b => b.status === "CANCELLED").length, [bookings]);
 
   // Filter bookings based on selected status
-  const filteredBookings = bookingStatusFilter === 'ALL'
+  const filteredBookings = useMemo(() => bookingStatusFilter === 'ALL'
     ? bookings
-    : bookings.filter(b => b.status === bookingStatusFilter);
+    : bookings.filter(b => b.status === bookingStatusFilter), [bookings, bookingStatusFilter]);
 
-  const addTimeSlot = (slot: Omit<TimeSlot, 'id'>) => {
+  // Memoized earnings calculations for the Payments tab
+  const totalEarnings = useMemo(() =>
+    (bookings.filter(b => b.status === 'COMPLETED').reduce((sum, b) => sum + b.totalAmount, 0) / 100).toFixed(2),
+    [bookings]
+  );
+  const pendingPayouts = useMemo(() =>
+    (bookings.filter(b => b.status === 'CONFIRMED' || b.status === 'IN_PROGRESS').reduce((sum, b) => sum + b.totalAmount, 0) / 100).toFixed(2),
+    [bookings]
+  );
+
+  const addTimeSlot = useCallback((slot: Omit<TimeSlot, 'id'>) => {
     const newSlot = {
       ...slot,
       id: Date.now().toString()
     };
     setTimeSlots(prev => [...prev, newSlot]);
     setShowAddSlot(false);
-  };
+  }, []);
 
-  const updateTimeSlot = (updatedSlot: TimeSlot) => {
-    setTimeSlots(prev => prev.map(slot => 
+  const updateTimeSlot = useCallback((updatedSlot: TimeSlot) => {
+    setTimeSlots(prev => prev.map(slot =>
       slot.id === updatedSlot.id ? updatedSlot : slot
     ));
     setEditingSlot(null);
-  };
+  }, []);
 
-  const deleteTimeSlot = (id: string) => {
+  const deleteTimeSlot = useCallback((id: string) => {
     setTimeSlots(prev => prev.filter(slot => slot.id !== id));
-  };
+  }, []);
 
-  const handleRateEdit = () => {
+  const handleRateEdit = useCallback(() => {
     setTempRate(hourlyRate);
     setIsEditingRate(true);
-  };
+  }, [hourlyRate]);
 
-  const saveRate = async () => {
+  const saveRate = useCallback(async () => {
     if (!caregiverId) return;
 
     try {
@@ -837,14 +852,14 @@ function CaregiverDashboardContent() {
       console.error("Error saving rate:", error);
       alert("Failed to save rate. Please try again.");
     }
-  };
+  }, [caregiverId, tempRate]);
 
-  const cancelRateEdit = () => {
+  const cancelRateEdit = useCallback(() => {
     setTempRate(hourlyRate);
     setIsEditingRate(false);
-  };
+  }, [hourlyRate]);
 
-  const toggleAgeGroup = async (id: string) => {
+  const toggleAgeGroup = useCallback(async (id: string) => {
     const updatedAgeGroups = ageGroups.map(group =>
       group.id === id ? { ...group, selected: !group.selected } : group
     );
@@ -875,9 +890,9 @@ function CaregiverDashboardContent() {
     } finally {
       setSavingAgeGroups(false);
     }
-  };
+  }, [ageGroups, caregiverId]);
 
-  const toggleSpecialty = async (id: string) => {
+  const toggleSpecialty = useCallback(async (id: string) => {
     const updatedSpecialties = specialties.map(specialty =>
       specialty.id === id ? { ...specialty, selected: !specialty.selected } : specialty
     );
@@ -904,10 +919,10 @@ function CaregiverDashboardContent() {
     } finally {
       setSavingSpecialties(false);
     }
-  };
+  }, [specialties, caregiverId]);
 
 
-  const toggleService = async (id: string) => {
+  const toggleService = useCallback(async (id: string) => {
     const updatedServices = services.map(service =>
       service.id === id ? { ...service, selected: !service.selected } : service
     );
@@ -937,9 +952,9 @@ function CaregiverDashboardContent() {
     } finally {
       setSavingServices(false);
     }
-  };
+  }, [services, caregiverId]);
   
-  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     
@@ -950,9 +965,9 @@ function CaregiverDashboardContent() {
       return;
     }
     
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB');
+    // Validate file size (max 50MB)
+    if (file.size > 50 * 1024 * 1024) {
+      alert('File size must be less than 50MB');
       return;
     }
     
@@ -971,7 +986,7 @@ function CaregiverDashboardContent() {
       
       if (response.ok) {
         const data = await response.json();
-        setProfilePhoto(data.avatarUrl);
+        setProfilePhoto(data.data?.avatarUrl);
         // Refresh user context to update header
         if (typeof window !== 'undefined') {
           window.location.reload();
@@ -987,10 +1002,10 @@ function CaregiverDashboardContent() {
     } finally {
       setUploadingAvatar(false);
     }
-  };
+  }, []);
 
   // Address saving function
-  const handleSaveAddress = async () => {
+  const handleSaveAddress = useCallback(async () => {
     setSavingAddress(true);
     try {
       const response = await fetch('/api/profile/update-address', {
@@ -1004,16 +1019,16 @@ function CaregiverDashboardContent() {
 
       if (response.ok) {
         const result = await response.json();
-        
+
         // Update local addressData state with the saved data
-        if (result.profile) {
+        if (result.data?.profile) {
           setAddressData({
-            streetAddress: result.profile.streetAddress || '',
-            apartment: result.profile.apartment || '',
-            city: result.profile.city || '',
-            state: result.profile.state || '',
-            zipCode: result.profile.zipCode || '',
-            country: result.profile.country || 'US'
+            streetAddress: result.data.profile.streetAddress || '',
+            apartment: result.data.profile.apartment || '',
+            city: result.data.profile.city || '',
+            state: result.data.profile.state || '',
+            zipCode: result.data.profile.zipCode || '',
+            country: result.data.profile.country || 'US'
           });
         }
         
@@ -1032,9 +1047,9 @@ function CaregiverDashboardContent() {
     } finally {
       setSavingAddress(false);
     }
-  };
+  }, [addressData]);
 
-  const handleCancelAddressEdit = () => {
+  const handleCancelAddressEdit = useCallback(() => {
     setAddressData({
       streetAddress: user?.profile?.streetAddress || '',
       apartment: user?.profile?.apartment || '',
@@ -1044,12 +1059,12 @@ function CaregiverDashboardContent() {
       country: user?.profile?.country || 'US'
     });
     setIsEditingAddress(false);
-  };
+  }, [user?.profile]);
 
   // About Me save function
-  const handleSaveBio = async () => {
+  const handleSaveBio = useCallback(async () => {
     if (!caregiverId) return;
-    
+
     setSavingBio(true);
     try {
       const response = await fetch(`/api/caregivers/${caregiverId}`, {
@@ -1077,7 +1092,7 @@ function CaregiverDashboardContent() {
     } finally {
       setSavingBio(false);
     }
-  };
+  }, [caregiverId, bio, experienceYears]);
 
   const handleCancelBioEdit = () => {
     // Reset to original values
@@ -1086,7 +1101,7 @@ function CaregiverDashboardContent() {
   };
 
   // Stripe Connect functions
-  const handleStripeOnboarding = async () => {
+  const handleStripeOnboarding = useCallback(async () => {
     if (!user) {
       alert('User information not available. Please try refreshing the page.');
       return;
@@ -1114,21 +1129,23 @@ function CaregiverDashboardContent() {
         throw new Error(data.error || 'Failed to create onboarding session');
       }
 
-      if (data.accountId) {
-        updateStripeAccountId(data.accountId);
+      const stripeData = data.data;
+
+      if (stripeData?.accountId) {
+        updateStripeAccountId(stripeData.accountId);
       }
 
       // Demo mode: still redirect
-      if (data.demo && data.onboardingUrl) {
+      if (stripeData?.demo && stripeData?.onboardingUrl) {
         setShowRedirectLoading(true);
         await new Promise(resolve => setTimeout(resolve, 1500));
-        window.location.href = data.onboardingUrl;
+        window.location.href = stripeData.onboardingUrl;
         return;
       }
 
       // Real mode: show inline embedded onboarding
-      if (data.accountId) {
-        setInlineAccountId(data.accountId);
+      if (stripeData?.accountId) {
+        setInlineAccountId(stripeData.accountId);
         setShowInlineOnboarding(true);
       }
     } catch (error) {
@@ -1137,19 +1154,9 @@ function CaregiverDashboardContent() {
     } finally {
       setIsLoadingStripe(false);
     }
-  };
+  }, [user, updateStripeAccountId]);
 
-  const handleOnboardingComplete = () => {
-    setShowInlineOnboarding(false);
-    setInlineAccountId(null);
-    setShowSuccessModal(true);
-    setActiveTab('payments');
-    if (stripeAccountId) {
-      checkStripeAccountStatus(stripeAccountId);
-    }
-  };
-
-  const checkStripeAccountStatus = async (accountId: string) => {
+  const checkStripeAccountStatus = useCallback(async (accountId: string) => {
     try {
       const response = await fetch('/api/stripe/connect/status', {
         method: 'POST',
@@ -1160,23 +1167,34 @@ function CaregiverDashboardContent() {
       });
 
       const data = await response.json();
+      const statusData = data.data;
 
-      if (data.accountId) {
+      if (statusData?.accountId) {
         updateStripeAccountStatus({
-          canReceivePayments: data.canReceivePayments,
-          chargesEnabled: data.chargesEnabled,
-          detailsSubmitted: data.detailsSubmitted,
-          payoutsEnabled: data.payoutsEnabled,
-          requirements: data.requirements || undefined,
+          canReceivePayments: statusData.canReceivePayments,
+          chargesEnabled: statusData.chargesEnabled,
+          detailsSubmitted: statusData.detailsSubmitted,
+          payoutsEnabled: statusData.payoutsEnabled,
+          requirements: statusData.requirements || undefined,
         });
       }
     } catch (error) {
       console.error('Failed to check Stripe account status:', error);
     }
-  };
+  }, [updateStripeAccountStatus]);
+
+  const handleOnboardingComplete = useCallback(() => {
+    setShowInlineOnboarding(false);
+    setInlineAccountId(null);
+    setShowSuccessModal(true);
+    setActiveTab('payments');
+    if (stripeAccountId) {
+      checkStripeAccountStatus(stripeAccountId);
+    }
+  }, [stripeAccountId, checkStripeAccountStatus]);
 
   // Helper to convert Stripe requirement codes to human-readable messages
-  const getRequirementMessage = (requirement: string): string => {
+  const getRequirementMessage = useCallback((requirement: string): string => {
     const requirementMessages: { [key: string]: string } = {
       'individual.verification.proof_of_liveness': 'Identity verification (selfie photo) required',
       'individual.verification.document': 'Government ID document required',
@@ -1202,7 +1220,7 @@ function CaregiverDashboardContent() {
     };
 
     return requirementMessages[requirement] || requirement.replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  };
+  }, []);
 
   // Check account status when component mounts or when stripeAccountId changes
   useEffect(() => {
@@ -1619,8 +1637,8 @@ function CaregiverDashboardContent() {
                 <div className="flex items-center mt-1">
                   <MapPinIcon className="h-4 w-4 text-gray-400 mr-1" />
                   <span className="text-gray-600 dark:text-gray-300">
-                    {user?.profile?.city && user?.profile?.province 
-                      ? `${user.profile.city}, ${user.profile.province}` 
+                    {user?.profile?.city && user?.profile?.state
+                      ? `${user.profile.city}, ${user.profile.state}`
                       : 'Location not provided'}
                   </span>
                 </div>
@@ -2664,10 +2682,6 @@ function CaregiverDashboardContent() {
               )}
             </div>
             
-            {/* Notification Settings */}
-            <div className="border-t border-gray-200 dark:border-gray-700">
-              <NotificationSettings />
-            </div>
           </div>
         )}
 
@@ -2974,19 +2988,23 @@ function CaregiverDashboardContent() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                   <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
                     <BanknotesIcon className="h-8 w-8 text-green-600 dark:text-green-400 mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">$1,247</p>
+                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      ${totalEarnings}
+                    </p>
                     <p className="text-sm text-gray-600 dark:text-gray-300">Total Earnings</p>
                   </div>
-                  
+
                   <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                     <ClockIcon className="h-8 w-8 text-blue-600 dark:text-blue-400 mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">$340</p>
+                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      ${pendingPayouts}
+                    </p>
                     <p className="text-sm text-gray-600 dark:text-gray-300">Pending Payouts</p>
                   </div>
 
                   <div className="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
                     <CreditCardIcon className="h-8 w-8 text-purple-600 dark:text-purple-400 mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">18</p>
+                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{completedBookingCount}</p>
                     <p className="text-sm text-gray-600 dark:text-gray-300">Completed Bookings</p>
                   </div>
                 </div>

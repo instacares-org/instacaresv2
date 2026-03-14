@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+import { z } from 'zod';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]/options';
-import { prisma } from '@/lib/database';
+import { prisma } from '@/lib/db';
 import { validatePhotoUrl, createFileUploadError } from '@/lib/file-upload-validation';
 import { logger } from '@/lib/logger';
+
+const addPhotoSchema = z.object({
+  url: z.string().min(1, 'Photo URL is required').url('Must be a valid URL'),
+  caption: z.string().max(500, 'Caption must be 500 characters or less').optional().default(''),
+  isProfile: z.boolean().optional().default(false),
+});
 
 export async function GET(request: NextRequest) {
   let session: any = null;
@@ -11,7 +19,7 @@ export async function GET(request: NextRequest) {
     session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     // Get caregiver ID from user
@@ -21,7 +29,7 @@ export async function GET(request: NextRequest) {
 
     if (!caregiver) {
       // Return empty array if caregiver profile doesn't exist yet
-      return NextResponse.json({ photos: [] });
+      return apiSuccess({ photos: [] });
     }
 
     // Fetch caregiver photos
@@ -30,12 +38,12 @@ export async function GET(request: NextRequest) {
       orderBy: { sortOrder: 'asc' },
     });
 
-    return NextResponse.json({ photos });
+    return apiSuccess({ photos });
   } catch (error) {
     logger.error('Error fetching caregiver photos', error, {
       userId: session?.user?.id,
     });
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return ApiErrors.internal();
   }
 }
 
@@ -45,7 +53,7 @@ export async function POST(request: NextRequest) {
     session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     // Get caregiver ID from user
@@ -54,18 +62,15 @@ export async function POST(request: NextRequest) {
     });
 
     if (!caregiver) {
-      return NextResponse.json(
-        { error: 'Caregiver profile not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Caregiver profile not found');
     }
 
     const body = await request.json();
-    const { url, caption, isProfile = false } = body;
-
-    if (!url) {
-      return createFileUploadError('Photo URL is required');
+    const parsed = addPhotoSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
     }
+    const { url, caption, isProfile } = parsed.data;
 
     // Validate photo URL to prevent SSRF attacks
     const urlValidation = validatePhotoUrl(url);
@@ -118,12 +123,12 @@ export async function POST(request: NextRequest) {
       isProfile,
     });
 
-    return NextResponse.json({ photo });
+    return apiSuccess({ photo });
   } catch (error) {
     logger.error('Error creating caregiver photo', error, {
       userId: session?.user?.id,
     });
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return ApiErrors.internal();
   }
 }
 
@@ -133,7 +138,7 @@ export async function DELETE(request: NextRequest) {
     session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     // Get caregiver ID from user
@@ -142,10 +147,7 @@ export async function DELETE(request: NextRequest) {
     });
 
     if (!caregiver) {
-      return NextResponse.json(
-        { error: 'Caregiver profile not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Caregiver profile not found');
     }
 
     const { searchParams } = new URL(request.url);
@@ -164,7 +166,7 @@ export async function DELETE(request: NextRequest) {
     });
 
     if (!photo) {
-      return NextResponse.json({ error: 'Photo not found' }, { status: 404 });
+      return ApiErrors.notFound('Photo not found');
     }
 
     // Delete the photo
@@ -178,11 +180,11 @@ export async function DELETE(request: NextRequest) {
       photoId: photoId,
     });
 
-    return NextResponse.json({ success: true });
+    return apiSuccess();
   } catch (error) {
     logger.error('Error deleting caregiver photo', error, {
       userId: session?.user?.id,
     });
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return ApiErrors.internal();
   }
 }

@@ -1,6 +1,34 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { withAuth } from '@/lib/auth-middleware';
 import { db } from '@/lib/db';
+import { z } from 'zod';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+
+const emergencyContactSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1, 'Contact name is required').max(200, 'Contact name too long').trim(),
+  relationship: z.string().min(1, 'Relationship is required').max(100, 'Relationship too long').trim(),
+  phone: z.string().min(7, 'Phone number must be at least 7 characters').max(20, 'Phone number too long').trim(),
+  email: z.string().email('Invalid email').max(200, 'Email too long').optional().or(z.literal('')),
+  canPickup: z.boolean().optional().default(false),
+});
+
+const updateChildSchema = z.object({
+  firstName: z.string().min(1, 'First name is required').max(100, 'First name too long').trim().optional(),
+  lastName: z.string().min(1, 'Last name is required').max(100, 'Last name too long').trim().optional(),
+  dateOfBirth: z.string().optional(),
+  gender: z.string().max(50, 'Gender too long').optional(),
+  allergies: z.any().optional(),
+  medications: z.any().optional(),
+  medicalConditions: z.any().optional(),
+  emergencyMedicalInfo: z.string().max(1000, 'Emergency medical info too long').optional(),
+  bloodType: z.string().max(10, 'Blood type too long').optional(),
+  emergencyContacts: z.array(emergencyContactSchema).min(1, 'At least one emergency contact is required').optional(),
+  dietaryRestrictions: z.any().optional(),
+  specialInstructions: z.string().max(1000, 'Special instructions too long').optional(),
+  pickupInstructions: z.string().max(1000, 'Pickup instructions too long').optional(),
+  photoUrl: z.string().url('Invalid photo URL').max(500, 'Photo URL too long').optional(),
+});
 
 // DELETE /api/children/[childId] - Delete a specific child profile
 export async function DELETE(
@@ -33,13 +61,7 @@ export async function DELETE(
     });
 
     if (!child) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Child profile not found or access denied' 
-        },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Child profile not found or access denied');
     }
 
     // Check if child has any active bookings or check-ins
@@ -62,13 +84,7 @@ export async function DELETE(
     });
 
     if (activeBookings > 0 || activeCheckIns > 0) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Cannot delete child profile with active bookings or check-ins. Please complete or cancel them first.' 
-        },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Cannot delete child profile with active bookings or check-ins. Please complete or cancel them first.');
     }
 
     // Delete the child profile
@@ -78,21 +94,11 @@ export async function DELETE(
 
     console.log('Child deleted:', { childId, deletedBy: parentUser.id });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Child profile deleted successfully'
-    });
+    return apiSuccess(undefined, 'Child profile deleted successfully');
 
   } catch (error) {
     console.error('Error deleting child profile:', error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Failed to delete child profile',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to delete child profile');
   }
 }
 
@@ -113,11 +119,16 @@ export async function PUT(
     const { childId } = await params;
     const body = await request.json();
 
-    console.log('Child PUT - Parent authenticated:', { 
-      userId: parentUser.id, 
+    const parsed = updateChildSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
+    }
+
+    console.log('Child PUT - Parent authenticated:', {
+      userId: parentUser.id,
       email: parentUser.email,
       childId,
-      bodyKeys: Object.keys(body)
+      bodyKeys: Object.keys(parsed.data)
     });
 
     // Verify child exists and belongs to the authenticated parent
@@ -130,13 +141,7 @@ export async function PUT(
 
     if (!existingChild) {
       console.error('Child not found or access denied:', { childId, parentId: parentUser.id });
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Child profile not found or access denied' 
-        },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Child profile not found or access denied');
     }
 
     const {
@@ -154,7 +159,7 @@ export async function PUT(
       specialInstructions,
       pickupInstructions,
       photoUrl
-    } = body;
+    } = parsed.data;
 
     // Update child profile
     const updatedChild = await db.child.update({
@@ -169,7 +174,7 @@ export async function PUT(
         medicalConditions: medicalConditions !== undefined ? medicalConditions : existingChild.medicalConditions,
         emergencyMedicalInfo: emergencyMedicalInfo !== undefined ? emergencyMedicalInfo : existingChild.emergencyMedicalInfo,
         bloodType: bloodType !== undefined ? bloodType : existingChild.bloodType,
-        emergencyContacts: emergencyContacts !== undefined ? emergencyContacts : existingChild.emergencyContacts,
+        emergencyContacts: emergencyContacts !== undefined ? emergencyContacts : (existingChild.emergencyContacts ?? undefined),
         dietaryRestrictions: dietaryRestrictions !== undefined ? dietaryRestrictions : existingChild.dietaryRestrictions,
         specialInstructions: specialInstructions !== undefined ? specialInstructions : existingChild.specialInstructions,
         pickupInstructions: pickupInstructions !== undefined ? pickupInstructions : existingChild.pickupInstructions,
@@ -179,22 +184,11 @@ export async function PUT(
 
     console.log('Child updated successfully:', { childId, updatedBy: parentUser.id });
 
-    return NextResponse.json({
-      success: true,
-      data: updatedChild,
-      message: 'Child profile updated successfully'
-    });
+    return apiSuccess(updatedChild, 'Child profile updated successfully');
 
   } catch (error) {
     console.error('Error updating child profile:', error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Failed to update child profile',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to update child profile');
   }
 }
 
@@ -229,29 +223,13 @@ export async function GET(
     });
 
     if (!child) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Child profile not found or access denied' 
-        },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Child profile not found or access denied');
     }
 
-    return NextResponse.json({
-      success: true,
-      data: child
-    });
+    return apiSuccess(child);
 
   } catch (error) {
     console.error('Error fetching child profile:', error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Failed to fetch child profile',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch child profile');
   }
 }

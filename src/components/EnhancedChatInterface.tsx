@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { 
+import Image from 'next/image';
+import {
   PaperAirplaneIcon,
   FaceSmileIcon,
   PaperClipIcon,
@@ -195,9 +196,11 @@ export default function EnhancedChatInterface({
             {/* Avatar */}
             <div className="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0">
               {otherUser?.profile?.avatar ? (
-                <img
+                <Image
                   src={otherUser.profile.avatar}
                   alt={otherUserName}
+                  width={40}
+                  height={40}
                   className="w-full h-full object-cover"
                 />
               ) : (
@@ -381,9 +384,11 @@ export default function EnhancedChatInterface({
                       {showAvatar ? (
                         <div className="w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center overflow-hidden">
                           {otherUser?.profile?.avatar ? (
-                            <img
+                            <Image
                               src={otherUser.profile.avatar}
                               alt={otherUserName}
+                              width={32}
+                              height={32}
                               className="w-full h-full object-cover"
                             />
                           ) : (

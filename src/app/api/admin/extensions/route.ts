@@ -1,31 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import Stripe from 'stripe';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-08-27.basil',
-});
+import { requirePermission } from '@/lib/adminAuth';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 // GET - List all booking extensions with filtering
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Verify admin role
-    const user = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: { userType: true }
-    });
-
-    if (user?.userType !== 'ADMIN') {
-      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 });
-    }
+    // Require admin authentication with permission check
+    const permCheck = await requirePermission(request, 'canManageExtensions');
+    if (!permCheck.authorized) return permCheck.response!;
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status'); // PENDING, PAID, FAILED, etc.
@@ -97,8 +80,7 @@ export async function GET(request: NextRequest) {
       return acc;
     }, {} as Record<string, { count: number; totalAmount: number; totalPlatformFees: number }>);
 
-    return NextResponse.json({
-      success: true,
+    return apiSuccess({
       extensions: extensions.map(ext => ({
         id: ext.id,
         bookingId: ext.bookingId,
@@ -113,6 +95,8 @@ export async function GET(request: NextRequest) {
         reason: ext.reason,
         stripePaymentIntentId: ext.stripePaymentIntentId,
         paidAt: ext.paidAt,
+        reminderCount: ext.reminderCount,
+        lastReminderSentAt: ext.lastReminderSentAt,
         createdAt: ext.createdAt,
         parent: {
           id: ext.booking.parent.id,
@@ -149,9 +133,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Error fetching extensions:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch extensions' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch extensions');
   }
 }

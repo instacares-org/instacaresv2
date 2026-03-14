@@ -1,23 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
-import { withAuth } from '@/lib/auth-middleware';
+import { requirePermission } from '@/lib/adminAuth';
 import { logger, getClientInfo } from '@/lib/logger';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    // ✅ STEP 1: Require admin authentication (REMOVE adminUserId query param)
-    const authResult = await withAuth(request, 'ADMIN');
-    if (!authResult.isAuthorized) {
-      const clientInfo = getClientInfo(request);
-      logger.security('Unauthorized admin revenue analytics access attempt', {
-        endpoint: '/api/admin/analytics/revenue',
-        ip: clientInfo.ip,
-        userAgent: clientInfo.userAgent
-      });
-      return authResult.response;
-    }
+    // STEP 1: Require admin authentication with permission check
+    const permCheck = await requirePermission(request, 'canViewAnalytics');
+    if (!permCheck.authorized) return permCheck.response!;
 
-    const adminUser = authResult.user!;
+    const adminUser = permCheck.user!;
 
     const { searchParams } = new URL(request.url);
     const timeRange = searchParams.get('timeRange') || '30d';
@@ -347,13 +342,10 @@ export async function GET(request: NextRequest) {
       totalRevenue: response.summary.totalRevenue
     });
 
-    return NextResponse.json(response);
+    return apiSuccess(response);
   } catch (error) {
     console.error('Error fetching revenue analytics:', error);
     logger.error('Revenue analytics fetch error', { error });
-    return NextResponse.json(
-      { error: 'Failed to fetch revenue analytics' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch revenue analytics');
   }
 }

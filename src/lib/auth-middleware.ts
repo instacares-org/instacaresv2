@@ -7,14 +7,18 @@ import { SECURITY_CONFIG, logSecurityEvent } from './security-config';
  */
 export async function withAuth(
   request: NextRequest,
-  requiredUserType?: 'PARENT' | 'CAREGIVER' | 'ADMIN' | 'ANY',
-  requireApproval: boolean = true
+  requiredUserType?: 'PARENT' | 'CAREGIVER' | 'ADMIN' | 'SUPERVISOR' | 'ANY',
+  requireApproval: boolean = false
 ) {
   try {
     // Get NextAuth token
-    const token = await getToken({ 
-      req: request, 
-      secret: process.env.NEXTAUTH_SECRET 
+    // secureCookie must match useSecureCookies in authOptions
+    // Behind Cloudflare/nginx, internal requests are HTTP, so getToken
+    // defaults to the wrong cookie name without this flag
+    const token = await getToken({
+      req: request,
+      secret: process.env.NEXTAUTH_SECRET,
+      secureCookie: process.env.NODE_ENV === 'production',
     });
 
     if (!token || !token.email) {
@@ -51,7 +55,7 @@ export async function withAuth(
     }
 
     // Check approval status (unless admin)
-    if (requireApproval && token.userType !== 'ADMIN' && token.approvalStatus !== 'APPROVED') {
+    if (requireApproval && token.userType !== 'ADMIN' && token.userType !== 'SUPERVISOR' && token.approvalStatus !== 'APPROVED') {
       logSecurityEvent('AUTH_FAILURE', { 
         reason: 'User not approved',
         email: token.email,
@@ -74,24 +78,13 @@ export async function withAuth(
       // Handle both boolean and truthy values for isParent/isCaregiver
       const hasParentRole = Boolean(token.isParent) || token.userType === 'PARENT';
       const hasCaregiverRole = Boolean(token.isCaregiver) || token.userType === 'CAREGIVER';
-      const isAdmin = token.userType === 'ADMIN';
-
-      // Debug logging for dual-role auth
-      console.log('Auth check:', {
-        email: token.email,
-        requiredUserType,
-        userType: token.userType,
-        isParent: token.isParent,
-        isCaregiver: token.isCaregiver,
-        hasParentRole,
-        hasCaregiverRole,
-        isAdmin
-      });
+      const isAdmin = token.userType === 'ADMIN' || token.userType === 'SUPERVISOR';
 
       const hasRequiredRole = isAdmin ||
         (requiredUserType === 'PARENT' && hasParentRole) ||
         (requiredUserType === 'CAREGIVER' && hasCaregiverRole) ||
-        (requiredUserType === 'ADMIN' && isAdmin);
+        (requiredUserType === 'ADMIN' && isAdmin) ||
+        (requiredUserType === 'SUPERVISOR' && isAdmin);
 
       if (!hasRequiredRole) {
         logSecurityEvent('AUTH_FAILURE', {

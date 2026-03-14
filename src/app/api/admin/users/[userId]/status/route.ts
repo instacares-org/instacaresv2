@@ -1,8 +1,17 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { withAuth } from '@/lib/auth-middleware';
-import { prisma } from '@/lib/database';
+import { NextRequest } from 'next/server';
+import { requirePermission } from '@/lib/adminAuth';
+import { prisma } from '@/lib/db';
 import { logger, getClientInfo } from '@/lib/logger';
 import { logAuditEvent, AuditActions } from '@/lib/audit-log';
+import { z } from 'zod';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+
+const bodySchema = z.object({
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'INACTIVE'], {
+    message: 'Invalid status. Must be ACTIVE, SUSPENDED, or INACTIVE',
+  }),
+  reason: z.string().max(1000, 'Reason too long').optional(),
+});
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,31 +23,28 @@ export async function PATCH(
   const clientInfo = getClientInfo(request);
   const startTime = Date.now();
   let userId: string = '';
-  let authResult: any = null;
+  let permCheck: any = null;
 
   try {
     const paramsData = await params;
     userId = paramsData.userId;
 
-    // Validate admin authentication
-    authResult = await withAuth(request, 'ADMIN', true);
-    if (!authResult.isAuthorized) {
+    // Validate admin authentication and permission
+    permCheck = await requirePermission(request, 'canManageUsers');
+    if (!permCheck.authorized) {
       logger.security('Unauthorized user status change attempt', {
         ip: clientInfo.ip,
         userAgent: clientInfo.userAgent,
         targetUserId: userId,
         error: 'Invalid admin session'
       });
-      
-      return authResult.response;
+
+      return permCheck.response!;
     }
 
     // Validate user ID format
     if (!userId || typeof userId !== 'string' || userId.length < 10) {
-      return NextResponse.json(
-        { error: 'Invalid user ID format' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Invalid user ID format');
     }
 
     // Parse and validate request body
@@ -46,26 +52,19 @@ export async function PATCH(
     try {
       requestBody = await request.json();
     } catch (error) {
-      logger.warn('Invalid JSON in user status request', { 
+      logger.warn('Invalid JSON in user status request', {
         ip: clientInfo.ip,
-        adminId: authResult.user?.id 
+        adminId: permCheck.user!.id
       });
-      return NextResponse.json(
-        { error: 'Invalid request format' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Invalid request format');
     }
 
-    const { status, reason } = requestBody;
-
-    // Validate status
-    const validStatuses = ['ACTIVE', 'SUSPENDED', 'INACTIVE'];
-    if (!status || !validStatuses.includes(status)) {
-      return NextResponse.json(
-        { error: 'Invalid status. Must be ACTIVE, SUSPENDED, or INACTIVE' },
-        { status: 400 }
-      );
+    const parsed = bodySchema.safeParse(requestBody);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
     }
+
+    const { status, reason } = parsed.data;
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
@@ -80,10 +79,7 @@ export async function PATCH(
     });
 
     if (!existingUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('User not found');
     }
 
     // Update user status
@@ -106,8 +102,8 @@ export async function PATCH(
 
     // Persistent audit log
     logAuditEvent({
-      adminId: authResult.user?.id,
-      adminEmail: authResult.user?.email,
+      adminId: permCheck.user!.id,
+      adminEmail: permCheck.user!.email,
       action: AuditActions.USER_STATUS_CHANGED,
       resource: 'user',
       resourceId: userId,
@@ -122,7 +118,7 @@ export async function PATCH(
 
     // Audit log for admin action
     logger.audit('User status changed', {
-      adminId: authResult.user?.id,
+      adminId: permCheck.user!.id,
       targetUserId: userId,
       targetEmail: updatedUser.email,
       previousStatus: existingUser.isActive ? 'ACTIVE' : 'INACTIVE',
@@ -134,9 +130,7 @@ export async function PATCH(
     });
 
     // Return success response
-    return NextResponse.json({ 
-      success: true, 
-      message: `User status updated to ${status.toLowerCase()} successfully`,
+    return apiSuccess({
       user: {
         id: updatedUser.id,
         email: updatedUser.email,
@@ -145,21 +139,18 @@ export async function PATCH(
         approvalStatus: updatedUser.approvalStatus,
         status: status.toLowerCase() // Return friendly status
       }
-    });
+    }, `User status updated to ${status.toLowerCase()} successfully`);
 
   } catch (error: any) {
     // Log unexpected errors
     logger.error('User status update failed', error, {
-      adminId: authResult?.user?.id,
+      adminId: permCheck?.user?.id,
       targetUserId: userId,
       ip: clientInfo.ip,
       userAgent: clientInfo.userAgent,
       processingTime: Date.now() - startTime
     });
 
-    return NextResponse.json(
-      { error: 'Failed to update user status' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to update user status');
   }
 }

@@ -48,12 +48,15 @@ interface Caregiver {
 
 interface CaregiverResponse {
   success: boolean;
-  data: Caregiver[];
-  pagination: {
-    limit: number;
-    offset: number;
-    total: number;
-    hasMore: boolean;
+  data: {
+    caregivers: Caregiver[];
+    pagination: {
+      limit: number;
+      offset: number;
+      total: number;
+      hasMore: boolean;
+    };
+    showCaregiverContactInfo?: boolean;
   };
   error?: string;
   message?: string;
@@ -94,8 +97,8 @@ export function useCaregivers(params: CaregiverSearchParams = {}) {
         throw new Error(result.message || result.error || 'Failed to fetch caregivers');
       }
 
-      setCaregivers(result.data);
-      setHasMore(result.pagination.hasMore);
+      setCaregivers(result.data.caregivers);
+      setHasMore(result.data.pagination.hasMore);
       
     } catch (err) {
       console.error('Error fetching caregivers:', err);
@@ -134,8 +137,8 @@ export function useCaregivers(params: CaregiverSearchParams = {}) {
       const result: CaregiverResponse = await response.json();
       
       if (result.success) {
-        setCaregivers(prev => [...prev, ...result.data]);
-        setHasMore(result.pagination.hasMore);
+        setCaregivers(prev => [...prev, ...result.data.caregivers]);
+        setHasMore(result.data.pagination.hasMore);
       }
     } catch (err) {
       console.error('Error loading more caregivers:', err);
@@ -196,7 +199,7 @@ export function useCaregiver(id: string) {
           throw new Error(result.message || result.error || 'Failed to fetch caregiver');
         }
 
-        setCaregiver(result.data);
+        setCaregiver(result.data.caregiver);
         
       } catch (err) {
         console.error('Error fetching caregiver:', err);

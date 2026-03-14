@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/database';
+import { z } from 'zod';
+import { prisma } from '@/lib/db';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+
+const findOrCreateRoomSchema = z.object({
+  bookingId: z.string().min(1, 'Booking ID is required'),
+});
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,8 +20,16 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   const clientInfo = getClientInfo(request);
-  
+
   try {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.API_WRITE);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
     // Authenticate user
     const authResult = await withAuth(request, 'ANY');
     if (!authResult.isAuthorized) {
@@ -28,14 +43,11 @@ export async function POST(request: NextRequest) {
 
     const user = authResult.user!;
     const body = await request.json();
-    const { bookingId } = body;
-
-    if (!bookingId) {
-      return NextResponse.json(
-        { success: false, error: 'Booking ID is required' },
-        { status: 400 }
-      );
+    const parsed = findOrCreateRoomSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
     }
+    const { bookingId } = parsed.data;
 
     // Get the booking and verify user has access
     const booking = await prisma.booking.findUnique({
@@ -55,10 +67,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!booking) {
-      return NextResponse.json(
-        { success: false, error: 'Booking not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Booking not found');
     }
 
     // Verify user is either the parent or caregiver of this booking
@@ -71,19 +80,13 @@ export async function POST(request: NextRequest) {
         bookingId,
         ip: clientInfo.ip
       });
-      return NextResponse.json(
-        { success: false, error: 'You do not have access to this booking' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('You do not have access to this booking');
     }
 
     // Only allow messaging for PENDING, CONFIRMED, IN_PROGRESS, or COMPLETED bookings
     const allowedStatuses = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED'];
     if (!allowedStatuses.includes(booking.status)) {
-      return NextResponse.json(
-        { success: false, error: 'Cannot message for this booking status' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Cannot message for this booking status');
     }
 
     // Try to find existing chat room
@@ -158,49 +161,43 @@ export async function POST(request: NextRequest) {
 
     // Format response
     const otherParty = isParent ? booking.caregiverUser : booking.parent;
-    
-    const response = {
-      success: true,
-      chatRoom: {
-        id: chatRoom.id,
-        bookingId: chatRoom.bookingId,
-        isActive: chatRoom.isActive,
-        lastMessageAt: chatRoom.lastMessageAt,
-        createdAt: chatRoom.createdAt,
-        otherParty: {
-          id: otherParty.id,
-          email: otherParty.email,
-          userType: isParent ? 'CAREGIVER' : 'PARENT',
-          profile: {
-            firstName: otherParty.profile?.firstName || '',
-            lastName: otherParty.profile?.lastName || '',
-            avatar: otherParty.profile?.avatar
-          }
-        },
-        booking: {
-          id: booking.id,
-          status: booking.status,
-          startTime: booking.startTime,
-          endTime: booking.endTime,
-          address: booking.address
-        },
-        lastMessage: chatRoom.messages[0] ? {
-          id: chatRoom.messages[0].id,
-          content: chatRoom.messages[0].content,
-          createdAt: chatRoom.messages[0].createdAt,
-          senderId: chatRoom.messages[0].senderId
-        } : null,
-        unreadCount: chatRoom._count.messages
-      }
+
+    const chatRoomData = {
+      id: chatRoom.id,
+      bookingId: chatRoom.bookingId,
+      isActive: chatRoom.isActive,
+      lastMessageAt: chatRoom.lastMessageAt,
+      createdAt: chatRoom.createdAt,
+      otherParty: {
+        id: otherParty.id,
+        email: otherParty.email,
+        userType: isParent ? 'CAREGIVER' : 'PARENT',
+        profile: {
+          firstName: otherParty.profile?.firstName || '',
+          lastName: otherParty.profile?.lastName || '',
+          avatar: otherParty.profile?.avatar
+        }
+      },
+      booking: {
+        id: booking.id,
+        status: booking.status,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        address: booking.address
+      },
+      lastMessage: chatRoom.messages[0] ? {
+        id: chatRoom.messages[0].id,
+        content: chatRoom.messages[0].content,
+        createdAt: chatRoom.messages[0].createdAt,
+        senderId: chatRoom.messages[0].senderId
+      } : null,
+      unreadCount: chatRoom._count.messages
     };
 
-    return NextResponse.json(response);
+    return apiSuccess({ chatRoom: chatRoomData });
 
   } catch (error) {
     logger.error('Error in find-or-create chat room', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to access chat room' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to access chat room');
   }
 }

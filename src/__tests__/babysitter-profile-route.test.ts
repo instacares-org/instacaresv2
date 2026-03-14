@@ -72,12 +72,11 @@ describe('GET /api/babysitter/profile', () => {
     const res = await GET(req);
     expect(res.status).toBe(200);
     const body = await res.json();
-    // Public profile returns flat object (not wrapped in { success, data })
-    expect(body.id).toBe('bs-1');
-    expect(body.firstName).toBe('Jane');
-    expect(body.hourlyRate).toBe(25);
-    expect(body.trustBadges).toBeDefined();
-    expect(body.trustBadges.length).toBeGreaterThan(0);
+    expect(body.data.id).toBe('bs-1');
+    expect(body.data.firstName).toBe('Jane');
+    expect(body.data.hourlyRate).toBe(25);
+    expect(body.data.trustBadges).toBeDefined();
+    expect(body.data.trustBadges.length).toBeGreaterThan(0);
   });
 
   it('returns 404 for non-existent babysitter ID', async () => {

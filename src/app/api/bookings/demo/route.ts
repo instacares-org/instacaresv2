@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { bookingOperations } from '@/lib/db';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
 // POST /api/bookings/demo - Create a demo booking without Stripe
 export async function POST(request: NextRequest) {
@@ -9,17 +10,11 @@ export async function POST(request: NextRequest) {
     // Verify authentication
     const session = await getServerSession(authOptions);
     if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     if (session.user.userType !== 'PARENT') {
-      return NextResponse.json(
-        { error: 'Only parents can create bookings' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('Only parents can create bookings');
     }
 
     const body = await request.json();
@@ -57,19 +52,15 @@ export async function POST(request: NextRequest) {
         hasChildrenCount: !!childrenCount,
         receivedBody: body
       });
-      return NextResponse.json(
-        {
-          error: 'Missing required fields',
-          missing: {
-            caregiverId: !caregiverId,
-            date: !date,
-            startTime: !startTime,
-            endTime: !endTime,
-            childrenCount: !childrenCount
-          }
-        },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Missing required fields', {
+        missing: {
+          caregiverId: !caregiverId,
+          date: !date,
+          startTime: !startTime,
+          endTime: !endTime,
+          childrenCount: !childrenCount
+        }
+      });
     }
 
     // Create full datetime objects
@@ -104,20 +95,10 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Demo booking created successfully:', booking.id);
 
-    return NextResponse.json({
-      success: true,
-      bookingId: booking.id,
-      message: 'Demo booking created successfully'
-    }, { status: 201 });
+    return apiSuccess({ bookingId: booking.id }, 'Demo booking created successfully', 201);
 
   } catch (error) {
     console.error('❌ Error creating demo booking:', error);
-    return NextResponse.json(
-      {
-        error: 'Failed to create booking',
-        details: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
-      },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to create booking');
   }
 }

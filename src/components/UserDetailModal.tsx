@@ -21,16 +21,19 @@ interface UserDetailModalProps {
   user: any;
   isOpen: boolean;
   onClose: () => void;
-  onPasswordReset: (userId: string) => void;
+  onPasswordReset: (userId: string) => Promise<{ success: boolean; email?: string }>;
 }
 
 export default function UserDetailModal({ user, isOpen, onClose, onPasswordReset }: UserDetailModalProps) {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [resetResult, setResetResult] = useState<{ success: boolean; email?: string } | null>(null);
 
   const handlePasswordReset = async () => {
     setIsResetting(true);
-    await onPasswordReset(user.id);
+    setResetResult(null);
+    const result = await onPasswordReset(user.id);
+    setResetResult(result);
     setIsResetting(false);
     setShowResetConfirm(false);
   };
@@ -154,8 +157,9 @@ export default function UserDetailModal({ user, isOpen, onClose, onPasswordReset
                     <h4 className="text-lg font-semibold text-gray-900 mb-4">Admin Actions</h4>
                     <div className="flex flex-wrap gap-3">
                       <button
-                        onClick={() => setShowResetConfirm(true)}
-                        className="flex items-center px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition"
+                        onClick={() => { setShowResetConfirm(true); setResetResult(null); }}
+                        disabled={isResetting}
+                        className="flex items-center px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition disabled:opacity-50"
                       >
                         <KeyIcon className="h-4 w-4 mr-2" />
                         Reset Password
@@ -180,7 +184,7 @@ export default function UserDetailModal({ user, isOpen, onClose, onPasswordReset
                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                       <p className="text-sm text-gray-900 mb-4">
                         Are you sure you want to reset the password for <strong>{user.name}</strong>?
-                        A temporary password will be generated and sent to their email.
+                        A temporary password will be generated and sent to their email at <strong>{user.email}</strong>.
                       </p>
                       <div className="flex space-x-3">
                         <button
@@ -192,11 +196,31 @@ export default function UserDetailModal({ user, isOpen, onClose, onPasswordReset
                         </button>
                         <button
                           onClick={() => setShowResetConfirm(false)}
-                          className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition"
+                          disabled={isResetting}
+                          className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition disabled:opacity-50"
                         >
                           Cancel
                         </button>
                       </div>
+                    </div>
+                  )}
+
+                  {/* Password Reset Result */}
+                  {resetResult && (
+                    <div className={`border rounded-lg p-4 ${
+                      resetResult.success
+                        ? 'bg-green-50 border-green-200'
+                        : 'bg-red-50 border-red-200'
+                    }`}>
+                      {resetResult.success ? (
+                        <p className="text-sm text-green-800">
+                          Password reset successfully! A temporary password has been sent to <strong>{resetResult.email}</strong>. The user will be required to change their password on next login.
+                        </p>
+                      ) : (
+                        <p className="text-sm text-red-800">
+                          Failed to reset password. Please try again or check server logs for details.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

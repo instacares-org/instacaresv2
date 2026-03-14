@@ -109,12 +109,12 @@ function BabysitterCard({ babysitter, isSelected }: BabysitterCardProps) {
             e.stopPropagation();
             setIsFavorited(!isFavorited);
           }}
-          className="absolute top-2 right-2 p-1 rounded-full bg-white/80 hover:bg-white transition"
+          className="absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-white/80 hover:bg-white transition shadow-sm"
         >
           {isFavorited ? (
-            <HeartIconSolid className="h-4 w-4 text-violet-500" />
+            <HeartIconSolid className="h-4 w-4 shrink-0 text-violet-500" />
           ) : (
-            <HeartIcon className="h-4 w-4 text-gray-700" />
+            <HeartIcon className="h-4 w-4 shrink-0 text-gray-700" />
           )}
         </button>
 

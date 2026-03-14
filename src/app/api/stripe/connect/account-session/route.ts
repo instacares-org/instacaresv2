@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { getStripeInstance } from '@/lib/stripe';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger } from '@/lib/logger';
 import { db } from '@/lib/db';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    // --- RATE LIMITING ---
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.API_WRITE);
+    if (!rateLimitResult.success) {
+      return ApiErrors.tooManyRequests('Too many requests. Please try again later.');
+    }
+
     const authResult = await withAuth(request, 'CAREGIVER');
     if (!authResult.isAuthorized) {
       return authResult.response;
@@ -16,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     const { accountId } = await request.json();
     if (!accountId) {
-      return NextResponse.json({ error: 'Account ID required' }, { status: 400 });
+      return ApiErrors.badRequest('Account ID required');
     }
 
     // Verify the requesting user owns this Stripe account
@@ -33,12 +41,12 @@ export async function POST(request: NextRequest) {
         userId: authUser.id,
         accountId,
       });
-      return NextResponse.json({ error: 'Account not found' }, { status: 403 });
+      return ApiErrors.forbidden('Account not found');
     }
 
     const stripe = getStripeInstance();
     if (!stripe) {
-      return NextResponse.json({ error: 'Stripe not configured' }, { status: 500 });
+      return ApiErrors.internal('Stripe not configured');
     }
 
     const accountSession = await stripe.accountSessions.create({
@@ -48,15 +56,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ clientSecret: accountSession.client_secret });
+    return apiSuccess({ clientSecret: accountSession.client_secret });
   } catch (error: any) {
     console.error('Account session error:', error);
     logger.error('Failed to create account session', {
       error: error.message,
     });
-    return NextResponse.json(
-      { error: 'Failed to create account session' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to create account session');
   }
 }

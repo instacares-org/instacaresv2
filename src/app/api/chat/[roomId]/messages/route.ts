@@ -1,14 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { z } from 'zod';
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+
+const postMessageSchema = z.object({
+  content: z.string().min(1, 'Content is required').max(2000, 'Content must be 2000 characters or less'),
+  messageType: z.enum(['TEXT', 'SYSTEM']).default('TEXT'),
+});
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roomId: string }> }
 ) {
   try {
-    // ✅ STEP 1: Require authentication (REMOVE userId query param vulnerability)
+    // STEP 1: Require authentication (REMOVE userId query param vulnerability)
     const authResult = await withAuth(request, 'ANY');
     if (!authResult.isAuthorized) {
       const clientInfo = getClientInfo(request);
@@ -27,7 +34,7 @@ export async function GET(
 
     const { roomId } = await params;
 
-    // ✅ STEP 2: Verify user has access to this chat room (use session user ID)
+    // STEP 2: Verify user has access to this chat room (use session user ID)
     const chatRoom = await db.chatRoom.findFirst({
       where: {
         id: roomId,
@@ -43,7 +50,7 @@ export async function GET(
         userId: user.id,
         roomId
       });
-      return NextResponse.json({ error: 'Chat room not found or access denied' }, { status: 404 });
+      return ApiErrors.notFound('Chat room not found or access denied');
     }
 
     // Get messages with pagination
@@ -80,7 +87,7 @@ export async function GET(
           avatar: message.sender.profile?.avatar,
         },
       },
-      isFromMe: message.senderId === user.id, // ✅ Use session user ID
+      isFromMe: message.senderId === user.id, // Use session user ID
       isRead: message.isRead,
       createdAt: message.createdAt,
       readAt: message.readAt,
@@ -92,7 +99,7 @@ export async function GET(
       messageCount: formattedMessages.length
     });
 
-    return NextResponse.json({
+    return apiSuccess({
       messages: formattedMessages,
       hasMore: messages.length === limit,
       currentPage: page,
@@ -100,10 +107,7 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching messages:', error);
     logger.error('Chat room messages fetch error', { error });
-    return NextResponse.json(
-      { error: 'Failed to fetch messages' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to fetch messages');
   }
 }
 
@@ -112,7 +116,7 @@ export async function POST(
   { params }: { params: Promise<{ roomId: string }> }
 ) {
   try {
-    // ✅ STEP 1: Require authentication
+    // STEP 1: Require authentication
     const authResult = await withAuth(request, 'ANY');
     if (!authResult.isAuthorized) {
       const clientInfo = getClientInfo(request);
@@ -126,18 +130,15 @@ export async function POST(
 
     const user = authResult.user!;
     const body = await request.json();
-    const { content, messageType = 'TEXT' } = body; // ✅ REMOVE senderId from client
-
-    if (!content) {
-      return NextResponse.json(
-        { error: 'Content is required' },
-        { status: 400 }
-      );
+    const parsed = postMessageSchema.safeParse(body);
+    if (!parsed.success) {
+      return ApiErrors.badRequest('Invalid input', parsed.error.flatten().fieldErrors);
     }
+    const { content, messageType } = parsed.data;
 
     const { roomId } = await params;
 
-    // ✅ STEP 2: Verify user has access to this chat room
+    // STEP 2: Verify user has access to this chat room
     const chatRoom = await db.chatRoom.findFirst({
       where: {
         id: roomId,
@@ -153,14 +154,14 @@ export async function POST(
         userId: user.id,
         roomId
       });
-      return NextResponse.json({ error: 'Chat room not found or access denied' }, { status: 404 });
+      return ApiErrors.notFound('Chat room not found or access denied');
     }
 
-    // ✅ STEP 3: Create the message using authenticated user ID
+    // STEP 3: Create the message using authenticated user ID
     const message = await db.message.create({
       data: {
         chatRoomId: roomId,
-        senderId: user.id, // ✅ Use session user ID, not client-provided
+        senderId: user.id, // Use session user ID, not client-provided
         content,
         messageType,
       },
@@ -220,13 +221,10 @@ export async function POST(
       readAt: message.readAt,
     };
 
-    return NextResponse.json(formattedMessage);
+    return apiSuccess(formattedMessage);
   } catch (error) {
     console.error('Error sending message:', error);
     logger.error('Message send error', { error });
-    return NextResponse.json(
-      { error: 'Failed to send message' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to send message');
   }
 }

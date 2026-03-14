@@ -4,6 +4,8 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
 import { getStripeInstance, getCommissionRate } from '@/lib/stripe';
 import { z } from 'zod';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 
 const paymentSchema = z.object({
   babysitterId: z.string().min(1),
@@ -62,9 +64,18 @@ async function getOrCreateStripeCustomer(
 
 export async function POST(request: NextRequest) {
   try {
+    // --- RATE LIMITING ---
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.PAYMENT);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.id || !session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     const parentId = session.user.id;
@@ -78,11 +89,11 @@ export async function POST(request: NextRequest) {
     });
 
     if (!babysitter || babysitter.status !== 'APPROVED' || !babysitter.isAvailable) {
-      return NextResponse.json({ error: 'Babysitter is not available' }, { status: 400 });
+      return ApiErrors.badRequest('Babysitter is not available');
     }
 
     if (!babysitter.acceptsOnsitePayment) {
-      return NextResponse.json({ error: 'This babysitter does not accept on-site payments' }, { status: 400 });
+      return ApiErrors.badRequest('This babysitter does not accept on-site payments');
     }
 
     // Calculate pricing
@@ -91,7 +102,7 @@ export async function POST(request: NextRequest) {
     const totalHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
 
     if (totalHours < 2) {
-      return NextResponse.json({ error: 'Minimum booking is 2 hours' }, { status: 400 });
+      return ApiErrors.badRequest('Minimum booking is 2 hours');
     }
 
     const commissionRate = await getCommissionRate();
@@ -100,15 +111,12 @@ export async function POST(request: NextRequest) {
 
     // Stripe minimum charge is 50 cents
     if (platformFee < 50) {
-      return NextResponse.json(
-        { error: 'Booking amount is too small for payment processing. Minimum platform fee is $0.50.' },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Booking amount is too small for payment processing. Minimum platform fee is $0.50.');
     }
 
     const stripe = getStripeInstance();
     if (!stripe) {
-      return NextResponse.json({ error: 'Payment system unavailable' }, { status: 503 });
+      return apiError('Payment system unavailable', 503);
     }
 
     // Get or create Stripe customer
@@ -136,7 +144,7 @@ export async function POST(request: NextRequest) {
       description: `Platform fee for babysitter booking`,
     });
 
-    return NextResponse.json({
+    return apiSuccess({
       clientSecret: paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id,
       platformFee,
@@ -148,13 +156,13 @@ export async function POST(request: NextRequest) {
     console.error('Create platform fee payment error:', error);
 
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Validation error', details: error.issues }, { status: 400 });
+      return ApiErrors.badRequest('Validation error', error.issues);
     }
 
     if (error.type === 'StripeInvalidRequestError') {
-      return NextResponse.json({ error: 'Payment processing error' }, { status: 400 });
+      return ApiErrors.badRequest('Payment processing error');
     }
 
-    return NextResponse.json({ error: 'Failed to create payment' }, { status: 500 });
+    return ApiErrors.internal('Failed to create payment');
   }
 }

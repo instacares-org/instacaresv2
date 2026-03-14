@@ -4,6 +4,8 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
 import { z } from 'zod';
 import { getStripeInstance } from '@/lib/stripe';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 
 // Validation schema for status update
 const statusUpdateSchema = z.object({
@@ -16,13 +18,18 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.API_WRITE);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const userId = session.user.id;
@@ -41,20 +48,14 @@ export async function PATCH(
     });
 
     if (!booking) {
-      return NextResponse.json(
-        { error: 'Booking not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Booking not found');
     }
 
     const isBabysitter = booking.babysitter.userId === userId;
     const isParent = booking.parentId === userId;
 
     if (!isBabysitter && !isParent) {
-      return NextResponse.json(
-        { error: 'You are not authorized to update this booking' },
-        { status: 403 }
-      );
+      return ApiErrors.forbidden('You are not authorized to update this booking');
     }
 
     let updateData: Record<string, unknown> = {};
@@ -64,16 +65,10 @@ export async function PATCH(
       case 'confirm':
         // Only babysitter can confirm
         if (!isBabysitter) {
-          return NextResponse.json(
-            { error: 'Only the babysitter can confirm a booking' },
-            { status: 403 }
-          );
+          return ApiErrors.forbidden('Only the babysitter can confirm a booking');
         }
         if (booking.status !== 'PENDING') {
-          return NextResponse.json(
-            { error: 'Can only confirm pending bookings' },
-            { status: 400 }
-          );
+          return ApiErrors.badRequest('Can only confirm pending bookings');
         }
         updateData = {
           status: 'CONFIRMED',
@@ -85,16 +80,10 @@ export async function PATCH(
       case 'decline':
         // Only babysitter can decline
         if (!isBabysitter) {
-          return NextResponse.json(
-            { error: 'Only the babysitter can decline a booking' },
-            { status: 403 }
-          );
+          return ApiErrors.forbidden('Only the babysitter can decline a booking');
         }
         if (booking.status !== 'PENDING') {
-          return NextResponse.json(
-            { error: 'Can only decline pending bookings' },
-            { status: 400 }
-          );
+          return ApiErrors.badRequest('Can only decline pending bookings');
         }
 
         // Refund platform fee if it was charged
@@ -126,16 +115,10 @@ export async function PATCH(
       case 'start':
         // Only babysitter can start
         if (!isBabysitter) {
-          return NextResponse.json(
-            { error: 'Only the babysitter can start a session' },
-            { status: 403 }
-          );
+          return ApiErrors.forbidden('Only the babysitter can start a session');
         }
         if (booking.status !== 'CONFIRMED') {
-          return NextResponse.json(
-            { error: 'Can only start confirmed bookings' },
-            { status: 400 }
-          );
+          return ApiErrors.badRequest('Can only start confirmed bookings');
         }
         updateData = {
           status: 'IN_PROGRESS',
@@ -147,16 +130,10 @@ export async function PATCH(
       case 'complete':
         // Only babysitter can complete
         if (!isBabysitter) {
-          return NextResponse.json(
-            { error: 'Only the babysitter can complete a session' },
-            { status: 403 }
-          );
+          return ApiErrors.forbidden('Only the babysitter can complete a session');
         }
         if (booking.status !== 'IN_PROGRESS') {
-          return NextResponse.json(
-            { error: 'Can only complete in-progress bookings' },
-            { status: 400 }
-          );
+          return ApiErrors.badRequest('Can only complete in-progress bookings');
         }
         updateData = {
           status: 'COMPLETED',
@@ -178,10 +155,7 @@ export async function PATCH(
       case 'cancel':
         // Both parent and babysitter can cancel
         if (!['PENDING', 'CONFIRMED'].includes(booking.status)) {
-          return NextResponse.json(
-            { error: 'Cannot cancel a booking that is in progress or already completed' },
-            { status: 400 }
-          );
+          return ApiErrors.badRequest('Cannot cancel a booking that is in progress or already completed');
         }
 
         // Calculate cancellation policy
@@ -233,10 +207,7 @@ export async function PATCH(
         break;
 
       default:
-        return NextResponse.json(
-          { error: 'Invalid action' },
-          { status: 400 }
-        );
+        return ApiErrors.badRequest('Invalid action');
     }
 
     // Update the booking
@@ -247,29 +218,21 @@ export async function PATCH(
 
     // TODO: Send notification to the other party
 
-    return NextResponse.json({
-      success: true,
-      message,
+    return apiSuccess({
       booking: {
         id: updatedBooking.id,
         status: updatedBooking.status,
       }
-    });
+    }, message);
 
   } catch (error) {
     console.error('Update babysitter booking error:', error);
 
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.issues },
-        { status: 400 }
-      );
+      return ApiErrors.badRequest('Validation error', error.issues);
     }
 
-    return NextResponse.json(
-      { error: 'Failed to update booking' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to update booking');
   }
 }
 
@@ -282,10 +245,7 @@ export async function GET(
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return ApiErrors.unauthorized();
     }
 
     const userId = session.user.id;
@@ -335,15 +295,12 @@ export async function GET(
     });
 
     if (!booking) {
-      return NextResponse.json(
-        { error: 'Booking not found' },
-        { status: 404 }
-      );
+      return ApiErrors.notFound('Booking not found');
     }
 
     const isBabysitter = booking.babysitter.userId === userId;
 
-    return NextResponse.json({
+    return apiSuccess({
       booking: {
         id: booking.id,
         status: booking.status,
@@ -393,9 +350,6 @@ export async function GET(
 
   } catch (error) {
     console.error('Get babysitter booking error:', error);
-    return NextResponse.json(
-      { error: 'Failed to get booking' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to get booking');
   }
 }

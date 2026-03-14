@@ -1,10 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { existsSync } from 'fs';
+import sharp from 'sharp';
 import {
   validateFileUpload,
   generateSecureFilename,
@@ -12,6 +13,7 @@ import {
   checkUploadRateLimit,
 } from '@/lib/file-upload-validation';
 import { logger } from '@/lib/logger';
+import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
 export async function POST(request: NextRequest) {
   let session: any = null;
@@ -19,7 +21,7 @@ export async function POST(request: NextRequest) {
     // Verify authentication using NextAuth
     session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return ApiErrors.unauthorized();
     }
 
     // Check rate limiting
@@ -54,13 +56,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (!child) {
-      return NextResponse.json({ error: 'Child not found or unauthorized' }, { status: 404 });
+      return ApiErrors.notFound('Child not found or unauthorized');
     }
 
     // Validate file upload with comprehensive security checks
     const validation = await validateFileUpload(file, {
       allowedTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
-      maxSizeBytes: 5 * 1024 * 1024, // 5MB
+      maxSizeBytes: 50 * 1024 * 1024, // 50MB - modern phone photos can be very large
       checkMagicBytes: true, // Verify file content matches declared type
     });
 
@@ -84,14 +86,31 @@ export async function POST(request: NextRequest) {
       await mkdir(uploadDir, { recursive: true });
     }
 
-    // Save file
+    // Process image: resize and optimize with sharp
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const filepath = path.join(uploadDir, filename);
-    await writeFile(filepath, buffer);
+    const inputBuffer = Buffer.from(bytes);
+
+    const metadata = await sharp(inputBuffer).metadata();
+    const { width = 0, height = 0 } = metadata;
+
+    // Resize to max 512x512 (square crop, same as avatar)
+    const size = Math.min(width, height);
+    const left = Math.floor((width - size) / 2);
+    const top = Math.floor((height - size) / 2);
+
+    const processedBuffer = await sharp(inputBuffer)
+      .extract({ left, top, width: size, height: size })
+      .resize(512, 512, { fit: 'cover', position: 'center' })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+
+    // Save processed file (change extension to .jpg)
+    const jpgFilename = filename.replace(/\.[^.]+$/, '.jpg');
+    const filepath = path.join(uploadDir, jpgFilename);
+    await writeFile(filepath, processedBuffer);
 
     // Update child profile with photo URL
-    const photoUrl = `/uploads/children/${filename}`;
+    const photoUrl = `/uploads/children/${jpgFilename}`;
 
     await db.child.update({
       where: { id: childId },
@@ -102,22 +121,18 @@ export async function POST(request: NextRequest) {
       userId: session.user.id,
       email: session.user.email,
       childId: childId,
-      filename: filename,
-      fileSize: file.size,
+      filename: jpgFilename,
+      originalSize: file.size,
+      processedSize: processedBuffer.length,
+      originalDimensions: `${width}x${height}`,
     });
 
-    return NextResponse.json({
-      success: true,
-      photoUrl
-    });
+    return apiSuccess({ photoUrl });
   } catch (error: any) {
     logger.error('Child photo upload failed', error, {
       userId: session?.user?.id,
       email: session?.user?.email,
     });
-    return NextResponse.json(
-      { error: 'Failed to upload photo' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to upload photo');
   }
 }

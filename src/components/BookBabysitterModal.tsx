@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { addCSRFHeader } from '@/lib/csrf';
 import { loadStripe } from '@stripe/stripe-js';
+import type { Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import {
   Calendar,
@@ -20,10 +21,18 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react';
+import { useStripeAppearance } from '@/hooks/useStripeAppearance';
 
-const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.startsWith('pk_')
-  ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
-  : Promise.resolve(null);
+// Lazy-load Stripe.js only when needed (not at module level)
+let stripePromise: Promise<Stripe | null> | null = null;
+const getStripePromise = () => {
+  if (!stripePromise) {
+    stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.startsWith('pk_')
+      ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
+      : Promise.resolve(null);
+  }
+  return stripePromise;
+};
 
 interface BookBabysitterModalProps {
   babysitterId: string;
@@ -145,6 +154,7 @@ function PlatformFeePaymentForm({
 export default function BookBabysitterModal({ babysitterId, isOpen, onClose }: BookBabysitterModalProps) {
   const router = useRouter();
   const { isAuthenticated, user, loading: authLoading } = useAuth();
+  const stripeAppearance = useStripeAppearance();
 
   const [babysitter, setBabysitter] = useState<BabysitterProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -442,7 +452,7 @@ export default function BookBabysitterModal({ babysitterId, isOpen, onClose }: B
 
             {/* Payment step */}
             {step === 'payment' && clientSecret && babysitter && (
-              <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'stripe' } }}>
+              <Elements stripe={getStripePromise()} options={{ clientSecret, appearance: stripeAppearance }}>
                 <PlatformFeePaymentForm
                   platformFee={Math.round(pricing.platformFee * 100)}
                   onSuccess={handlePaymentSuccess}

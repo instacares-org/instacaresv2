@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
+import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
 // GET - Search/list babysitters (public)
 export async function GET(request: NextRequest) {
@@ -48,6 +49,11 @@ export async function GET(request: NextRequest) {
         isActive: true,
       }
     } : undefined;
+
+    // Age group filter (JSON array column - use Prisma array_contains for PostgreSQL jsonb)
+    if (ageGroup) {
+      where.ageGroupsServed = { array_contains: [ageGroup] };
+    }
 
     // Fetch babysitters
     const babysitters = await db.babysitter.findMany({
@@ -112,17 +118,8 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Filter by age group if specified (done in memory since it's a JSON field)
-    let filteredBabysitters = babysitters;
-    if (ageGroup) {
-      filteredBabysitters = babysitters.filter(b => {
-        const ageGroups = b.ageGroupsServed as string[] | null;
-        return ageGroups?.includes(ageGroup);
-      });
-    }
-
     // Build trust badges for each babysitter
-    const results = filteredBabysitters.map(b => {
+    const results = babysitters.map(b => {
       const trustBadges = [];
       if (b.governmentIdFront && b.selfieForMatch) {
         trustBadges.push('VERIFIED_ID');
@@ -175,10 +172,10 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({
+    return apiSuccess({
       babysitters: results,
       pagination: {
-        total: ageGroup ? filteredBabysitters.length : totalCount,
+        total: totalCount,
         limit,
         offset,
         hasMore: offset + limit < totalCount,
@@ -187,9 +184,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Search babysitters error:', error);
-    return NextResponse.json(
-      { error: 'Failed to search babysitters' },
-      { status: 500 }
-    );
+    return ApiErrors.internal('Failed to search babysitters');
   }
 }

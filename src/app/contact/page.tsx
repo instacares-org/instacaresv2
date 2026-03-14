@@ -1,7 +1,7 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Contact InstaCares - Get Help & Support',
+  title: 'Contact Us',
   description: 'Contact InstaCares for support, questions, or feedback. We\'re here to help Canadian families and caregivers.'
 }
 
