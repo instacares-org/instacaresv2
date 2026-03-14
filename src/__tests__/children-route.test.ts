@@ -96,8 +96,8 @@ describe('GET /api/children', () => {
     const req = new NextRequest('http://localhost:3005/api/children');
     const res = await GET(req);
 
-    expect(res.status).toBe(200);
-    const body = await res.json();
+    expect(res!.status).toBe(200);
+    const body = await res!.json();
     expect(body.success).toBe(true);
     expect(body.data).toHaveLength(2);
   });
@@ -124,8 +124,8 @@ describe('GET /api/children', () => {
     const req = new NextRequest('http://localhost:3005/api/children');
     const res = await GET(req);
 
-    expect(res.status).toBe(200);
-    const body = await res.json();
+    expect(res!.status).toBe(200);
+    const body = await res!.json();
     expect(body.success).toBe(true);
     expect(body.data).toEqual([]);
   });
@@ -136,7 +136,7 @@ describe('GET /api/children', () => {
     const req = new NextRequest('http://localhost:3005/api/children');
     const res = await GET(req);
 
-    expect(res.status).toBe(401);
+    expect(res!.status).toBe(401);
   });
 
   it('rejects non-parent users', async () => {
@@ -145,7 +145,7 @@ describe('GET /api/children', () => {
     const req = new NextRequest('http://localhost:3005/api/children');
     const res = await GET(req);
 
-    expect(res.status).toBe(403);
+    expect(res!.status).toBe(403);
   });
 
   it('returns 500 when database throws', async () => {
@@ -155,8 +155,8 @@ describe('GET /api/children', () => {
     const req = new NextRequest('http://localhost:3005/api/children');
     const res = await GET(req);
 
-    expect(res.status).toBe(500);
-    const body = await res.json();
+    expect(res!.status).toBe(500);
+    const body = await res!.json();
     expect(body.success).toBe(false);
     expect(body.error).toContain('Failed to fetch children');
   });
@@ -174,8 +174,8 @@ describe('POST /api/children', () => {
     const req = createPostRequest(validChildData);
     const res = await POST(req);
 
-    expect(res.status).toBe(200);
-    const body = await res.json();
+    expect(res!.status).toBe(200);
+    const body = await res!.json();
     expect(body.success).toBe(true);
     expect(body.message).toContain('created successfully');
     expect(body.data.firstName).toBe('Emma');
@@ -209,8 +209,8 @@ describe('POST /api/children', () => {
     const req = createPostRequest(rest);
     const res = await POST(req);
 
-    expect(res.status).toBe(400);
-    const body = await res.json();
+    expect(res!.status).toBe(400);
+    const body = await res!.json();
     expect(body.success).toBe(false);
     expect(body.error).toBe('Invalid input');
   });
@@ -222,8 +222,8 @@ describe('POST /api/children', () => {
     const req = createPostRequest(rest);
     const res = await POST(req);
 
-    expect(res.status).toBe(400);
-    const body = await res.json();
+    expect(res!.status).toBe(400);
+    const body = await res!.json();
     expect(body.success).toBe(false);
     expect(body.error).toBe('Invalid input');
   });
@@ -235,8 +235,8 @@ describe('POST /api/children', () => {
     const req = createPostRequest(rest);
     const res = await POST(req);
 
-    expect(res.status).toBe(400);
-    const body = await res.json();
+    expect(res!.status).toBe(400);
+    const body = await res!.json();
     expect(body.success).toBe(false);
   });
 
@@ -246,7 +246,7 @@ describe('POST /api/children', () => {
     const req = createPostRequest(validChildData);
     const res = await POST(req);
 
-    expect(res.status).toBe(401);
+    expect(res!.status).toBe(401);
   });
 
   it('returns 500 when database create throws', async () => {
@@ -256,8 +256,8 @@ describe('POST /api/children', () => {
     const req = createPostRequest(validChildData);
     const res = await POST(req);
 
-    expect(res.status).toBe(500);
-    const body = await res.json();
+    expect(res!.status).toBe(500);
+    const body = await res!.json();
     expect(body.success).toBe(false);
     expect(body.error).toContain('Failed to create child profile');
   });
@@ -279,8 +279,8 @@ describe('GET /api/children/[childId]', () => {
 
     const res = await callGetChild('child-1');
 
-    expect(res.status).toBe(200);
-    const body = await res.json();
+    expect(res!.status).toBe(200);
+    const body = await res!.json();
     expect(body.success).toBe(true);
     expect(body.data.id).toBe('child-1');
   });
@@ -291,8 +291,8 @@ describe('GET /api/children/[childId]', () => {
 
     const res = await callGetChild('child-other');
 
-    expect(res.status).toBe(404);
-    const body = await res.json();
+    expect(res!.status).toBe(404);
+    const body = await res!.json();
     expect(body.error).toContain('not found');
   });
 
@@ -301,7 +301,7 @@ describe('GET /api/children/[childId]', () => {
 
     const res = await callGetChild('child-1');
 
-    expect(res.status).toBe(401);
+    expect(res!.status).toBe(401);
   });
 });
 
@@ -325,8 +325,8 @@ describe('DELETE /api/children/[childId]', () => {
 
     const res = await callDeleteChild('child-1');
 
-    expect(res.status).toBe(200);
-    const body = await res.json();
+    expect(res!.status).toBe(200);
+    const body = await res!.json();
     expect(body.success).toBe(true);
     expect(body.message).toContain('deleted successfully');
   });
@@ -337,8 +337,8 @@ describe('DELETE /api/children/[childId]', () => {
 
     const res = await callDeleteChild('child-unknown');
 
-    expect(res.status).toBe(404);
-    const body = await res.json();
+    expect(res!.status).toBe(404);
+    const body = await res!.json();
     expect(body.error).toContain('not found');
   });
 
@@ -350,8 +350,8 @@ describe('DELETE /api/children/[childId]', () => {
 
     const res = await callDeleteChild('child-1');
 
-    expect(res.status).toBe(400);
-    const body = await res.json();
+    expect(res!.status).toBe(400);
+    const body = await res!.json();
     expect(body.error).toContain('active bookings');
   });
 });
