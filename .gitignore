@@ -78,6 +78,9 @@ logs/
 
 # Root-level JS files (development utilities)
 /*.js
+!ecosystem.config.js
+!ecosystem.staging.config.js
+!socket-server.js
 
 # Root-level shell scripts (keep scripts/ directory)
 /*.sh
