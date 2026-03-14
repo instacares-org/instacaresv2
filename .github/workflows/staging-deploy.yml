@@ -58,7 +58,7 @@ jobs:
 
     environment:
       name: staging
-      url: https://staging.instacares.net
+      url: https://instacares.com
 
     steps:
       - name: Setup SSH
@@ -120,4 +120,4 @@ jobs:
           echo "- **Status:** Success" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **URL:** https://staging.instacares.net" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** https://instacares.com" >> $GITHUB_STEP_SUMMARY

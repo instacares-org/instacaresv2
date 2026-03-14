@@ -11,9 +11,9 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3007,
-        NEXTAUTH_URL: 'https://staging.instacares.net',
-        NEXT_PUBLIC_BASE_URL: 'https://staging.instacares.net',
-        NEXT_PUBLIC_SOCKET_URL: 'https://staging.instacares.net',
+        NEXTAUTH_URL: 'https://instacares.com',
+        NEXT_PUBLIC_BASE_URL: 'https://instacares.com',
+        NEXT_PUBLIC_SOCKET_URL: 'https://instacares.com',
         PAYMENT_MODE: 'test',
       },
       kill_timeout: 5000,
