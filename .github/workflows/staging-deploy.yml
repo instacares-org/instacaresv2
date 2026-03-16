@@ -13,9 +13,9 @@ env:
   NODE_VERSION: '20.x'
 
 jobs:
-  # Quality gates (same as CI)
+  # Quality gates
   quality:
-    name: Lint, Type-Check, Build
+    name: Lint, Type-Check, Test, Build
     runs-on: ubuntu-latest
 
     steps:
@@ -44,6 +44,9 @@ jobs:
 
       - name: Type Check
         run: npm run type-check
+
+      - name: Unit Tests
+        run: npm test
 
       - name: Build
         run: |
@@ -81,6 +84,13 @@ jobs:
           git fetch origin develop
           git reset --hard origin/develop
 
+          # Ensure uploads symlink exists (points to production uploads)
+          if [ ! -L public/uploads ]; then
+            rm -rf public/uploads
+            ln -s /var/www/instacaresv2/public/uploads public/uploads
+            echo "Recreated uploads symlink"
+          fi
+
           # Install dependencies
           echo "Installing dependencies..."
           npm ci --prefer-offline --no-audit --force
@@ -91,8 +101,14 @@ jobs:
 
           # Build with env vars from PM2
           echo "Building application..."
-          eval $(pm2 env $(pm2 id instacares-staging 2>/dev/null || echo 0) 2>/dev/null | grep -E '^(DATABASE_URL|NEXTAUTH_SECRET|NEXTAUTH_URL|NEXT_PUBLIC)' | sed 's/: /="/' | sed 's/$/"/' | sed 's/^/export /' 2>/dev/null) || true
+          STAGING_ID=$(pm2 id instacares-staging 2>/dev/null | tr -d '[]' || echo "")
+          if [ -n "$STAGING_ID" ]; then
+            export DATABASE_URL="$(pm2 env $STAGING_ID 2>/dev/null | grep '^DATABASE_URL' | sed 's/^DATABASE_URL: //')"
+            export NEXTAUTH_SECRET="$(pm2 env $STAGING_ID 2>/dev/null | grep '^NEXTAUTH_SECRET' | sed 's/^NEXTAUTH_SECRET: //')"
+          fi
           export SKIP_ENV_VALIDATION=true
+          export NEXTAUTH_URL="https://instacares.com"
+          export NEXT_PUBLIC_BASE_URL="https://instacares.com"
           npm run build
 
           # Restart only staging processes
@@ -101,23 +117,72 @@ jobs:
           pm2 restart socket-server-staging --update-env || true
           pm2 save
 
-          # Health check
-          echo "Health check..."
-          sleep 5
-          if curl -s -o /dev/null -w "%{http_code}" http://localhost:3007 | grep -qE "200|302"; then
-            echo "Staging is healthy!"
-          else
-            echo "WARNING: Health check returned unexpected status"
-            pm2 logs instacares-staging --lines 20 --nostream || true
-          fi
-
           echo "=== Staging deployment completed at $(date) ==="
           DEPLOY_EOF
 
+      - name: Smoke Tests
+        run: |
+          echo "Running smoke tests against staging..."
+          sleep 8
+
+          ssh -o StrictHostKeyChecking=no root@72.60.71.43 << 'SMOKE_EOF'
+          PASS=0
+          FAIL=0
+
+          # Test 1: Homepage loads
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3007)
+          if echo "$STATUS" | grep -qE "200|302"; then
+            echo "✅ Homepage: HTTP $STATUS"
+            PASS=$((PASS+1))
+          else
+            echo "❌ Homepage: HTTP $STATUS"
+            FAIL=$((FAIL+1))
+          fi
+
+          # Test 2: Health endpoint
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3007/api/health)
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Health API: HTTP $STATUS"
+            PASS=$((PASS+1))
+          else
+            echo "❌ Health API: HTTP $STATUS"
+            FAIL=$((FAIL+1))
+          fi
+
+          # Test 3: Caregivers API
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3007/api/caregivers)
+          if echo "$STATUS" | grep -qE "200|304"; then
+            echo "✅ Caregivers API: HTTP $STATUS"
+            PASS=$((PASS+1))
+          else
+            echo "❌ Caregivers API: HTTP $STATUS"
+            FAIL=$((FAIL+1))
+          fi
+
+          # Test 4: Static assets
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3007/robots.txt)
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Static assets: HTTP $STATUS"
+            PASS=$((PASS+1))
+          else
+            echo "❌ Static assets: HTTP $STATUS"
+            FAIL=$((FAIL+1))
+          fi
+
+          echo ""
+          echo "Smoke tests: $PASS passed, $FAIL failed"
+
+          if [ "$FAIL" -gt 0 ]; then
+            echo "⚠️ Some smoke tests failed"
+            pm2 logs instacares-staging --lines 15 --nostream || true
+            exit 1
+          fi
+          SMOKE_EOF
+
       - name: Deployment Summary
+        if: always()
         run: |
           echo "## Staging Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status:** Success" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- **URL:** https://instacares.com" >> $GITHUB_STEP_SUMMARY

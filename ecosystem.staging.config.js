@@ -7,7 +7,7 @@ module.exports = {
       cwd: '/var/www/instacares-staging',
       instances: 1,
       exec_mode: 'fork',
-      max_memory_restart: '400M',
+      max_memory_restart: '512M',
       env: {
         NODE_ENV: 'production',
         PORT: 3007,

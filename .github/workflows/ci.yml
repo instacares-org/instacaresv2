@@ -41,9 +41,8 @@ jobs:
       - name: Type Check
         run: npm run type-check
 
-      - name: Unit Tests (non-blocking until test suite is fixed)
+      - name: Unit Tests
         run: npm test
-        continue-on-error: true
 
       - name: Build
         run: |
