@@ -11,6 +11,7 @@ name: Promote to Production
 
 on:
   workflow_dispatch:
+    inputs: {}
 
 jobs:
   create-release-pr:
