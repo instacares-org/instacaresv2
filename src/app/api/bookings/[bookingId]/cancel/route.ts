@@ -9,6 +9,8 @@ import { z } from 'zod';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const cancelBookingBodySchema = z.object({
   reason: z.string().max(1000, 'Reason must not exceed 1000 characters').optional(),
   refundPercentage: z.number().min(0).max(100).optional(),

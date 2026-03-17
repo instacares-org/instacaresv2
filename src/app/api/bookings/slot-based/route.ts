@@ -9,6 +9,8 @@ import { getCommissionRate } from '@/lib/stripe';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 // POST /api/bookings/slot-based - Create slot-based booking
 export async function POST(request: NextRequest) {
   const clientInfo = getClientInfo(request);

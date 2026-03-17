@@ -7,6 +7,8 @@ import { getStripeInstance } from '@/lib/stripe';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 
+export const dynamic = 'force-dynamic';
+
 // Validation schema for status update
 const statusUpdateSchema = z.object({
   action: z.enum(['confirm', 'decline', 'start', 'complete', 'cancel']),

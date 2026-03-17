@@ -5,6 +5,8 @@ import { db } from '@/lib/db';
 import { z } from 'zod';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 // Base fields shared by all recurrence types

@@ -3,6 +3,8 @@ import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 import { db } from '@/lib/db';
 import { getToken } from 'next-auth/jwt';
 
+export const dynamic = 'force-dynamic';
+
 async function authenticateCaregiver(request: NextRequest) {
   try {
     const token = await getToken({

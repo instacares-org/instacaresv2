@@ -15,6 +15,8 @@ import {
 import { logger } from '@/lib/logger';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const ALLOWED_DOCUMENT_TYPES = [
   'governmentIdFront',
   'governmentIdBack',

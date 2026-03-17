@@ -5,6 +5,8 @@ import { logAuditEvent, AuditActions } from '@/lib/audit-log';
 import { z } from 'zod';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const noticeBodySchema = z.object({
   content: z.string().min(1, 'Notice content is required').max(2000, 'Notice content too long').trim(),
   type: z.string().max(50, 'Type too long').optional().default('admin_notice'),

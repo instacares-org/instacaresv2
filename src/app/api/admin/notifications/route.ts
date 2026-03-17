@@ -5,6 +5,8 @@ import { logger, getClientInfo } from '@/lib/logger';
 import { z } from 'zod';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const notificationActionSchema = z.object({
   notificationId: z.string().min(1, 'Notification ID is required'),
   action: z.enum(['retry'], {

@@ -4,6 +4,8 @@ import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomId: string }> }

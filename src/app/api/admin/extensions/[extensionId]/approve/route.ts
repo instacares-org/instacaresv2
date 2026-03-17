@@ -5,6 +5,8 @@ import { requirePermission } from '@/lib/adminAuth';
 import { logAuditEvent, AuditActions } from '@/lib/audit-log';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 // POST - Admin approves or declines a booking extension
 export async function POST(
   request: NextRequest,

@@ -5,6 +5,8 @@ import { db } from '@/lib/db';
 import { z } from 'zod';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 // Validation schema for babysitter registration (Step 1: Basic info)
 const registerSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),

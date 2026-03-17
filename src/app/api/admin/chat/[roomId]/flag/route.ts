@@ -5,6 +5,8 @@ import { logAuditEvent, AuditActions } from '@/lib/audit-log';
 import { z } from 'zod';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const flagBodySchema = z.object({
   reason: z.string().max(1000, 'Reason too long').optional(),
   flaggedBy: z.string().max(200, 'FlaggedBy too long').optional(),

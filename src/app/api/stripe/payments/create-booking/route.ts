@@ -9,6 +9,8 @@ import { db } from '@/lib/db';
 import { z } from 'zod';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 
+export const dynamic = 'force-dynamic';
+
 const createBookingPaymentSchema = z.object({
   caregiverStripeAccountId: z.string()
     .min(1, 'Caregiver Stripe account ID is required')

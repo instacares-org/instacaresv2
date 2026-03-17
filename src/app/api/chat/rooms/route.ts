@@ -5,6 +5,8 @@ import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     // STEP 1: Require authentication (REMOVE userId/userType query param vulnerability)
@@ -29,7 +31,7 @@ export async function GET(request: NextRequest) {
     const cacheKey = cacheKeys.chatRooms(userId, userType);
 
     // Try to get from cache first
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     let chatRooms: any[] | null = await apiCache.get<any[]>(cacheKey);
 
     if (!chatRooms) {

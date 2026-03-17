@@ -6,6 +6,8 @@ import { notificationService } from '@/lib/notifications/notification.service';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const createSupervisorSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),

@@ -5,6 +5,8 @@ import { logger, getClientInfo } from '@/lib/logger';
 import { logAuditEvent, AuditActions } from '@/lib/audit-log';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     // STEP 1: Require admin authentication with permission check

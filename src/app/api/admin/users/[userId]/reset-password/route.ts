@@ -7,6 +7,8 @@ import { logAuditEvent, AuditActions } from '@/lib/audit-log';
 import { z } from 'zod';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const bodySchema = z.object({
   newPassword: z.string()
     .min(8, 'Password must be at least 8 characters')

@@ -5,6 +5,8 @@ import { db } from '@/lib/db';
 import { z } from 'zod';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 // Validation schema for references
 const referenceSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),

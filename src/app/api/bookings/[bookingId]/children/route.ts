@@ -3,6 +3,8 @@ import { withAuth } from '@/lib/auth-middleware';
 import { db as prisma } from '@/lib/db';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/bookings/[bookingId]/children - Get children for a specific booking
 // Caregivers can view children info for bookings they are assigned to
 export async function GET(

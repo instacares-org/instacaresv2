@@ -4,6 +4,8 @@ import { prisma } from '@/lib/db';
 import { authOptions } from '../../auth/[...nextauth]/options';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/user/session-info
  * Returns detailed user information from database based on current session.

@@ -5,6 +5,8 @@ import { logger, getClientInfo } from '@/lib/logger';
 import { smartCaregiverOperations } from '@/lib/db-fallback';
 import { getToken } from 'next-auth/jwt';
 
+export const dynamic = 'force-dynamic';
+
 interface Params {
   id: string;
 }

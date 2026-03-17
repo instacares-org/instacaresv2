@@ -5,6 +5,8 @@ import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const postMessageSchema = z.object({
   content: z.string().min(1, 'Content is required').max(2000, 'Content must be 2000 characters or less'),
   messageType: z.enum(['TEXT', 'SYSTEM']).default('TEXT'),

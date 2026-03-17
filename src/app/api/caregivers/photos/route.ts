@@ -6,6 +6,8 @@ import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { getToken } from 'next-auth/jwt';
 
+export const dynamic = 'force-dynamic';
+
 async function authenticateCaregiver(request: NextRequest) {
   try {
     const token = await getToken({

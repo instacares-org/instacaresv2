@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const switchRoleSchema = z.object({
   role: z.enum(['PARENT', 'CAREGIVER'], {
     message: 'Invalid role. Must be PARENT or CAREGIVER.',

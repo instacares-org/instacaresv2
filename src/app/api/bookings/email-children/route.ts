@@ -4,6 +4,8 @@ import { prisma } from '@/lib/db';
 import { emailService } from '@/lib/notifications/email.service';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 interface Child {
   id: string;
   firstName: string;

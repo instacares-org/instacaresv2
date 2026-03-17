@@ -4,6 +4,8 @@ import { requirePermission } from '@/lib/adminAuth';
 import { logger, getClientInfo } from '@/lib/logger';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 // Get detailed chat room info for admin
 export async function GET(
   request: NextRequest,

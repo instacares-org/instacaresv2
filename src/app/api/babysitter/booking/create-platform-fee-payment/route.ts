@@ -7,6 +7,8 @@ import { z } from 'zod';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 
+export const dynamic = 'force-dynamic';
+
 const paymentSchema = z.object({
   babysitterId: z.string().min(1),
   startTime: z.string().datetime(),

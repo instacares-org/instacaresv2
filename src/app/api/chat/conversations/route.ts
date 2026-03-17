@@ -6,6 +6,8 @@ import { logger } from '@/lib/logger';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const createConversationSchema = z.object({
   bookingId: z.string().min(1, 'Booking ID is required'),
   otherUserId: z.string().min(1, 'Other user ID is required'),

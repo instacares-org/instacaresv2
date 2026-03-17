@@ -6,6 +6,8 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { logger, getClientInfo } from '@/lib/logger';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const patchNotificationSchema = z.object({
   notificationId: z.string().min(1, 'Notification ID is required').optional(),
   markAllAsRead: z.boolean().optional(),

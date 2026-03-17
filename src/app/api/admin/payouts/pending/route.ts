@@ -5,6 +5,8 @@ import { logger, getClientInfo } from '@/lib/logger';
 import { z } from 'zod';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const manualPayoutSchema = z.object({
   bookingIds: z.array(z.string().min(1, 'Booking ID cannot be empty')).min(1, 'At least one booking ID is required'),
   caregiverId: z.string().min(1, 'Caregiver ID is required'),

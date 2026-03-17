@@ -4,6 +4,8 @@ import { prisma } from '@/lib/db';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const updatePermissionsSchema = z.object({
   permissions: z.object({
     canApproveUsers: z.boolean().optional(),

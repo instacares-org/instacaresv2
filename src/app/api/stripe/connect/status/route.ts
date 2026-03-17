@@ -3,6 +3,8 @@ import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { getStripeInstance } from '@/lib/stripe';
 import { prisma } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     const { accountId } = await request.json();

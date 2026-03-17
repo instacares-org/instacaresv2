@@ -6,6 +6,8 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
+export const dynamic = 'force-dynamic';
+
 const addResponseSchema = z.object({
   message: z.string().min(1, 'Message is required').max(5000, 'Message must be 5000 characters or less'),
   isInternal: z.boolean().optional().default(false),

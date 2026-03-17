@@ -7,6 +7,8 @@ import { logger, getClientInfo } from '@/lib/logger';
 import { z } from 'zod';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 
+export const dynamic = 'force-dynamic';
+
 const createReviewBodySchema = z.object({
   bookingId: z.string().min(1, 'Booking ID is required').max(50, 'Invalid booking ID'),
   caregiverId: z.string().min(1, 'Caregiver ID is required').max(50, 'Invalid caregiver ID'),

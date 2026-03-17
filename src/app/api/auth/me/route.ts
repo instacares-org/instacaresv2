@@ -4,6 +4,8 @@ import { authOptions } from '../[...nextauth]/options';
 import { prisma } from '@/lib/db';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     // Get NextAuth session

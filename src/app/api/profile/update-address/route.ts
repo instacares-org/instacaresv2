@@ -8,6 +8,8 @@ import { getTimezoneFromLocation } from '@/lib/timezone';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function PATCH(request: NextRequest) {
   try {
     const rateLimitResult = await checkRateLimit(request, RATE_LIMIT_CONFIGS.PROFILE_UPDATE);

@@ -3,6 +3,8 @@ import { db } from '@/lib/db';
 import { requirePermission } from '@/lib/adminAuth';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 // GET - List all babysitters for admin review
 export async function GET(request: NextRequest) {
   try {

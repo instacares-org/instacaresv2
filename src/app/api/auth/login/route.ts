@@ -5,6 +5,8 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/db';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Must be a valid email address'),
   password: z.string().min(1, 'Password is required'),

@@ -4,6 +4,8 @@ import { requirePermission } from '@/lib/adminAuth';
 import { purgeOldAuditLogs, logAuditEvent, AuditActions } from '@/lib/audit-log';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const permCheck = await requirePermission(request, 'canViewAuditLogs');
