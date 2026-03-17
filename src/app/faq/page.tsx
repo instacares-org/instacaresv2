@@ -76,7 +76,7 @@ export default function FAQPage() {
       questions: [
         {
           q: "How do I contact customer support?",
-          a: "You can reach us at info@instacares.net or call us at +1 (647) 955-7780. We're here to help!"
+          a: "You can reach us at info@instacares.com or call us at +1 (647) 955-7780. We're here to help!"
         },
         {
           q: "What if I have an issue with a caregiver?",
@@ -142,7 +142,7 @@ export default function FAQPage() {
               Contact Support
             </a>
             <a
-              href="mailto:info@instacares.net"
+              href="mailto:info@instacares.com"
               className="bg-white text-blue-600 border border-blue-600 px-6 py-3 rounded-lg font-medium hover:bg-blue-50 transition-colors text-center"
             >
               Email Us

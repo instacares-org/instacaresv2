@@ -110,8 +110,8 @@ describe('Security Configuration', () => {
       vi.resetModules();
       const { SECURITY_CONFIG } = await importModule();
 
-      expect(SECURITY_CONFIG.CORS.ORIGINS).toContain('https://instacares.net');
-      expect(SECURITY_CONFIG.CORS.ORIGINS).toContain('https://www.instacares.net');
+      expect(SECURITY_CONFIG.CORS.ORIGINS).toContain('https://instacares.com');
+      expect(SECURITY_CONFIG.CORS.ORIGINS).toContain('https://www.instacares.com');
       expect(SECURITY_CONFIG.CORS.ORIGINS).not.toContain('http://localhost:3000');
     });
 
@@ -123,7 +123,7 @@ describe('Security Configuration', () => {
 
       expect(SECURITY_CONFIG.CORS.ORIGINS).toContain('http://localhost:3000');
       expect(SECURITY_CONFIG.CORS.ORIGINS).toContain('http://127.0.0.1:3000');
-      expect(SECURITY_CONFIG.CORS.ORIGINS).not.toContain('https://instacares.net');
+      expect(SECURITY_CONFIG.CORS.ORIGINS).not.toContain('https://instacares.com');
     });
   });
 

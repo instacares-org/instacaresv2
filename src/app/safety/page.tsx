@@ -171,7 +171,7 @@ export default function SafetyPage() {
             </div>
             <div className="bg-white rounded-lg p-4 border border-red-200">
               <h3 className="font-semibold text-red-900 mb-1">Email</h3>
-              <p className="text-red-800">safety@instacares.net</p>
+              <p className="text-red-800">safety@instacares.com</p>
             </div>
           </div>
         </div>

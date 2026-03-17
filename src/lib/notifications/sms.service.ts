@@ -154,7 +154,7 @@ export class SMSService {
       ? 'Start accepting bookings and earning today!'
       : 'Find trusted caregivers for your family today!';
 
-    const body = `Welcome to InstaCares, ${user.firstName}! 🎉 ${roleMessage} Visit instacares.net to get started.`;
+    const body = `Welcome to InstaCares, ${user.firstName}! 🎉 ${roleMessage} Visit instacares.com to get started.`;
 
     return this.send({ to, body });
   }

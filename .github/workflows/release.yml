@@ -54,10 +54,10 @@ jobs:
           ${CHANGELOG}
 
           ### Deployment
-          Once merged, production deploys automatically to instacares.net.
+          Once merged, production deploys automatically to instacares.com.
 
           ### Pre-merge Checklist
-          - [ ] Changes tested on staging (instacares.com)
+          - [ ] Changes tested on staging (instacares.net)
           - [ ] No broken features on staging
 
           ---
@@ -81,10 +81,10 @@ jobs:
           ${CHANGELOG}
 
           ### Deployment
-          Once merged, production deploys automatically to instacares.net.
+          Once merged, production deploys automatically to instacares.com.
 
           ### Pre-merge Checklist
-          - [ ] Changes tested on staging (instacares.com)
+          - [ ] Changes tested on staging (instacares.net)
           - [ ] No broken features on staging
 
           ---

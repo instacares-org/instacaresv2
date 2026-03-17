@@ -322,7 +322,7 @@ function DocumentsStep({ data, updateData, errors }: StepProps) {
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     // In production, this would be the URL from your file upload service
-    const fakeUrl = `https://storage.instacares.net/documents/${Date.now()}-${file.name}`;
+    const fakeUrl = `https://storage.instacares.com/documents/${Date.now()}-${file.name}`;
     updateData({ [field]: fakeUrl });
 
     setUploading(null);

@@ -67,7 +67,7 @@ export async function POST(
     });
 
     // Send temporary password via email
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.net';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.com';
     const userName = targetUser.profile?.firstName || 'User';
     const emailResult = await emailService.send({
       to: targetUser.email,
@@ -110,7 +110,7 @@ export async function POST(
                           </a>
                         </td></tr>
                       </table>
-                      <p style="margin:30px 0 0;text-align:center;color:#9ca3af;font-size:12px;">If you didn't expect this reset, contact <a href="mailto:support@instacares.net" style="color:#5CBDB7;">support@instacares.net</a></p>
+                      <p style="margin:30px 0 0;text-align:center;color:#9ca3af;font-size:12px;">If you didn't expect this reset, contact <a href="mailto:support@instacares.com" style="color:#5CBDB7;">support@instacares.com</a></p>
                     </td>
                   </tr>
                   <tr><td style="padding:20px;text-align:center;">

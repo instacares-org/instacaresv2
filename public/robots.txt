@@ -10,4 +10,4 @@ Disallow: /babysitter-dashboard/
 Disallow: /chat/
 Disallow: /auth/
 
-Sitemap: https://instacares.net/sitemap.xml
+Sitemap: https://instacares.com/sitemap.xml

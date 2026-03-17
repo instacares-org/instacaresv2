@@ -3,7 +3,7 @@ name: Production Deployment
 # ============================================================================
 # AUTO-DEPLOY ON MERGE TO MAIN + MANUAL TRIGGER
 # ============================================================================
-# This workflow deploys to production (instacares.net) on Hostinger VPS.
+# This workflow deploys to production (instacares.com) on Hostinger VPS.
 #
 # Triggers:
 #   1. Automatically when a PR is merged into main
@@ -120,7 +120,7 @@ jobs:
 
     environment:
       name: production
-      url: https://instacares.net
+      url: https://instacares.com
 
     steps:
       - name: Setup SSH
@@ -254,7 +254,7 @@ jobs:
           echo "- **Deployed At:** ${{ steps.deploy-info.outputs.deploy-time }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Deployed By:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **URL:** https://instacares.net" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** https://instacares.com" >> $GITHUB_STEP_SUMMARY
 
   # Rollback job (on failure)
   rollback:

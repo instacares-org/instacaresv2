@@ -32,7 +32,7 @@ export class EmailService {
    * Get the FROM address at runtime to ensure env vars are loaded
    */
   private getFromAddress(): string {
-    return process.env.EMAIL_FROM || 'InstaCares <noreply@instacares.net>';
+    return process.env.EMAIL_FROM || 'InstaCares <noreply@instacares.com>';
   }
 
   /**
@@ -107,7 +107,7 @@ export class EmailService {
     },
     invoiceHtml?: string // Optional invoice HTML attachment
   ) {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.net';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.com';
 
     const html = `
       <!DOCTYPE html>
@@ -286,7 +286,7 @@ export class EmailService {
                               Need to make changes? Contact us at
                             </p>
                             <p style="font-size: 14px; color: #6b7280; margin: 0;">
-                              <a href="mailto:support@instacares.net" style="color: #5CBDB7; text-decoration: none; font-weight: 500;">support@instacares.net</a>
+                              <a href="mailto:support@instacares.com" style="color: #5CBDB7; text-decoration: none; font-weight: 500;">support@instacares.com</a>
                             </p>
                           </td>
                         </tr>
@@ -353,7 +353,7 @@ export class EmailService {
     },
     invoiceHtml?: string // Optional invoice HTML attachment
   ) {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.net';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.com';
 
     // Build children info HTML - handle case where children array is not provided
     const children = booking.children || [];
@@ -643,7 +643,7 @@ export class EmailService {
                               Questions about this booking? Contact us at
                             </p>
                             <p style="font-size: 14px; color: #6b7280; margin: 0;">
-                              <a href="mailto:support@instacares.net" style="color: #E8786B; text-decoration: none; font-weight: 500;">support@instacares.net</a>
+                              <a href="mailto:support@instacares.com" style="color: #E8786B; text-decoration: none; font-weight: 500;">support@instacares.com</a>
                             </p>
                           </td>
                         </tr>
@@ -902,7 +902,7 @@ export class EmailService {
     }
   ) {
     const isCaregiver = details.userType === 'CAREGIVER';
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.net';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.com';
     const dashboardUrl = isCaregiver
       ? `${baseUrl}/caregiver-dashboard`
       : `${baseUrl}/parent-dashboard`;
@@ -1041,7 +1041,7 @@ export class EmailService {
                               Need help? Our support team is here for you.
                             </p>
                             <p style="font-size: 14px; color: #6b7280; margin: 0;">
-                              Contact us at <a href="mailto:support@instacares.net" style="color: #E8786B; text-decoration: none; font-weight: 500;">support@instacares.net</a>
+                              Contact us at <a href="mailto:support@instacares.com" style="color: #E8786B; text-decoration: none; font-weight: 500;">support@instacares.com</a>
                             </p>
                           </td>
                         </tr>
@@ -1100,7 +1100,7 @@ export class EmailService {
     }
   ) {
     const isCaregiver = details.userType === 'CAREGIVER';
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.net';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.com';
     const dashboardUrl = isCaregiver
       ? `${baseUrl}/caregiver-dashboard`
       : `${baseUrl}/parent-dashboard`;
@@ -1187,7 +1187,7 @@ export class EmailService {
                         <tr>
                           <td style="padding: 20px 0 0; text-align: center;">
                             <p style="font-size: 14px; color: #6b7280; margin: 0;">
-                              Need help? Contact us at <a href="mailto:support@instacares.net" style="color: #10b981; text-decoration: none; font-weight: 500;">support@instacares.net</a>
+                              Need help? Contact us at <a href="mailto:support@instacares.com" style="color: #10b981; text-decoration: none; font-weight: 500;">support@instacares.com</a>
                             </p>
                           </td>
                         </tr>
@@ -1229,7 +1229,7 @@ export class EmailService {
       reason?: string;
     }
   ) {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.net';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.com';
 
     const html = `
       <!DOCTYPE html>
@@ -1285,7 +1285,7 @@ export class EmailService {
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
                               <tr>
                                 <td align="center" bgcolor="#6b7280" style="border-radius: 10px;">
-                                  <a href="mailto:support@instacares.net" target="_blank" style="display: inline-block; padding: 18px 45px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 10px; background-color: #6b7280; border: 1px solid #6b7280;">
+                                  <a href="mailto:support@instacares.com" target="_blank" style="display: inline-block; padding: 18px 45px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 10px; background-color: #6b7280; border: 1px solid #6b7280;">
                                     Contact Support
                                   </a>
                                 </td>
@@ -1304,7 +1304,7 @@ export class EmailService {
                         <tr>
                           <td style="padding: 20px 0 0; text-align: center;">
                             <p style="font-size: 14px; color: #6b7280; margin: 0;">
-                              Email us at <a href="mailto:support@instacares.net" style="color: #E8786B; text-decoration: none; font-weight: 500;">support@instacares.net</a>
+                              Email us at <a href="mailto:support@instacares.com" style="color: #E8786B; text-decoration: none; font-weight: 500;">support@instacares.com</a>
                             </p>
                           </td>
                         </tr>
@@ -1348,7 +1348,7 @@ export class EmailService {
       permissions: Record<string, boolean>;
     }
   ) {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.net';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.com';
     const dashboardUrl = `${baseUrl}/admin/dashboard`;
 
     const permissionLabels: Record<string, string> = {
@@ -1474,7 +1474,7 @@ export class EmailService {
                         <tr>
                           <td style="padding: 20px 0 0; text-align: center;">
                             <p style="font-size: 14px; color: #6b7280; margin: 0;">
-                              Need help? Contact us at <a href="mailto:support@instacares.net" style="color: #F5C857; text-decoration: none; font-weight: 500;">support@instacares.net</a>
+                              Need help? Contact us at <a href="mailto:support@instacares.com" style="color: #F5C857; text-decoration: none; font-weight: 500;">support@instacares.com</a>
                             </p>
                           </td>
                         </tr>
