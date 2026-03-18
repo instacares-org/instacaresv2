@@ -83,13 +83,12 @@ export function generateCSRFToken(sessionId?: string): string {
   const random = bytesToHex(randomBytes);
   const data = `${timestamp}:${random}:${sessionId || 'anonymous'}`;
 
-  // Keyed hash: incorporate CSRF_SECRET so tokens can't be forged without the secret
-  const keyedInput = CSRF_SECRET + ':' + data;
-  const keyedHash = keyedInput.split('').reduce((hash, char) => {
-    return ((hash << 5) - hash) + char.charCodeAt(0);
-  }, 0);
+  // HMAC-SHA256 signature using Node.js crypto (server-side only)
+   
+  const { createHmac } = require('crypto');
+  const signature = createHmac('sha256', CSRF_SECRET).update(data).digest('hex');
 
-  const token = `${btoa(data)}.${Math.abs(keyedHash).toString(16)}`;
+  const token = `${btoa(data)}.${signature}`;
   return token;
 }
 
@@ -108,15 +107,17 @@ export function validateCSRFToken(token: string, sessionId?: string): boolean {
     const data = atob(encodedData);
     const [timestamp, random, tokenSessionId] = data.split(':');
     
-    // Verify the signature using keyed hash (must match generateCSRFToken)
-    const keyedInput = CSRF_SECRET + ':' + data;
-    const expectedHash = keyedInput.split('').reduce((hash, char) => {
-      return ((hash << 5) - hash) + char.charCodeAt(0);
-    }, 0);
+    // Verify HMAC-SHA256 signature (must match generateCSRFToken)
+     
+    const { createHmac, timingSafeEqual } = require('crypto');
+    const expectedSignature = createHmac('sha256', CSRF_SECRET).update(data).digest('hex');
 
-    const expectedSignature = Math.abs(expectedHash).toString(16);
-    
-    if (signature !== expectedSignature) {
+    // Use timing-safe comparison to prevent timing attacks
+    try {
+      if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
+        return false;
+      }
+    } catch {
       return false;
     }
     

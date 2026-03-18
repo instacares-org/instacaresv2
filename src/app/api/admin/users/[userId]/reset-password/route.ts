@@ -54,7 +54,10 @@ export async function POST(
     }
 
     // Use provided password or generate a temporary one
-    const tempPassword = newPassword || (Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10).toUpperCase());
+    const tempPassword = newPassword || Array.from(
+      crypto.getRandomValues(new Uint8Array(20)),
+      (b) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'[b % 72]
+    ).join('');
 
     // Hash the password
     const hashedPassword = await bcrypt.hash(tempPassword, 10);

@@ -27,7 +27,7 @@ module.exports = {
     },
     {
       name: 'socket-server',
-      script: 'server.js',
+      script: 'socket-server.js',
       cwd: '/var/www/instacaresv2',
       instances: 1,
       exec_mode: 'fork',

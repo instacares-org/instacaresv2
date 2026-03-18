@@ -36,6 +36,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3008,
+        CORS_ORIGINS: 'https://instacares.net,https://www.instacares.net',
       },
       kill_timeout: 5000,
       autorestart: true,

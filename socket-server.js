@@ -199,9 +199,11 @@ const httpServer = createServer((req, res) => {
 // Create Socket.IO server
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.NODE_ENV === 'production'
-      ? ['https://instacares.com', 'https://www.instacares.com', 'https://instacares.net', 'https://www.instacares.net']
-      : ['http://localhost:3000', 'http://localhost:3005'],
+    origin: process.env.CORS_ORIGINS
+      ? process.env.CORS_ORIGINS.split(',')
+      : process.env.NODE_ENV === 'production'
+        ? ['https://instacares.com', 'https://www.instacares.com']
+        : ['http://localhost:3000', 'http://localhost:3005'],
     methods: ['GET', 'POST'],
     credentials: true
   },
