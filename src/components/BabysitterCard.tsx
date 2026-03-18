@@ -1,14 +1,17 @@
 "use client";
 
-import { HeartIcon, MapPinIcon, ClockIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
+import { HeartIcon, MapPinIcon, ClockIcon, ShieldCheckIcon, ChatBubbleLeftEllipsisIcon } from "@heroicons/react/24/outline";
 import { StarIcon as StarIconSolid, HeartIcon as HeartIconSolid } from "@heroicons/react/24/solid";
 import { useState, memo, useMemo } from "react";
 import CaregiverProfileImage from "./CaregiverProfileImage";
 import BabysitterDetailModal from "./BabysitterDetailModal";
 import BookBabysitterModal from "./BookBabysitterModal";
+import BookingChatModal from "./BookingChatModal";
+import { useAuth } from "../contexts/AuthContext";
 
 export interface BabysitterCardData {
   id: string;
+  userId: string;
   type: 'babysitter';
   firstName: string;
   lastName: string;
@@ -41,9 +44,11 @@ interface BabysitterCardProps {
 }
 
 function BabysitterCard({ babysitter, isSelected }: BabysitterCardProps) {
+  const { isAuthenticated, isParent, user } = useAuth();
   const [isFavorited, setIsFavorited] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
+  const [showChatModal, setShowChatModal] = useState(false);
 
   const rating = babysitter.averageRating ?? 0;
   const name = `${babysitter.firstName} ${babysitter.lastName}`;
@@ -210,7 +215,7 @@ function BabysitterCard({ babysitter, isSelected }: BabysitterCardProps) {
           )}
         </div>
 
-        {/* Price and View Button */}
+        {/* Price and Action Buttons */}
         <div className="flex items-center justify-between">
           <div>
             <span className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -219,15 +224,29 @@ function BabysitterCard({ babysitter, isSelected }: BabysitterCardProps) {
             <span className="text-xs text-gray-500 dark:text-gray-400">/hr</span>
           </div>
 
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowBookingModal(true);
-            }}
-            className="bg-violet-500 hover:bg-violet-600 text-white px-2 py-1 rounded text-xs font-medium transition"
-          >
-            Book
-          </button>
+          <div className="flex items-center gap-1.5">
+            {isAuthenticated && isParent && babysitter.userId && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowChatModal(true);
+                }}
+                className="text-violet-600 hover:text-violet-700 hover:bg-violet-50 p-1.5 rounded-lg transition"
+                title="Message"
+              >
+                <ChatBubbleLeftEllipsisIcon className="h-5 w-5" />
+              </button>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowBookingModal(true);
+              }}
+              className="bg-violet-500 hover:bg-violet-600 text-white px-2 py-1 rounded text-xs font-medium transition"
+            >
+              Book
+            </button>
+          </div>
         </div>
       </div>
 
@@ -248,6 +267,19 @@ function BabysitterCard({ babysitter, isSelected }: BabysitterCardProps) {
           babysitterId={babysitter.id}
           isOpen={showBookingModal}
           onClose={() => setShowBookingModal(false)}
+        />
+      )}
+
+      {showChatModal && user && babysitter.userId && (
+        <BookingChatModal
+          isOpen={showChatModal}
+          onClose={() => setShowChatModal(false)}
+          directProviderId={babysitter.userId}
+          otherPartyName={name}
+          otherPartyAvatar={babysitter.avatar || undefined}
+          otherPartyId={babysitter.userId}
+          currentUserId={user.id}
+          currentUserName={user.profile?.firstName || user.name || 'User'}
         />
       )}
     </div>

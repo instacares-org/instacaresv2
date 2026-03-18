@@ -1,13 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { StarIcon, HeartIcon, MapPinIcon, ClockIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
+import { StarIcon, HeartIcon, MapPinIcon, ClockIcon, ShieldCheckIcon, ChatBubbleLeftEllipsisIcon } from "@heroicons/react/24/outline";
 import { StarIcon as StarIconSolid, HeartIcon as HeartIconSolid } from "@heroicons/react/24/solid";
 import { useState, memo, useMemo } from "react";
 import CaregiverProfileImage from "./CaregiverProfileImage";
 import BookingModal from "./BookingModal";
 import CaregiverDetailModal from "./CaregiverDetailModal";
+import BookingChatModal from "./BookingChatModal";
 import { useLanguage } from "../contexts/LanguageContext";
+import { useAuth } from "../contexts/AuthContext";
 
 export interface AvailabilitySlot {
   id: string;
@@ -79,9 +81,11 @@ interface CaregiverCardProps {
 
 function CaregiverCard({ caregiver, onHover, isSelected, showContactInfo = false }: CaregiverCardProps) {
   const { t } = useLanguage();
+  const { isAuthenticated, isParent, user } = useAuth();
   const [isFavorited, setIsFavorited] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showChatModal, setShowChatModal] = useState(false);
 
   // Debug logging for Isabella specifically
   if (caregiver.name === 'Isabella Rodriguez') {
@@ -268,7 +272,7 @@ function CaregiverCard({ caregiver, onHover, isSelected, showContactInfo = false
           </div>
         )}
 
-        {/* Price and Book Button */}
+        {/* Price and Action Buttons */}
         <div className="flex items-center justify-between">
           <div>
             <span className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -276,25 +280,39 @@ function CaregiverCard({ caregiver, onHover, isSelected, showContactInfo = false
             </span>
             <span className="text-xs text-gray-500 dark:text-gray-400">{t('caregiver.hourlyRate')}</span>
           </div>
-          
-          {caregiver.stripeOnboarded && caregiver.canReceivePayments ? (
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowBookingModal(true);
-              }}
-              className="bg-rose-500 hover:bg-rose-600 text-white px-2 py-1 rounded text-xs font-medium transition"
-            >
-              {t('common.book')}
-            </button>
-          ) : (
-            <div className="flex items-center gap-1 text-[10px] text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200">
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <span className="font-medium">{t('caregiver.setupInProgress')}</span>
-            </div>
-          )}
+
+          <div className="flex items-center gap-1.5">
+            {isAuthenticated && isParent && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowChatModal(true);
+                }}
+                className="text-green-600 hover:text-green-700 hover:bg-green-50 p-1.5 rounded-lg transition"
+                title="Message"
+              >
+                <ChatBubbleLeftEllipsisIcon className="h-5 w-5" />
+              </button>
+            )}
+            {caregiver.stripeOnboarded && caregiver.canReceivePayments ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowBookingModal(true);
+                }}
+                className="bg-rose-500 hover:bg-rose-600 text-white px-2 py-1 rounded text-xs font-medium transition"
+              >
+                {t('common.book')}
+              </button>
+            ) : (
+              <div className="flex items-center gap-1 text-[10px] text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span className="font-medium">{t('caregiver.setupInProgress')}</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       
@@ -316,6 +334,19 @@ function CaregiverCard({ caregiver, onHover, isSelected, showContactInfo = false
             setShowDetailModal(false);
             setShowBookingModal(true);
           }}
+        />
+      )}
+
+      {showChatModal && user && (
+        <BookingChatModal
+          isOpen={showChatModal}
+          onClose={() => setShowChatModal(false)}
+          directProviderId={caregiver.id}
+          otherPartyName={caregiver.name}
+          otherPartyAvatar={caregiver.profilePhoto || caregiver.image}
+          otherPartyId={caregiver.id}
+          currentUserId={user.id}
+          currentUserName={user.profile?.firstName || user.name || 'User'}
         />
       )}
     </div>

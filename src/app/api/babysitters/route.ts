@@ -146,6 +146,7 @@ export async function GET(request: NextRequest) {
 
       return {
         id: b.id,
+        userId: b.userId,
         firstName: b.user.profile?.firstName,
         lastName: b.user.profile?.lastName?.charAt(0) + '.', // Privacy
         avatar: b.user.profile?.avatar,

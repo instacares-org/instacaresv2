@@ -356,22 +356,24 @@ model PlatformSettings {
 }
 
 model ChatRoom {
-  id            String    @id @default(cuid())
-  bookingId     String    @unique
+  id            String       @id @default(cuid())
+  roomType      ChatRoomType @default(BOOKING)
+  bookingId     String?      @unique
   parentId      String
   caregiverId   String
-  isActive      Boolean   @default(true)
+  isActive      Boolean      @default(true)
   lastMessageAt DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  booking       Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  caregiver     User      @relation("CaregiverChatRooms", fields: [caregiverId], references: [id])
-  parent        User      @relation("ParentChatRooms", fields: [parentId], references: [id])
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  booking       Booking?     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  caregiver     User         @relation("CaregiverChatRooms", fields: [caregiverId], references: [id])
+  parent        User         @relation("ParentChatRooms", fields: [parentId], references: [id])
   messages      Message[]
 
   @@index([parentId])
   @@index([caregiverId])
   @@index([lastMessageAt])
+  @@index([roomType])
   @@map("chat_rooms")
 }
 
@@ -810,6 +812,11 @@ enum ServiceType {
 enum MessageType {
   TEXT
   SYSTEM
+}
+
+enum ChatRoomType {
+  BOOKING
+  DIRECT
 }
 
 enum CheckInOutStatus {

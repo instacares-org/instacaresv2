@@ -61,11 +61,21 @@ export async function GET(request: NextRequest) {
             },
           },
         },
+        parent: {
+          include: {
+            profile: true,
+          },
+        },
+        caregiver: {
+          include: {
+            profile: true,
+          },
+        },
         messages: {
           orderBy: {
             createdAt: 'desc',
           },
-          take: 1, // Get the latest message
+          take: 1,
           include: {
             sender: {
               include: {
@@ -99,51 +109,71 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter out chat rooms without bookings and transform the data for the frontend
-    const validRooms = chatRooms.filter(room => room.booking !== null);
-    const formattedRooms = validRooms.map((room) => ({
-      id: room.id,
-      booking: {
-        id: room.booking.id,
-        startTime: room.booking.startTime,
-        endTime: room.booking.endTime,
-        status: room.booking.status,
-        address: room.booking.address,
-        childrenCount: room.booking.childrenCount,
-        parent: {
-          id: room.booking.parent.id,
-          email: room.booking.parent.email,
+    // Transform the data for the frontend (include both booking and direct rooms)
+    const formattedRooms = chatRooms.map((room) => {
+      const isBookingRoom = room.booking !== null;
+
+      // For booking rooms: get other party from booking relation
+      // For direct rooms: get other party from parent/caregiver relation
+      const otherParty = userType === 'parent'
+        ? (isBookingRoom ? room.booking.caregiverUser : room.caregiver)
+        : (isBookingRoom ? room.booking.parent : room.parent);
+
+      return {
+        id: room.id,
+        roomType: room.roomType || 'BOOKING',
+        booking: isBookingRoom ? {
+          id: room.booking.id,
+          startTime: room.booking.startTime,
+          endTime: room.booking.endTime,
+          status: room.booking.status,
+          address: room.booking.address,
+          childrenCount: room.booking.childrenCount,
+          parent: {
+            id: room.booking.parent.id,
+            email: room.booking.parent.email,
+            profile: {
+              firstName: room.booking.parent.profile?.firstName || '',
+              lastName: room.booking.parent.profile?.lastName || '',
+              phone: room.booking.parent.profile?.phone,
+              avatar: room.booking.parent.profile?.avatar,
+            },
+          },
+          caregiver: {
+            id: room.booking.caregiverUser.id,
+            email: room.booking.caregiverUser.email,
+            profile: {
+              firstName: room.booking.caregiverUser.profile?.firstName || '',
+              lastName: room.booking.caregiverUser.profile?.lastName || '',
+              phone: room.booking.caregiverUser.profile?.phone,
+              avatar: room.booking.caregiverUser.profile?.avatar,
+            },
+          },
+        } : null,
+        otherParty: {
+          id: otherParty?.id || '',
+          email: otherParty?.email || '',
           profile: {
-            firstName: room.booking.parent.profile?.firstName || '',
-            lastName: room.booking.parent.profile?.lastName || '',
-            phone: room.booking.parent.profile?.phone,
-            avatar: room.booking.parent.profile?.avatar,
+            firstName: otherParty?.profile?.firstName || '',
+            lastName: otherParty?.profile?.lastName || '',
+            phone: otherParty?.profile?.phone,
+            avatar: otherParty?.profile?.avatar,
           },
         },
-        caregiver: {
-          id: room.booking.caregiverUser.id,
-          email: room.booking.caregiverUser.email,
-          profile: {
-            firstName: room.booking.caregiverUser.profile?.firstName || '',
-            lastName: room.booking.caregiverUser.profile?.lastName || '',
-            phone: room.booking.caregiverUser.profile?.phone,
-            avatar: room.booking.caregiverUser.profile?.avatar,
+        lastMessage: room.messages[0] ? {
+          id: room.messages[0].id,
+          content: room.messages[0].content,
+          createdAt: room.messages[0].createdAt,
+          sender: {
+            id: room.messages[0].senderId,
+            userType: room.messages[0].sender.userType,
           },
-        },
-      },
-      lastMessage: room.messages[0] ? {
-        id: room.messages[0].id,
-        content: room.messages[0].content,
-        createdAt: room.messages[0].createdAt,
-        sender: {
-          id: room.messages[0].senderId,
-          userType: room.messages[0].sender.userType,
-        },
-      } : null,
-      unreadCount: room._count.messages,
-      lastMessageAt: room.lastMessageAt,
-      isActive: room.isActive,
-    }));
+        } : null,
+        unreadCount: room._count.messages,
+        lastMessageAt: room.lastMessageAt,
+        isActive: room.isActive,
+      };
+    });
 
     logger.info('Chat rooms fetched successfully', {
       userId,

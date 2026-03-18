@@ -29,7 +29,8 @@ interface Message {
 interface BookingChatModalProps {
   isOpen: boolean;
   onClose: () => void;
-  bookingId: string;
+  bookingId?: string;
+  directProviderId?: string;
   otherPartyName: string;
   otherPartyAvatar?: string;
   otherPartyId: string;
@@ -41,13 +42,13 @@ export default function BookingChatModal({
   isOpen,
   onClose,
   bookingId,
+  directProviderId,
   otherPartyName,
   otherPartyAvatar,
   otherPartyId,
   currentUserId,
   currentUserName
 }: BookingChatModalProps) {
-  console.log('BookingChatModal rendered', { isOpen, bookingId, otherPartyId, currentUserId });
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -184,18 +185,31 @@ export default function BookingChatModal({
   }, [socket, chatRoomId, currentUserId]);
 
   useEffect(() => {
-    if (isOpen && bookingId) {
+    if (isOpen && (bookingId || directProviderId)) {
       initializeChat();
     }
-  }, [isOpen, bookingId]);
+  }, [isOpen, bookingId, directProviderId]);
 
   const initializeChat = async () => {
     setLoading(true);
     try {
-      const roomResponse = await fetch('/api/chat/rooms/find-or-create', {
+      let endpoint: string;
+      let body: object;
+
+      if (bookingId) {
+        endpoint = '/api/chat/rooms/find-or-create';
+        body = { bookingId };
+      } else if (directProviderId) {
+        endpoint = '/api/chat/rooms/find-or-create-direct';
+        body = { providerId: directProviderId };
+      } else {
+        throw new Error('Either bookingId or directProviderId is required');
+      }
+
+      const roomResponse = await fetch(endpoint, {
         method: 'POST',
         headers: addCSRFHeader({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ bookingId })
+        body: JSON.stringify(body)
       });
 
       if (!roomResponse.ok) {

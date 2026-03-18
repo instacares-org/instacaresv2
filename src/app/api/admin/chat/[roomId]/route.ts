@@ -53,14 +53,14 @@ export async function GET(
 
     console.log('Chat room found, fetching participants...');
 
-    // Fetch parent and caregiver separately
+    // Fetch parent and caregiver separately (use room's direct fields, not booking)
     const [parent, caregiver] = await Promise.all([
       db.user.findUnique({
-        where: { id: chatRoom.booking.parentId },
+        where: { id: chatRoom.parentId },
         include: { profile: true }
       }),
       db.user.findUnique({
-        where: { id: chatRoom.booking.caregiverId },
+        where: { id: chatRoom.caregiverId },
         include: { profile: true }
       })
     ]);
@@ -75,14 +75,15 @@ export async function GET(
     // Format for admin view
     const adminView = {
       id: chatRoom.id,
-      booking: {
+      roomType: chatRoom.roomType || 'BOOKING',
+      booking: chatRoom.booking ? {
         id: chatRoom.booking.id,
         status: chatRoom.booking.status,
         startTime: chatRoom.booking.startTime,
         endTime: chatRoom.booking.endTime,
         totalAmount: chatRoom.booking.totalAmount,
         address: chatRoom.booking.address
-      },
+      } : null,
       participants: {
         parent: {
           id: parent.id,

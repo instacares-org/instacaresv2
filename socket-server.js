@@ -367,8 +367,8 @@ io.on('connection', (socket) => {
         where: {
           id: roomId,
           OR: [
-            { booking: { parentId: userId } },
-            { booking: { caregiverId: userId } }
+            { parentId: userId },
+            { caregiverId: userId }
           ]
         }
       });
@@ -431,14 +431,14 @@ io.on('connection', (socket) => {
       // Use sanitized content
       const sanitizedContent = contentValidation.sanitized;
 
-      // Verify room access
+      // Verify room access (works for both BOOKING and DIRECT rooms)
       const room = await prisma.chatRoom.findFirst({
         where: {
           id: roomId,
           isActive: true,
           OR: [
-            { booking: { parentId: senderId } },
-            { booking: { caregiverId: senderId } }
+            { parentId: senderId },
+            { caregiverId: senderId }
           ]
         }
       });
@@ -491,23 +491,17 @@ io.on('connection', (socket) => {
       });
 
       // Emit unread count update to the recipient (not the sender)
-      // Get the booking to find the other participant
-      const roomWithBooking = await prisma.chatRoom.findUnique({
+      const roomData = await prisma.chatRoom.findUnique({
         where: { id: roomId },
-        include: {
-          booking: {
-            select: { parentId: true, caregiverId: true, id: true }
-          }
-        }
+        select: { parentId: true, caregiverId: true, bookingId: true }
       });
 
-      if (roomWithBooking?.booking) {
-        const recipientId = roomWithBooking.booking.parentId === senderId
-          ? roomWithBooking.booking.caregiverId
-          : roomWithBooking.booking.parentId;
+      if (roomData) {
+        const recipientId = roomData.parentId === senderId
+          ? roomData.caregiverId
+          : roomData.parentId;
 
         if (recipientId) {
-          // Get current unread count for this booking's chat room
           const unreadCount = await prisma.message.count({
             where: {
               chatRoomId: roomId,
@@ -516,14 +510,13 @@ io.on('connection', (socket) => {
             }
           });
 
-          // Emit to recipient's personal room
           io.to('user:' + recipientId).emit('unread_count_update', {
-            bookingId: roomWithBooking.booking.id,
+            bookingId: roomData.bookingId || null,
             roomId: roomId,
             unreadCount: unreadCount
           });
 
-          console.log('[Socket] Sent unread_count_update to user:', recipientId, 'booking:', roomWithBooking.booking.id, 'count:', unreadCount);
+          console.log('[Socket] Sent unread_count_update to user:', recipientId, 'room:', roomId, 'count:', unreadCount);
         }
       }
 
@@ -601,22 +594,18 @@ io.on('connection', (socket) => {
       });
 
       // Also emit unread count update to the current user (now 0)
-      const roomWithBooking = await prisma.chatRoom.findUnique({
+      const roomData = await prisma.chatRoom.findUnique({
         where: { id: roomId },
-        include: {
-          booking: { select: { id: true } }
-        }
+        select: { bookingId: true }
       });
 
-      if (roomWithBooking?.booking) {
-        // Emit to self (current user's room) that their unread count is now 0
-        io.to('user:' + socket.userId).emit('unread_count_update', {
-          bookingId: roomWithBooking.booking.id,
-          roomId: roomId,
-          unreadCount: 0
-        });
-        console.log('[Socket] Marked messages read, sent unread_count_update to user:', socket.userId, 'booking:', roomWithBooking.booking.id, 'count: 0');
-      }
+      // Emit to self that their unread count is now 0
+      io.to('user:' + socket.userId).emit('unread_count_update', {
+        bookingId: roomData?.bookingId || null,
+        roomId: roomId,
+        unreadCount: 0
+      });
+      console.log('[Socket] Marked messages read, sent unread_count_update to user:', socket.userId, 'room:', roomId, 'count: 0');
     } catch (error) {
       console.error('[Socket] Mark messages read error:', error);
     }

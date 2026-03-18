@@ -154,6 +154,8 @@ export async function GET(request: NextRequest) {
               caregiverProfile: true
             }
           },
+          parent: { include: { profile: true } },
+          caregiver: { include: { profile: true } },
           _count: {
             select: { messages: true }
           }
@@ -198,12 +200,17 @@ export async function GET(request: NextRequest) {
       recentActivity: finalFilteredRooms.map(room => ({
         id: room.id,
         bookingId: room.bookingId,
-        parentName: `${room.booking.parent.profile?.firstName} ${room.booking.parent.profile?.lastName}`,
-        caregiverName: `${room.booking.caregiverUser.profile?.firstName} ${room.booking.caregiverUser.profile?.lastName}`,
+        roomType: room.roomType || 'BOOKING',
+        parentName: room.booking
+          ? `${room.booking.parent.profile?.firstName} ${room.booking.parent.profile?.lastName}`
+          : `${room.parent?.profile?.firstName || ''} ${room.parent?.profile?.lastName || ''}`,
+        caregiverName: room.booking
+          ? `${room.booking.caregiverUser.profile?.firstName} ${room.booking.caregiverUser.profile?.lastName}`
+          : `${room.caregiver?.profile?.firstName || ''} ${room.caregiver?.profile?.lastName || ''}`,
         messageCount: room._count.messages,
         lastActivity: room.lastMessageAt,
         isActive: room.isActive,
-        bookingStatus: room.booking.status
+        bookingStatus: room.booking?.status || null
       })),
       pagination: {
         total: finalFilteredRooms.length,

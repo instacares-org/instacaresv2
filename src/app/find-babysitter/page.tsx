@@ -23,6 +23,7 @@ import {
 
 interface Babysitter {
   id: string;
+  userId: string;
   firstName: string;
   lastName: string;
   avatar: string | null;
