@@ -229,14 +229,14 @@ describe('Log levels', () => {
     vi.resetModules();
     vi.unmock('@/lib/logger');
     const origEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'development';
+    (process.env as any).NODE_ENV = 'development';
 
     return import('@/lib/logger').then((mod) => {
       mod.logger.debug('trace detail');
       expect(console.debug).toHaveBeenCalledTimes(1);
       const parsed = JSON.parse(vi.mocked(console.debug).mock.calls[0][0] as string);
       expect(parsed.level).toBe('DEBUG');
-      process.env.NODE_ENV = origEnv;
+      (process.env as any).NODE_ENV = origEnv;
     });
   });
 
@@ -279,7 +279,7 @@ describe('Log level filtering', () => {
     vi.resetModules();
     vi.unmock('@/lib/logger');
     const origEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
+    (process.env as any).NODE_ENV = 'production';
 
     const mod = await import('@/lib/logger');
 
@@ -299,14 +299,14 @@ describe('Log level filtering', () => {
     expect(console.info).not.toHaveBeenCalled();
     expect(console.debug).not.toHaveBeenCalled();
 
-    process.env.NODE_ENV = origEnv;
+    (process.env as any).NODE_ENV = origEnv;
   });
 
   it('development logs all levels including DEBUG', async () => {
     vi.resetModules();
     vi.unmock('@/lib/logger');
     const origEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'development';
+    (process.env as any).NODE_ENV = 'development';
 
     const mod = await import('@/lib/logger');
 
@@ -325,7 +325,7 @@ describe('Log level filtering', () => {
     expect(console.info).toHaveBeenCalledTimes(1);
     expect(console.debug).toHaveBeenCalledTimes(1);
 
-    process.env.NODE_ENV = origEnv;
+    (process.env as any).NODE_ENV = origEnv;
   });
 });
 

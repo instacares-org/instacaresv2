@@ -3,6 +3,8 @@ import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 import { requirePermission } from '@/lib/adminAuth';
 import { prisma } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const permCheck = await requirePermission(request, 'canApproveUsers');

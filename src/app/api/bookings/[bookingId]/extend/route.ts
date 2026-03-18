@@ -7,6 +7,8 @@ import { z } from 'zod';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const extendBookingBodySchema = z.object({
   extensionMinutes: z.number()
     .int('Extension minutes must be a whole number')

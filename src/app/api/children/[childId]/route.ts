@@ -4,6 +4,8 @@ import { db } from '@/lib/db';
 import { z } from 'zod';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const emergencyContactSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, 'Contact name is required').max(200, 'Contact name too long').trim(),

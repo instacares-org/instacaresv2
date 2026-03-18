@@ -1,37 +1,25 @@
 name: Staging Deployment
 
 on:
-  # Auto-deploy on push to develop branch
   push:
-    branches: [ develop ]
-
-  # Manual trigger
+    branches: [develop]
   workflow_dispatch:
-    inputs:
-      skip_tests:
-        description: 'Skip tests (use with caution)'
-        required: false
-        type: boolean
-        default: false
+
+concurrency:
+  group: staging-deploy-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   NODE_VERSION: '20.x'
-  APP_NAME: 'instacares'
-  STAGING_HOST: '10.0.0.56'
-  STAGING_USER: 'faradyoo7'
-  STAGING_PATH: '~/instacares_v2'
 
 jobs:
-  # Build and Test Job
-  build-and-test:
-    name: Build & Test
+  # Quality gates
+  quality:
+    name: Lint, Type-Check, Test, Build
     runs-on: ubuntu-latest
 
-    outputs:
-      build-success: ${{ steps.build.outputs.success }}
-
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -41,7 +29,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci --prefer-offline --no-audit
+        run: npm ci --prefer-offline --no-audit --force
 
       - name: Create minimal env file
         run: |
@@ -58,141 +46,143 @@ jobs:
         run: npm run type-check
 
       - name: Unit Tests
-        if: ${{ github.event.inputs.skip_tests != 'true' }}
         run: npm test
 
-      - name: Build Application
-        id: build
+      - name: Build
         run: |
-          export NODE_ENV=production
           export SKIP_ENV_VALIDATION=true
           npm run build
-          echo "success=true" >> $GITHUB_OUTPUT
 
-      - name: Build Summary
-        run: |
-          echo "## Staging Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build Status:** Success" >> $GITHUB_STEP_SUMMARY
-
-  # Deploy to Ubuntu Staging Server
-  deploy-staging:
+  # Deploy to Hostinger VPS
+  deploy:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: build-and-test
-    if: ${{ needs.build-and-test.outputs.build-success == 'true' }}
+    needs: quality
 
     environment:
       name: staging
-      url: http://10.0.0.56:3005
+      url: https://instacares.net
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
       - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.STAGING_SSH_KEY }}
-
-      - name: Prepare Deployment Info
-        id: deploy-info
         run: |
-          COMMIT_MSG="$(git log -1 --pretty=format:'%s')"
-          COMMIT_AUTHOR="$(git log -1 --pretty=format:'%an')"
-          DEPLOY_TIME="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-
-          echo "commit-msg=${COMMIT_MSG}" >> $GITHUB_OUTPUT
-          echo "commit-author=${COMMIT_AUTHOR}" >> $GITHUB_OUTPUT
-          echo "deploy-time=${DEPLOY_TIME}" >> $GITHUB_OUTPUT
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 72.60.71.43 >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Deploy to Staging Server
-        env:
-          STAGING_HOST: ${{ secrets.STAGING_HOST || '10.0.0.56' }}
-          STAGING_USER: ${{ secrets.STAGING_USER || 'faradyoo7' }}
         run: |
-          echo "Starting deployment to Staging..."
-
-          # Add staging host to known hosts
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${STAGING_HOST} >> ~/.ssh/known_hosts 2>/dev/null || true
-
-          # Deploy script
-          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=60 ${STAGING_USER}@${STAGING_HOST} << 'DEPLOY_EOF'
+          ssh -o StrictHostKeyChecking=no root@72.60.71.43 << 'DEPLOY_EOF'
           set -e
+          echo "=== Staging deployment started at $(date) ==="
 
-          echo "Deployment started on $(date)"
+          cd /var/www/instacares-staging
 
-          cd ~/instacares_v2
-
-          # Pull latest code
-          echo "Pulling latest code from develop branch..."
-          git fetch --all
-          git checkout develop 2>/dev/null || git checkout -b develop origin/develop
+          # Pull latest develop branch
+          echo "Pulling latest code..."
+          git fetch origin develop
           git reset --hard origin/develop
-          git pull origin develop
 
-          # Rebuild Docker containers
-          echo "Rebuilding Docker containers..."
-          docker compose down || true
-          docker compose build --no-cache
-          docker compose up -d
-
-          # Wait for containers to be healthy
-          echo "Waiting for containers to be healthy..."
-          sleep 15
-
-          # Run Prisma migrations inside container
-          echo "Running database migrations..."
-          docker compose exec -T app npx prisma migrate deploy || echo "Migration completed"
-
-          # Health check
-          echo "Performing health check..."
-          if docker compose ps | grep -q "Up"; then
-            echo "Staging deployment successful!"
-            docker compose ps
-          else
-            echo "Deployment may have issues"
-            docker compose logs --tail=50
-            exit 1
+          # Ensure uploads symlink exists (points to production uploads)
+          if [ ! -L public/uploads ]; then
+            rm -rf public/uploads
+            ln -s /var/www/instacaresv2/public/uploads public/uploads
+            echo "Recreated uploads symlink"
           fi
 
-          echo "Staging deployment completed at $(date)"
+          # Install dependencies
+          echo "Installing dependencies..."
+          npm ci --prefer-offline --no-audit --force
+
+          # Generate Prisma client
+          echo "Generating Prisma client..."
+          npx prisma generate
+
+          # Build with env vars from PM2
+          echo "Building application..."
+          STAGING_ID=$(pm2 id instacares-staging 2>/dev/null | tr -d '[]' || echo "")
+          if [ -n "$STAGING_ID" ]; then
+            export DATABASE_URL="$(pm2 env $STAGING_ID 2>/dev/null | grep '^DATABASE_URL' | sed 's/^DATABASE_URL: //')"
+            export NEXTAUTH_SECRET="$(pm2 env $STAGING_ID 2>/dev/null | grep '^NEXTAUTH_SECRET' | sed 's/^NEXTAUTH_SECRET: //')"
+          fi
+          export SKIP_ENV_VALIDATION=true
+          export NEXTAUTH_URL="https://instacares.net"
+          export NEXT_PUBLIC_BASE_URL="https://instacares.net"
+          npm run build
+
+          # Restart only staging processes
+          echo "Restarting staging processes..."
+          pm2 restart instacares-staging --update-env || pm2 start ecosystem.staging.config.js
+          pm2 restart socket-server-staging --update-env || true
+          pm2 save
+
+          echo "=== Staging deployment completed at $(date) ==="
           DEPLOY_EOF
 
-      - name: Verify Deployment
-        env:
-          STAGING_HOST: ${{ secrets.STAGING_HOST || '10.0.0.56' }}
-          STAGING_USER: ${{ secrets.STAGING_USER || 'faradyoo7' }}
+      - name: Smoke Tests
         run: |
-          echo "Verifying staging deployment..."
+          echo "Running smoke tests against staging..."
+          sleep 8
 
-          ssh -o StrictHostKeyChecking=no ${STAGING_USER}@${STAGING_HOST} << 'VERIFY_EOF'
-          cd ~/instacares_v2
+          ssh -o StrictHostKeyChecking=no root@72.60.71.43 << 'SMOKE_EOF'
+          PASS=0
+          FAIL=0
 
-          echo "=== Docker Container Status ==="
-          docker compose ps
+          # Test 1: Homepage loads
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3007)
+          if echo "$STATUS" | grep -qE "200|302"; then
+            echo "✅ Homepage: HTTP $STATUS"
+            PASS=$((PASS+1))
+          else
+            echo "❌ Homepage: HTTP $STATUS"
+            FAIL=$((FAIL+1))
+          fi
+
+          # Test 2: Health endpoint
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3007/api/health)
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Health API: HTTP $STATUS"
+            PASS=$((PASS+1))
+          else
+            echo "❌ Health API: HTTP $STATUS"
+            FAIL=$((FAIL+1))
+          fi
+
+          # Test 3: Caregivers API
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3007/api/caregivers)
+          if echo "$STATUS" | grep -qE "200|304"; then
+            echo "✅ Caregivers API: HTTP $STATUS"
+            PASS=$((PASS+1))
+          else
+            echo "❌ Caregivers API: HTTP $STATUS"
+            FAIL=$((FAIL+1))
+          fi
+
+          # Test 4: Static assets
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3007/robots.txt)
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Static assets: HTTP $STATUS"
+            PASS=$((PASS+1))
+          else
+            echo "❌ Static assets: HTTP $STATUS"
+            FAIL=$((FAIL+1))
+          fi
 
           echo ""
-          echo "=== Recent App Logs ==="
-          docker compose logs app --tail=20 || echo "No logs available"
+          echo "Smoke tests: $PASS passed, $FAIL failed"
 
-          echo ""
-          echo "=== API Health Check ==="
-          curl -s http://localhost:3005/api/health 2>/dev/null || echo "Health endpoint not available (this is OK)"
-
-          echo ""
-          echo "Verification completed"
-          VERIFY_EOF
+          if [ "$FAIL" -gt 0 ]; then
+            echo "⚠️ Some smoke tests failed"
+            pm2 logs instacares-staging --lines 15 --nostream || true
+            exit 1
+          fi
+          SMOKE_EOF
 
       - name: Deployment Summary
+        if: always()
         run: |
           echo "## Staging Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status:** Success" >> $GITHUB_STEP_SUMMARY
-          echo "- **Environment:** Staging (Ubuntu Docker)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Deployed At:** ${{ steps.deploy-info.outputs.deploy-time }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Author:** ${{ steps.deploy-info.outputs.commit-author }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Message:** ${{ steps.deploy-info.outputs.commit-msg }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **URL:** http://10.0.0.56:3005" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** https://instacares.net" >> $GITHUB_STEP_SUMMARY

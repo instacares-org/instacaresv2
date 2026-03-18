@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { logAuditEvent, AuditActions } from '@/lib/audit-log';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 // Validation schema for admin actions
 const adminActionSchema = z.object({
   action: z.enum(['approve', 'reject', 'suspend', 'unsuspend']),

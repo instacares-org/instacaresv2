@@ -44,8 +44,8 @@ const DEFAULT_PLATFORM_INFO = {
   address: 'Toronto, Ontario, Canada',
   tax: 'GST/HST: 123456789',
   phone: '+1 (416) 000-0000',
-  email: 'support@instacares.net',
-  website: 'https://instacares.net',
+  email: 'support@instacares.com',
+  website: 'https://instacares.com',
 };
 
 /**

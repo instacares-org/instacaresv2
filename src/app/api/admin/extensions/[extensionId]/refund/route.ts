@@ -5,6 +5,8 @@ import { requirePermission } from '@/lib/adminAuth';
 import { logAuditEvent, AuditActions } from '@/lib/audit-log';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 // POST - Refund an extension payment
 export async function POST(
   request: NextRequest,

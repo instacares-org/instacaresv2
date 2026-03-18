@@ -9,6 +9,8 @@ import { getCommissionRate } from '@/lib/stripe';
 import { CreateBookingSchema, validateRequest } from '@/lib/api-validation';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/bookings - Get user's bookings
 export async function GET(request: NextRequest) {
   const clientInfo = getClientInfo(request);

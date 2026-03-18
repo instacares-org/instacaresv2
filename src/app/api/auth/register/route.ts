@@ -12,6 +12,8 @@ import sharp from 'sharp';
 import { emailService } from '@/lib/notifications/email.service';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   const clientInfo = getClientInfo(request);
   const startTime = Date.now();

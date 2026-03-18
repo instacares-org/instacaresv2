@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server';
 import { Server } from 'socket.io';
 import { db } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 // Global variable to store the Socket.IO server
 let io: Server;
 

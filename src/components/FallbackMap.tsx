@@ -245,7 +245,7 @@ export default function FallbackMap({ caregivers, selectedCaregiver, onCaregiver
             Development Mode - OpenStreetMap Fallback
           </div>
           <p className="text-green-600 dark:text-green-400 mb-2">
-            Using fallback map to avoid Mapbox conflicts with production (instacares.net)
+            Using fallback map to avoid Mapbox conflicts with production (instacares.com)
           </p>
           <details className="cursor-pointer">
             <summary className="text-green-500 hover:underline">

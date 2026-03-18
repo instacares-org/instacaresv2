@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
       });
 
       // Get the host and protocol from the request headers for dynamic URL
-      const host = request.headers.get('host') || process.env.NEXT_PUBLIC_BASE_URL?.replace(/^https?:\/\//, '') || 'instacares.net';
+      const host = request.headers.get('host') || process.env.NEXT_PUBLIC_BASE_URL?.replace(/^https?:\/\//, '') || 'instacares.com';
       const protocol = request.headers.get('x-forwarded-proto') || 'https';
       const baseUrl = `${protocol}://${host}`;
       const demoOnboardingUrl = `${baseUrl}/caregiver-dashboard?setup=success&demo=true`;
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
         data: { stripeAccountId: demoAccountId }
       });
 
-      const host = request.headers.get('host') || process.env.NEXT_PUBLIC_BASE_URL?.replace(/^https?:\/\//, '') || 'instacares.net';
+      const host = request.headers.get('host') || process.env.NEXT_PUBLIC_BASE_URL?.replace(/^https?:\/\//, '') || 'instacares.com';
       const protocol = request.headers.get('x-forwarded-proto') || 'https';
       const baseUrl = `${protocol}://${host}`;
       const demoOnboardingUrl = `${baseUrl}/caregiver-dashboard?setup=success&demo=true`;

@@ -13,7 +13,7 @@ import TokenManager from '../components/providers/TokenManager';
 import CookieConsent from '../components/CookieConsent';
 import JsonLd from '../components/JsonLd';
 
-const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.net';
+const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.com';
 
 export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),
@@ -79,8 +79,8 @@ export default function RootLayout({
             '@context': 'https://schema.org',
             '@type': 'Organization',
             name: 'InstaCares',
-            url: 'https://instacares.net',
-            logo: 'https://instacares.net/logo.webp',
+            url: 'https://instacares.com',
+            logo: 'https://instacares.com/logo.webp',
             description:
               "Canada's trusted platform connecting families with verified childcare providers.",
             areaServed: {

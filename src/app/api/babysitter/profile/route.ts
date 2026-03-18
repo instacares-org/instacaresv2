@@ -3,6 +3,8 @@ import { db } from '@/lib/db';
 import { z } from 'zod';
 import { requireAuth, apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 // Validation schema for profile update
 const profileUpdateSchema = z.object({
   bio: z.string().min(10).max(500).optional(),

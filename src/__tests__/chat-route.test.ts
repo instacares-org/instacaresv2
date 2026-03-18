@@ -185,8 +185,8 @@ describe('GET /api/chat/rooms', () => {
     const req = new NextRequest('http://localhost:3005/api/chat/rooms');
     const res = await GET_ROOMS(req);
 
-    expect(res.status).toBe(200);
-    const body = await res.json();
+    expect(res!.status).toBe(200);
+    const body = await res!.json();
     expect(body.success).toBe(true);
     expect(body.data).toHaveLength(1);
     expect(body.data[0].id).toBe('room-1');
@@ -220,8 +220,8 @@ describe('GET /api/chat/rooms', () => {
     const req = new NextRequest('http://localhost:3005/api/chat/rooms');
     const res = await GET_ROOMS(req);
 
-    expect(res.status).toBe(200);
-    const body = await res.json();
+    expect(res!.status).toBe(200);
+    const body = await res!.json();
     expect(body.success).toBe(true);
     expect(body.data).toHaveLength(1); // only the room with booking
   });
@@ -233,8 +233,8 @@ describe('GET /api/chat/rooms', () => {
     const req = new NextRequest('http://localhost:3005/api/chat/rooms');
     const res = await GET_ROOMS(req);
 
-    expect(res.status).toBe(200);
-    const body = await res.json();
+    expect(res!.status).toBe(200);
+    const body = await res!.json();
     expect(body.success).toBe(true);
     expect(body.data).toEqual([]);
   });
@@ -247,7 +247,7 @@ describe('GET /api/chat/rooms', () => {
     const req = new NextRequest('http://localhost:3005/api/chat/rooms');
     const res = await GET_ROOMS(req);
 
-    const body = await res.json();
+    const body = await res!.json();
     expect(body.success).toBe(true);
     expect(body.data[0].lastMessage).toBeNull();
     expect(body.data[0].unreadCount).toBe(0);
@@ -259,7 +259,7 @@ describe('GET /api/chat/rooms', () => {
     const req = new NextRequest('http://localhost:3005/api/chat/rooms');
     const res = await GET_ROOMS(req);
 
-    expect(res.status).toBe(401);
+    expect(res!.status).toBe(401);
   });
 
   it('returns empty array when database throws (graceful fallback)', async () => {
@@ -270,8 +270,8 @@ describe('GET /api/chat/rooms', () => {
     const res = await GET_ROOMS(req);
 
     // The route catches DB errors and returns an empty array wrapped in apiSuccess
-    expect(res.status).toBe(200);
-    const body = await res.json();
+    expect(res!.status).toBe(200);
+    const body = await res!.json();
     expect(body.success).toBe(true);
     expect(body.data).toEqual([]);
   });
@@ -309,8 +309,8 @@ describe('GET /api/chat/conversations', () => {
     const req = new NextRequest('http://localhost:3005/api/chat/conversations');
     const res = await GET_CONVERSATIONS(req);
 
-    expect(res.status).toBe(200);
-    const body = await res.json();
+    expect(res!.status).toBe(200);
+    const body = await res!.json();
     expect(body.success).toBe(true);
     expect(body.data).toHaveLength(1);
     expect(body.data[0].otherUser.firstName).toBe('Jane');
@@ -322,8 +322,8 @@ describe('GET /api/chat/conversations', () => {
     const req = new NextRequest('http://localhost:3005/api/chat/conversations');
     const res = await GET_CONVERSATIONS(req);
 
-    expect(res.status).toBe(401);
-    const body = await res.json();
+    expect(res!.status).toBe(401);
+    const body = await res!.json();
     expect(body.success).toBe(false);
   });
 
@@ -338,7 +338,7 @@ describe('GET /api/chat/conversations', () => {
     const req = new NextRequest('http://localhost:3005/api/chat/conversations');
     const res = await GET_CONVERSATIONS(req);
 
-    expect(res.status).toBe(500);
+    expect(res!.status).toBe(500);
   });
 });
 
@@ -388,8 +388,8 @@ describe('POST /api/chat/conversations', () => {
     const req = createConversationRequest({ bookingId: 'booking-1', otherUserId: 'cg-1' });
     const res = await POST_CONVERSATION(req);
 
-    expect(res.status).toBe(200);
-    const body = await res.json();
+    expect(res!.status).toBe(200);
+    const body = await res!.json();
     expect(body.success).toBe(true);
     expect(body.data.id).toBe('room-new');
     expect(body.data.otherUser.firstName).toBe('Jane');
@@ -424,8 +424,8 @@ describe('POST /api/chat/conversations', () => {
     const req = createConversationRequest({ bookingId: 'booking-1', otherUserId: 'cg-1' });
     const res = await POST_CONVERSATION(req);
 
-    expect(res.status).toBe(200);
-    const body = await res.json();
+    expect(res!.status).toBe(200);
+    const body = await res!.json();
     expect(body.data.id).toBe('room-existing');
     // create should NOT have been called
     expect(mockPrismaChatRoom.create).not.toHaveBeenCalled();
@@ -441,8 +441,8 @@ describe('POST /api/chat/conversations', () => {
     const req = createConversationRequest({ otherUserId: 'cg-1' });
     const res = await POST_CONVERSATION(req);
 
-    expect(res.status).toBe(400);
-    const body = await res.json();
+    expect(res!.status).toBe(400);
+    const body = await res!.json();
     expect(body.error).toBe('Invalid input');
   });
 
@@ -457,7 +457,7 @@ describe('POST /api/chat/conversations', () => {
     const req = createConversationRequest({ bookingId: 'booking-nonexistent', otherUserId: 'cg-1' });
     const res = await POST_CONVERSATION(req);
 
-    expect(res.status).toBe(404);
+    expect(res!.status).toBe(404);
   });
 
   it('rejects when user is not a participant of the booking', async () => {
@@ -476,8 +476,8 @@ describe('POST /api/chat/conversations', () => {
     const req = createConversationRequest({ bookingId: 'booking-1', otherUserId: 'cg-1' });
     const res = await POST_CONVERSATION(req);
 
-    expect(res.status).toBe(403);
-    const body = await res.json();
+    expect(res!.status).toBe(403);
+    const body = await res!.json();
     expect(body.error).toContain('Access denied');
   });
 
@@ -487,6 +487,6 @@ describe('POST /api/chat/conversations', () => {
     const req = createConversationRequest({ bookingId: 'booking-1', otherUserId: 'cg-1' });
     const res = await POST_CONVERSATION(req);
 
-    expect(res.status).toBe(401);
+    expect(res!.status).toBe(401);
   });
 });

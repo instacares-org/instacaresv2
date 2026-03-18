@@ -7,6 +7,8 @@ import { apiCache, cacheKeys, cacheTTL } from '@/lib/cache';
 import { DateTime } from 'luxon';
 import type { CaregiverService, CaregiverPhoto, AvailabilitySlot, Prisma } from '@prisma/client';
 
+export const dynamic = 'force-dynamic';
+
 // Interface for the transformed caregiver data used throughout the GET handler
 interface CaregiverProfile {
   firstName?: string;

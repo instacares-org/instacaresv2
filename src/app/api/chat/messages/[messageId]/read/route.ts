@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db';
 import { getAuthenticatedUser, createApiResponse } from '@/lib/chatAuth';
 import { logger } from '@/lib/logger';
 
+export const dynamic = 'force-dynamic';
+
 interface RouteContext {
   params: Promise<{
     messageId: string;

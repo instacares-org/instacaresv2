@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next';
 import { db } from '@/lib/db';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.net';
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.com';
 
   const staticPages: MetadataRoute.Sitemap = [
     {

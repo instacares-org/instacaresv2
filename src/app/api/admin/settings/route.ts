@@ -5,6 +5,8 @@ import { logAuditEvent, AuditActions } from '@/lib/audit-log';
 import { z } from 'zod';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const settingsBodySchema = z.object({
   platformCommissionRate: z.number()
     .min(0, 'Platform commission rate must be at least 0')

@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const addCaregiverRoleSchema = z.object({
   caregiverData: z.object({
     bio: z.string().max(2000, 'Bio too long').optional(),

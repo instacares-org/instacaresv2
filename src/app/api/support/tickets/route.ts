@@ -7,6 +7,8 @@ import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 
+export const dynamic = 'force-dynamic';
+
 const ticketCategories = [
   'BOOKING_ISSUE',
   'PAYMENT_ISSUE',

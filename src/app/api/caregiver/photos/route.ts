@@ -7,6 +7,8 @@ import { prisma } from '@/lib/db';
 import { validatePhotoUrl, createFileUploadError } from '@/lib/file-upload-validation';
 import { logger } from '@/lib/logger';
 
+export const dynamic = 'force-dynamic';
+
 const addPhotoSchema = z.object({
   url: z.string().min(1, 'Photo URL is required').url('Must be a valid URL'),
   caption: z.string().max(500, 'Caption must be 500 characters or less').optional().default(''),

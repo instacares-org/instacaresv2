@@ -7,7 +7,7 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.net';
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.com';
 
   try {
     const babysitter = await db.babysitter.findUnique({

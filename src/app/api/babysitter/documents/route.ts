@@ -5,6 +5,8 @@ import { db } from '@/lib/db';
 import { z } from 'zod';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 // Validation schema for document upload
 const documentsSchema = z.object({
   governmentIdFront: z.string().url().optional(),

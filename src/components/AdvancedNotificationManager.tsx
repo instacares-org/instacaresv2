@@ -213,7 +213,7 @@ const AdvancedNotificationManager: React.FC = () => {
         description: 'Sent to new users after registration or OAuth signup',
         triggers: ['User registration', 'Google OAuth signup'],
         variables: ['[FirstName]', '[UserType]', '[DashboardURL]'],
-        sampleData: { FirstName: 'Emily', UserType: 'Parent', DashboardURL: 'https://instacares.net/dashboard' },
+        sampleData: { FirstName: 'Emily', UserType: 'Parent', DashboardURL: 'https://instacares.com/dashboard' },
         preview: `Hi [FirstName]! Welcome to InstaCares! As a [UserType], you can now access your dashboard at [DashboardURL].`,
         color: 'green'
       },
@@ -256,7 +256,7 @@ const AdvancedNotificationManager: React.FC = () => {
         triggers: ['User registration with phone'],
         variables: ['[FirstName]', '[RoleMessage]'],
         sampleData: { FirstName: 'Emily', RoleMessage: 'Find trusted caregivers for your family today!' },
-        preview: `Welcome to InstaCares, [FirstName]! [RoleMessage] Visit instacares.net to get started.`,
+        preview: `Welcome to InstaCares, [FirstName]! [RoleMessage] Visit instacares.com to get started.`,
         color: 'purple'
       },
       {
@@ -1230,7 +1230,7 @@ const AdvancedNotificationManager: React.FC = () => {
                   type="email"
                   value={templateTestEmail}
                   onChange={(e) => setTemplateTestEmail(e.target.value)}
-                  placeholder="admin@instacares.net"
+                  placeholder="admin@instacares.com"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>

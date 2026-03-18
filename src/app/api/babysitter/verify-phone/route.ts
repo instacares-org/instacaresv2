@@ -5,6 +5,8 @@ import { db } from '@/lib/db';
 import { smsService } from '@/lib/notifications/sms.service';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 // In-memory store for verification codes (TTL: 10 minutes)
 const verificationCodes = new Map<string, { code: string; expiresAt: number; attempts: number }>();
 

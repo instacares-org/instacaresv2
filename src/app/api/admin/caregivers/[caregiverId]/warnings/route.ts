@@ -6,6 +6,8 @@ import { emailService } from '@/lib/notifications/email.service';
 import { logAuditEvent, AuditActions } from '@/lib/audit-log';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 // GET - Get all warnings for a caregiver
 export async function GET(
   request: NextRequest,
@@ -126,7 +128,7 @@ export async function POST(
 
     // Check if 3rd strike - flag for admin review
     let reviewRequired = false;
-    let statusUpdated = false;
+    const statusUpdated = false;
 
     if (newStrikeNumber >= 3) {
       reviewRequired = true;

@@ -6,6 +6,8 @@ import { logger } from '@/lib/logger';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 const sendMessageSchema = z.object({
   conversationId: z.string().min(1, 'Conversation ID is required'),
   content: z.string().min(1, 'Message content is required').max(2000, 'Message content too long (max 2000 characters)'),

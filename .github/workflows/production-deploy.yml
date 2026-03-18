@@ -1,37 +1,41 @@
 name: Production Deployment
 
 # ============================================================================
-# MANUAL DEPLOYMENT ONLY
+# AUTO-DEPLOY ON MERGE TO MAIN + MANUAL TRIGGER
 # ============================================================================
-# This workflow deploys to production (instacares.net) on Hostinger VPS.
-# It is MANUAL ONLY to prevent accidental deployments.
+# This workflow deploys to production (instacares.com) on Hostinger VPS.
 #
-# Workflow: develop -> staging (auto) -> main -> production (manual)
+# Triggers:
+#   1. Automatically when a PR is merged into main
+#   2. Manually via workflow_dispatch (type "deploy" to confirm)
+#
+# Workflow: develop → staging (auto) → PR to main → production (auto)
 # ============================================================================
 
 on:
-  # Manual trigger only - for production safety
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       confirm_deploy:
-        description: 'Type "deploy" to confirm production deployment'
+        description: 'Type "deploy" to confirm manual production deployment'
         required: true
         type: string
-      skip_backup:
-        description: 'Skip backup (faster, but risky)'
-        required: false
-        type: boolean
-        default: false
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
 
 env:
   NODE_VERSION: '20.x'
   APP_NAME: 'instacares'
 
 jobs:
-  # Confirmation Check
+  # Confirmation Check (only for manual triggers)
   confirm:
     name: Confirm Deployment
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Verify Confirmation
         run: |
@@ -46,6 +50,7 @@ jobs:
     name: Build & Test
     runs-on: ubuntu-latest
     needs: confirm
+    if: always() && (needs.confirm.result == 'success' || needs.confirm.result == 'skipped')
 
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -71,7 +76,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci --prefer-offline --no-audit
+        run: npm ci --prefer-offline --no-audit --force
 
       - name: Create minimal env file
         run: |
@@ -105,211 +110,199 @@ jobs:
           echo "- **Node Version:** ${{ env.NODE_VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Status:** Success" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
 
   # Deploy to Hostinger
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: build-and-test
-    if: ${{ needs.build-and-test.outputs.build-success == 'true' }}
+    needs: [confirm, build-and-test]
+    if: always() && needs.build-and-test.result == 'success' && needs.build-and-test.outputs.build-success == 'true'
 
     environment:
       name: production
-      url: https://instacares.net
+      url: https://instacares.com
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
       - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.7.0
-        with:
-          ssh-private-key: ${{ secrets.HOSTINGER_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 72.60.71.43 >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Prepare Deployment Info
         id: deploy-info
         run: |
           VERSION="${{ needs.build-and-test.outputs.version }}"
-          COMMIT_MSG="$(git log -1 --pretty=format:'%s')"
-          COMMIT_AUTHOR="$(git log -1 --pretty=format:'%an')"
           DEPLOY_TIME="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "commit-msg=${COMMIT_MSG}" >> $GITHUB_OUTPUT
-          echo "commit-author=${COMMIT_AUTHOR}" >> $GITHUB_OUTPUT
           echo "deploy-time=${DEPLOY_TIME}" >> $GITHUB_OUTPUT
 
-      - name: Deploy to Hostinger Server
+      - name: Deploy to Production Server
         run: |
-          echo "Starting deployment to Hostinger..."
-
-          # SSH connection details
-          SSH_HOST="${{ secrets.HOSTINGER_HOST }}"
-          SSH_USER="${{ secrets.HOSTINGER_USER }}"
-          SSH_PORT="${{ secrets.HOSTINGER_PORT || 22 }}"
-          APP_DIR="/var/www/instacaresv2"
-
-          # Create deployment script
-          cat > deploy_script.sh << 'DEPLOY_SCRIPT_EOF'
-          #!/bin/bash
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 root@72.60.71.43 << 'DEPLOY_EOF'
           set -e
+          echo "=== Production deployment started at $(date) ==="
 
-          echo "Deployment started on $(date)"
-
-          # Navigate to application directory
           cd /var/www/instacaresv2
-
-          # Create deployment log
-          echo "Creating deployment log..."
-          echo "Deployment started: $(date)" > /tmp/github-deploy.log
-
-          # Stop services gracefully
-          echo "Stopping services..."
-          pm2 stop instacares || echo "Service not running"
-          pm2 stop socket-server || echo "Socket server not running"
 
           # Backup current version
           echo "Creating backup..."
-          sudo mkdir -p /var/backups/instacares
-          sudo tar -czf "/var/backups/instacares/backup-$(date +%Y%m%d-%H%M%S).tar.gz" . 2>/dev/null || echo "Backup created"
+          mkdir -p /var/backups/instacares
+          tar -czf "/var/backups/instacares/backup-$(date +%Y%m%d-%H%M%S).tar.gz" \
+            --exclude=node_modules --exclude=.next --exclude=.git \
+            . 2>/dev/null || echo "Backup created (some warnings ok)"
 
-          # Configure Git with credentials for authentication
-          echo "Configuring Git authentication..."
-          git config --global credential.helper store
-          echo "https://${{ secrets.GIT_USERNAME }}:${{ secrets.GIT_TOKEN }}@github.com" > ~/.git-credentials
-
-          # Pull latest code
+          # Pull latest code from main
           echo "Pulling latest code..."
-          git fetch --all
+          git fetch origin main
           git reset --hard origin/main
-          git pull origin main
 
           # Install dependencies
           echo "Installing dependencies..."
-          npm ci --production=false --verbose
-          echo "Dependencies installed successfully"
+          npm ci --prefer-offline --no-audit --force
 
           # Generate Prisma client
           echo "Generating Prisma client..."
           npx prisma generate
 
-          # Build application
+          # Run database migrations (extract DATABASE_URL from PM2)
+          echo "Running database migrations..."
+          PROD_ID=$(pm2 id instacares 2>/dev/null | tr -d '[]' || echo "")
+          if [ -n "$PROD_ID" ]; then
+            export DATABASE_URL="$(pm2 env $PROD_ID 2>/dev/null | grep '^DATABASE_URL' | sed 's/^DATABASE_URL: //')"
+          fi
+          npx prisma migrate deploy || echo "Migration completed (or no pending migrations)"
+
+          # Build application (NEXT_PUBLIC vars read from .env, secrets from PM2)
           echo "Building application..."
-          export NODE_ENV=production
           export SKIP_ENV_VALIDATION=true
           npm run build
-          echo "Application built successfully"
 
-          # Run database migrations
-          echo "Running database migrations..."
-          npx prisma migrate deploy || echo "Migration completed"
-
-          # Start services using ecosystem config
-          echo "Starting services..."
-          pm2 start ecosystem.config.js --env production
+          # Restart services (preserves PM2 environment variables)
+          echo "Restarting services..."
+          pm2 restart instacares --update-env || pm2 start ecosystem.config.js --env production
+          pm2 restart socket-server --update-env || true
           pm2 save
 
-          # Health check
-          echo "Performing health check..."
+          echo "=== Production deployment completed at $(date) ==="
+          DEPLOY_EOF
+
+      - name: Smoke Tests
+        run: |
+          echo "Running production smoke tests..."
           sleep 10
 
-          if pm2 list | grep -q "instacares.*online"; then
-            echo "Deployment successful!"
-            echo "Application is running"
+          ssh -o StrictHostKeyChecking=no root@72.60.71.43 << 'SMOKE_EOF'
+          PASS=0
+          FAIL=0
+
+          # Test 1: Homepage
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3005)
+          if echo "$STATUS" | grep -qE "200|302"; then
+            echo "✅ Homepage: HTTP $STATUS"
+            PASS=$((PASS+1))
           else
-            echo "Deployment may have issues"
-            pm2 logs instacares --lines 20 --nostream
+            echo "❌ Homepage: HTTP $STATUS"
+            FAIL=$((FAIL+1))
           fi
 
-          # Log completion
-          echo "Deployment completed: $(date)" >> /tmp/github-deploy.log
-          echo "Status: Success" >> /tmp/github-deploy.log
+          # Test 2: Health API
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3005/api/health)
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Health API: HTTP $STATUS"
+            PASS=$((PASS+1))
+          else
+            echo "❌ Health API: HTTP $STATUS"
+            FAIL=$((FAIL+1))
+          fi
 
-          DEPLOY_SCRIPT_EOF
+          # Test 3: Caregivers API
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3005/api/caregivers)
+          if echo "$STATUS" | grep -qE "200|304"; then
+            echo "✅ Caregivers API: HTTP $STATUS"
+            PASS=$((PASS+1))
+          else
+            echo "❌ Caregivers API: HTTP $STATUS"
+            FAIL=$((FAIL+1))
+          fi
 
-          # Make script executable
-          chmod +x deploy_script.sh
+          # Test 4: PM2 status
+          if pm2 list | grep -q "instacares.*online"; then
+            echo "✅ PM2 process: online"
+            PASS=$((PASS+1))
+          else
+            echo "❌ PM2 process: not online"
+            FAIL=$((FAIL+1))
+          fi
 
-          # Execute deployment on server
-          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} 'bash -s' < deploy_script.sh
+          echo ""
+          echo "Smoke tests: $PASS passed, $FAIL failed"
 
-      - name: Verify Deployment
-        run: |
-          echo "Verifying deployment..."
-
-          SSH_HOST="${{ secrets.HOSTINGER_HOST }}"
-          SSH_USER="${{ secrets.HOSTINGER_USER }}"
-          SSH_PORT="${{ secrets.HOSTINGER_PORT || 22 }}"
-
-          # Check if services are running
-          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} << 'VERIFY_EOF'
-          echo "Checking PM2 processes..."
-          pm2 list
-
-          echo "Checking application logs..."
-          pm2 logs instacares --lines 10 --nostream || echo "No recent logs"
-
-          echo "Checking disk space..."
-          df -h /var/www/instacaresv2
-
-          echo "Verification completed"
-          VERIFY_EOF
+          if [ "$FAIL" -gt 0 ]; then
+            echo "⚠️ Some smoke tests failed — check logs"
+            pm2 logs instacares --lines 20 --nostream || true
+            exit 1
+          fi
+          SMOKE_EOF
 
       - name: Deployment Summary
+        if: always()
         run: |
           echo "## Production Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status:** Success" >> $GITHUB_STEP_SUMMARY
           echo "- **Version:** ${{ steps.deploy-info.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Environment:** Production" >> $GITHUB_STEP_SUMMARY
           echo "- **Deployed At:** ${{ steps.deploy-info.outputs.deploy-time }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed By:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Author:** ${{ steps.deploy-info.outputs.commit-author }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Message:** ${{ steps.deploy-info.outputs.commit-msg }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **URL:** https://instacares.net" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** https://instacares.com" >> $GITHUB_STEP_SUMMARY
 
   # Rollback job (on failure)
   rollback:
-    name: Rollback
+    name: Rollback on Failure
     runs-on: ubuntu-latest
-    if: failure() && github.event_name == 'workflow_dispatch'
+    if: failure()
     needs: [deploy-production]
 
     steps:
       - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.7.0
-        with:
-          ssh-private-key: ${{ secrets.HOSTINGER_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 72.60.71.43 >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Rollback to Previous Version
         run: |
-          echo "Deployment failed, initiating rollback..."
+          echo "⚠️ Deployment failed, initiating rollback..."
 
-          SSH_HOST="${{ secrets.HOSTINGER_HOST }}"
-          SSH_USER="${{ secrets.HOSTINGER_USER }}"
-          SSH_PORT="${{ secrets.HOSTINGER_PORT || 22 }}"
-
-          ssh -o StrictHostKeyChecking=no -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} << 'ROLLBACK_EOF'
+          ssh -o StrictHostKeyChecking=no root@72.60.71.43 << 'ROLLBACK_EOF'
           cd /var/www/instacaresv2
 
           # Stop current services
-          pm2 stop all
+          pm2 stop instacares || true
+          pm2 stop socket-server || true
 
           # Find latest backup
-          LATEST_BACKUP=$(ls -t /var/backups/instacares/backup-*.tar.gz | head -n 1)
+          LATEST_BACKUP=$(ls -t /var/backups/instacares/backup-*.tar.gz 2>/dev/null | head -n 1)
 
           if [ -n "$LATEST_BACKUP" ]; then
             echo "Rolling back to: $LATEST_BACKUP"
+            tar -xzf "$LATEST_BACKUP" -C /var/www/instacaresv2/
 
-            # Extract backup
-            sudo tar -xzf "$LATEST_BACKUP" -C /var/www/instacaresv2/
+            # Rebuild after rollback
+            npm ci --prefer-offline --no-audit --force
+            npx prisma generate
+            export SKIP_ENV_VALIDATION=true
+            npm run build
 
-            # Restart services
-            pm2 start ecosystem.config.js --env production
+            # Restart services (preserves PM2 environment variables)
+            pm2 restart instacares --update-env || pm2 start ecosystem.config.js --env production
+            pm2 restart socket-server --update-env || true
             pm2 save
 
-            echo "Rollback completed"
+            echo "✅ Rollback completed"
           else
-            echo "No backup found for rollback"
+            echo "❌ No backup found — manual intervention required"
+            exit 1
           fi
           ROLLBACK_EOF

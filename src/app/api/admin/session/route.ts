@@ -3,6 +3,8 @@ import { verifyAdminAuth, logAdminAction, getAdminPermissions } from '@/lib/admi
 import { prisma } from '@/lib/db';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/admin/session - Get current admin session info
 export async function GET(request: NextRequest) {
   try {

@@ -15,6 +15,8 @@ import {
 import { logger } from '@/lib/logger';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   let session: any = null;
   try {

@@ -479,6 +479,7 @@ export default function CaregiverDetailModal({ caregiver, isOpen, onClose, showC
                                   height={180}
                                   alt={photo.caption || 'Daycare photo'}
                                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                  unoptimized
                                 />
                                 {photo.caption && (
                                   <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-xs p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -502,6 +503,7 @@ export default function CaregiverDetailModal({ caregiver, isOpen, onClose, showC
                                   height={48}
                                   alt={photo.caption || 'Daycare photo'}
                                   className="w-full h-full object-cover"
+                                  unoptimized
                                 />
                                 {index === 2 && daycarePhotos.length > 3 && (
                                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs font-bold">
@@ -645,6 +647,7 @@ export default function CaregiverDetailModal({ caregiver, isOpen, onClose, showC
                         height={600}
                         alt={selectedPhoto.caption || 'Daycare photo'}
                         className="w-full h-auto max-h-[85vh] object-contain rounded-lg"
+                        unoptimized
                       />
                       
                       {/* Caption */}

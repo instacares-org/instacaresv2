@@ -3,6 +3,8 @@ import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/auth-middleware';
 
+export const dynamic = 'force-dynamic';
+
 // PATCH /api/reviews/[reviewId] - Update review (admin only for moderation)
 export async function PATCH(
   request: NextRequest,

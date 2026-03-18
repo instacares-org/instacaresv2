@@ -3,6 +3,8 @@ import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { prisma } from '@/lib/prisma';
 import twilio from 'twilio';
 
+export const dynamic = 'force-dynamic';
+
 // Twilio webhook signature validation
 const twilioSignature = process.env.TWILIO_AUTH_TOKEN || '';
 

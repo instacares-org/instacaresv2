@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { enhancedSmsService } from '@/lib/notifications/enhanced-sms.service';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     // Verify this is a legitimate cron request

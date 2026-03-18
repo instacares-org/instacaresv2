@@ -5,6 +5,8 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/options';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
+export const dynamic = 'force-dynamic';
+
 // GET - Get single ticket with all responses
 export async function GET(
   request: NextRequest,

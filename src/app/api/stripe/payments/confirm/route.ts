@@ -11,6 +11,8 @@ import { prisma } from '@/lib/db';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 import { decryptField } from '@/lib/field-encryption';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     // --- RATE LIMITING ---
@@ -142,7 +144,7 @@ export async function POST(request: NextRequest) {
 
           // For now, we'll need to extract caregiver ID from the booking modal
           // This should be passed in metadata in a real implementation
-          let caregiverId = metadata.caregiverId;
+          const caregiverId = metadata.caregiverId;
 
           console.log('🔧 PAYMENT CONFIRMATION DEBUG:');
           console.log('- Payment Intent ID:', paymentIntentId);

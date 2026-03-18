@@ -5,6 +5,8 @@ import { getCommissionRate, getStripeInstance } from '@/lib/stripe';
 import { requireAuth, apiSuccess, ApiErrors } from '@/lib/api-utils';
 import { checkRateLimit, RATE_LIMIT_CONFIGS, createRateLimitHeaders } from '@/lib/rate-limit';
 
+export const dynamic = 'force-dynamic';
+
 // Validation schema for booking
 const bookingSchema = z.object({
   babysitterId: z.string().min(1, 'Babysitter ID is required'),

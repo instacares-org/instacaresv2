@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { db } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/caregiver-reviews?caregiverId=xxx - Get all reviews for a caregiver
 export async function GET(request: NextRequest) {
   try {

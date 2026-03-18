@@ -664,7 +664,7 @@ const TaxReports: React.FC<TaxReportsProps> = ({ period }) => {
       doc.setFontSize(7);
       doc.setTextColor(...colors.textLight);
       doc.text('InstaCares - Professional Childcare Platform', margin, footerY);
-      doc.text('www.instacares.net', pageWidth / 2, footerY, { align: 'center' });
+      doc.text('www.instacares.com', pageWidth / 2, footerY, { align: 'center' });
       doc.text(`Generated: ${new Date().toLocaleDateString('en-CA')}`, pageWidth - margin, footerY, { align: 'right' });
 
       // Save the PDF
