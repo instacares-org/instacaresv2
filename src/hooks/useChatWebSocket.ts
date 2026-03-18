@@ -135,13 +135,23 @@ export const useChatWebSocket = ({ userId, userType }: UseChatWebSocketProps) =>
     }
   }, [userId, markMessagesRead]);
 
-  // Send a message
+  // Send a message via WebSocket (real-time) with HTTP fallback
   const sendMessage = useCallback(async (roomId: string, content: string, messageType = 'TEXT') => {
     if (!content.trim()) return;
 
+    // Use WebSocket if connected for real-time delivery
+    if (isConnected && socket) {
+      socketSendMessage({
+        roomId,
+        content: content.trim(),
+        senderId: userId,
+        messageType
+      });
+      return;
+    }
+
+    // Fallback to HTTP if WebSocket is not connected
     try {
-      // For now, always use HTTP API since WebSocket is mock
-      // TODO: Switch to WebSocket when real server is implemented
       const response = await fetch(`/api/chat/${roomId}/messages`, {
         method: 'POST',
         headers: addCSRFHeader({ 'Content-Type': 'application/json' }),
@@ -156,13 +166,12 @@ export const useChatWebSocket = ({ userId, userType }: UseChatWebSocketProps) =>
         throw new Error('Failed to send message');
       }
 
-      // Always refresh messages to show the new message
       await fetchMessages(roomId);
     } catch (error) {
       console.error('Error sending message:', error);
       setError('Failed to send message');
     }
-  }, [userId, fetchMessages]);
+  }, [userId, isConnected, socket, socketSendMessage, fetchMessages]);
 
   // Join a chat room
   const joinChatRoom = useCallback((roomId: string) => {

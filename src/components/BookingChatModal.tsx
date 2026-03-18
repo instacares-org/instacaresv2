@@ -108,7 +108,6 @@ export default function BookingChatModal({
 
       socketInstance.on('connect', () => {
         console.log('Socket connected:', socketInstance.id);
-        socketInstance.emit('join', { userId: currentUserId, userType: 'user' });
       });
 
       // Handle initial list of online users
