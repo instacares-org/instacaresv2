@@ -153,11 +153,6 @@ jobs:
             --exclude=node_modules --exclude=.next --exclude=.git \
             . 2>/dev/null || echo "Backup created (some warnings ok)"
 
-          # Stop services gracefully
-          echo "Stopping services..."
-          pm2 stop instacares || echo "Service not running"
-          pm2 stop socket-server || echo "Socket server not running"
-
           # Pull latest code from main
           echo "Pulling latest code..."
           git fetch origin main
@@ -171,18 +166,23 @@ jobs:
           echo "Generating Prisma client..."
           npx prisma generate
 
-          # Run database migrations
+          # Run database migrations (extract DATABASE_URL from PM2)
           echo "Running database migrations..."
+          PROD_ID=$(pm2 id instacares 2>/dev/null | tr -d '[]' || echo "")
+          if [ -n "$PROD_ID" ]; then
+            export DATABASE_URL="$(pm2 env $PROD_ID 2>/dev/null | grep '^DATABASE_URL' | sed 's/^DATABASE_URL: //')"
+          fi
           npx prisma migrate deploy || echo "Migration completed (or no pending migrations)"
 
-          # Build application
+          # Build application (NEXT_PUBLIC vars read from .env, secrets from PM2)
           echo "Building application..."
           export SKIP_ENV_VALIDATION=true
           npm run build
 
-          # Start services
-          echo "Starting services..."
-          pm2 start ecosystem.config.js --env production
+          # Restart services (preserves PM2 environment variables)
+          echo "Restarting services..."
+          pm2 restart instacares --update-env || pm2 start ecosystem.config.js --env production
+          pm2 restart socket-server --update-env || true
           pm2 save
 
           echo "=== Production deployment completed at $(date) ==="
@@ -295,8 +295,9 @@ jobs:
             export SKIP_ENV_VALIDATION=true
             npm run build
 
-            # Restart services
-            pm2 start ecosystem.config.js --env production
+            # Restart services (preserves PM2 environment variables)
+            pm2 restart instacares --update-env || pm2 start ecosystem.config.js --env production
+            pm2 restart socket-server --update-env || true
             pm2 save
 
             echo "✅ Rollback completed"
