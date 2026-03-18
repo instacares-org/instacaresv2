@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const CSRF_SECRET = process.env.CSRF_SECRET || process.env.JWT_SECRET || '';
-const CSRF_TOKEN_LENGTH = 32;
 const CSRF_COOKIE_NAME = 'csrf-token';
 const CSRF_HEADER_NAME = 'x-csrf-token';
 
@@ -12,24 +11,12 @@ if (typeof window === 'undefined' && !CSRF_SECRET && process.env.NEXT_PHASE !== 
 }
 
 /**
- * Generate cryptographically secure random bytes
+ * Generate cryptographically secure random bytes (Edge-compatible)
  */
 function getRandomBytes(length: number): Uint8Array {
   const array = new Uint8Array(length);
-  
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    // Web Crypto API (works in both Node.js and Edge Runtime)
-    return crypto.getRandomValues(array);
-  } else {
-    // Node.js crypto module fallback
-    try {
-      const nodeCrypto = require('crypto');
-      nodeCrypto.randomFillSync(array);
-      return array;
-    } catch (error) {
-      throw new Error('No secure random number generator available. Cannot generate CSRF tokens.');
-    }
-  }
+  crypto.getRandomValues(array);
+  return array;
 }
 
 /**
@@ -42,51 +29,47 @@ function bytesToHex(bytes: Uint8Array): string {
 }
 
 /**
- * Create HMAC-SHA256 using Web Crypto API
+ * Create HMAC-SHA256 using Web Crypto API (Edge-compatible)
  */
 async function createHmacSha256(key: string, data: string): Promise<string> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(key);
   const messageData = encoder.encode(data);
 
-  if (typeof crypto !== 'undefined' && crypto.subtle) {
-    // Web Crypto API
-    const cryptoKey = await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-    
-    const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
-    return bytesToHex(new Uint8Array(signature));
-  } else {
-    // Fallback - simple hash (less secure, but better than nothing)
-    let hash = 0;
-    const combined = key + data;
-    for (let i = 0; i < combined.length; i++) {
-      const char = combined.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return Math.abs(hash).toString(16).padStart(8, '0');
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+  return bytesToHex(new Uint8Array(signature));
+}
+
+/**
+ * Constant-time string comparison (Edge-compatible, no Node.js crypto needed)
+ */
+function timingSafeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
   }
+  return result === 0;
 }
 
 /**
  * Generate a cryptographically secure CSRF token
  */
-export function generateCSRFToken(sessionId?: string): string {
+export async function generateCSRFToken(sessionId?: string): Promise<string> {
   const timestamp = Date.now().toString();
   const randomBytes = getRandomBytes(16);
   const random = bytesToHex(randomBytes);
   const data = `${timestamp}:${random}:${sessionId || 'anonymous'}`;
 
-  // HMAC-SHA256 signature using Node.js crypto (server-side only)
-   
-  const { createHmac } = require('crypto');
-  const signature = createHmac('sha256', CSRF_SECRET).update(data).digest('hex');
+  const signature = await createHmacSha256(CSRF_SECRET, data);
 
   const token = `${btoa(data)}.${signature}`;
   return token;
@@ -95,47 +78,39 @@ export function generateCSRFToken(sessionId?: string): string {
 /**
  * Validate a CSRF token
  */
-export function validateCSRFToken(token: string, sessionId?: string): boolean {
+export async function validateCSRFToken(token: string, sessionId?: string): Promise<boolean> {
   if (!token || typeof token !== 'string') return false;
-  
+
   const parts = token.split('.');
   if (parts.length !== 2) return false;
-  
+
   const [encodedData, signature] = parts;
-  
+
   try {
     const data = atob(encodedData);
-    const [timestamp, random, tokenSessionId] = data.split(':');
-    
-    // Verify HMAC-SHA256 signature (must match generateCSRFToken)
-     
-    const { createHmac, timingSafeEqual } = require('crypto');
-    const expectedSignature = createHmac('sha256', CSRF_SECRET).update(data).digest('hex');
+    const [timestamp, , tokenSessionId] = data.split(':');
 
-    // Use timing-safe comparison to prevent timing attacks
-    try {
-      if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
-        return false;
-      }
-    } catch {
+    const expectedSignature = await createHmacSha256(CSRF_SECRET, data);
+
+    if (!timingSafeCompare(signature, expectedSignature)) {
       return false;
     }
-    
+
     // Check if session IDs match (if provided)
     if (sessionId && tokenSessionId !== sessionId && tokenSessionId !== 'anonymous') {
       return false;
     }
-    
+
     // Check token age (valid for 24 hours)
     const tokenTime = parseInt(timestamp);
     const maxAge = 24 * 60 * 60 * 1000; // 24 hours
-    
+
     if (Date.now() - tokenTime > maxAge) {
       return false;
     }
-    
+
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -147,22 +122,16 @@ export function extractCSRFToken(request: NextRequest): string | null {
   // Try header first
   const headerToken = request.headers.get(CSRF_HEADER_NAME);
   if (headerToken) return headerToken;
-  
-  // Try form data
-  if (request.headers.get('content-type')?.includes('application/x-www-form-urlencoded')) {
-    // Note: This would require reading the body, which might not be available in middleware
-    // Better to use headers or cookies
-  }
-  
+
   return null;
 }
 
 /**
  * Set CSRF token in response
  */
-export function setCSRFToken(response: NextResponse, token?: string, sessionId?: string): void {
-  const csrfToken = token || generateCSRFToken(sessionId);
-  
+export async function setCSRFToken(response: NextResponse, token?: string, sessionId?: string): Promise<void> {
+  const csrfToken = token || await generateCSRFToken(sessionId);
+
   response.cookies.set(CSRF_COOKIE_NAME, csrfToken, {
     httpOnly: false, // Needs to be accessible to JavaScript
     secure: process.env.NODE_ENV === 'production',
@@ -170,7 +139,7 @@ export function setCSRFToken(response: NextResponse, token?: string, sessionId?:
     maxAge: 24 * 60 * 60, // 24 hours in seconds
     path: '/',
   });
-  
+
   // Also set it as a header for immediate use
   response.headers.set('X-CSRF-Token', csrfToken);
 }
@@ -178,38 +147,38 @@ export function setCSRFToken(response: NextResponse, token?: string, sessionId?:
 /**
  * Verify CSRF protection for a request
  */
-export function verifyCSRFProtection(request: NextRequest, sessionId?: string): {
+export async function verifyCSRFProtection(request: NextRequest, sessionId?: string): Promise<{
   isValid: boolean;
   error?: string;
-} {
+}> {
   const method = request.method.toUpperCase();
-  
+
   // Only protect state-changing methods
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
     return { isValid: true };
   }
-  
+
   const rawCookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value;
   const rawHeaderToken = extractCSRFToken(request);
-  
+
   if (!rawCookieToken) {
-    return { 
-      isValid: false, 
-      error: 'CSRF token missing from cookies. Please refresh the page.' 
+    return {
+      isValid: false,
+      error: 'CSRF token missing from cookies. Please refresh the page.'
     };
   }
-  
+
   if (!rawHeaderToken) {
-    return { 
-      isValid: false, 
-      error: 'CSRF token missing from request headers.' 
+    return {
+      isValid: false,
+      error: 'CSRF token missing from request headers.'
     };
   }
-  
+
   // URL decode both tokens to ensure consistent comparison
   const cookieToken = decodeURIComponent(rawCookieToken);
   const headerToken = decodeURIComponent(rawHeaderToken);
-  
+
   if (cookieToken !== headerToken) {
     console.error('CSRF Token Mismatch:', {
       method: request.method,
@@ -221,14 +190,14 @@ export function verifyCSRFProtection(request: NextRequest, sessionId?: string): 
       error: 'CSRF token mismatch between cookie and header.'
     };
   }
-  
-  if (!validateCSRFToken(cookieToken, sessionId)) {
-    return { 
-      isValid: false, 
-      error: 'Invalid or expired CSRF token. Please refresh the page.' 
+
+  if (!await validateCSRFToken(cookieToken, sessionId)) {
+    return {
+      isValid: false,
+      error: 'Invalid or expired CSRF token. Please refresh the page.'
     };
   }
-  
+
   return { isValid: true };
 }
 
@@ -240,15 +209,15 @@ export function createCSRFMiddleware(options: {
   sessionIdExtractor?: (request: NextRequest) => string | undefined;
 } = {}) {
   const { skipPaths = [], sessionIdExtractor } = options;
-  
+
   return (request: NextRequest) => {
     const pathname = request.nextUrl.pathname;
-    
+
     // Skip CSRF for specified paths
     if (skipPaths.some(path => pathname.startsWith(path))) {
       return { bypass: true };
     }
-    
+
     const sessionId = sessionIdExtractor ? sessionIdExtractor(request) : undefined;
     return verifyCSRFProtection(request, sessionId);
   };
@@ -264,7 +233,7 @@ export function addCSRFHeader(headers: HeadersInit = {}): HeadersInit {
       .split('; ')
       .find(row => row.startsWith(`${CSRF_COOKIE_NAME}=`))
       ?.split('=')[1];
-    
+
     if (csrfToken) {
       return {
         ...headers,
@@ -272,7 +241,7 @@ export function addCSRFHeader(headers: HeadersInit = {}): HeadersInit {
       };
     }
   }
-  
+
   return headers;
 }
 

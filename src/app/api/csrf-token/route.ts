@@ -11,16 +11,16 @@ export async function GET(request: NextRequest) {
     const sessionId = session?.user?.id || undefined;
     
     // Generate a new CSRF token
-    const csrfToken = generateCSRFToken(sessionId);
-    
+    const csrfToken = await generateCSRFToken(sessionId);
+
     // Create response
     const response = NextResponse.json({
       success: true,
       token: csrfToken,
     });
-    
+
     // Set the CSRF token in cookies
-    setCSRFToken(response, csrfToken, sessionId);
+    await setCSRFToken(response, csrfToken, sessionId);
     
     return response;
     
