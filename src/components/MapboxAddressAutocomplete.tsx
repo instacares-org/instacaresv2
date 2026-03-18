@@ -225,7 +225,7 @@ export default function MapboxAddressAutocomplete({
             Development Mode - Manual Address Entry
           </p>
           <p className="text-xs text-blue-600 dark:text-blue-400">
-            Mapbox is disabled to avoid conflicts with production (instacares.net).
+            Mapbox is disabled to avoid conflicts with production (instacares.com).
             Type your address above - it will use Toronto, ON as default location.
           </p>
           <details className="mt-2">
