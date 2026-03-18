@@ -140,11 +140,18 @@ jobs:
 
       - name: Deploy to Production Server
         run: |
-          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 root@72.60.71.43 << 'DEPLOY_EOF'
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ConnectTimeout=30 root@72.60.71.43 << 'DEPLOY_EOF'
           set -e
           echo "=== Production deployment started at $(date) ==="
 
           cd /var/www/instacaresv2
+
+          # Ensure git repo is initialized (first-time setup)
+          if [ ! -d .git ]; then
+            echo "Initializing git repo..."
+            git init
+            git remote add origin https://github.com/instacares-org/instacaresv2.git
+          fi
 
           # Backup current version
           echo "Creating backup..."
@@ -158,6 +165,9 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
 
+          # Clean untracked files from src (leftover debug files break build)
+          git clean -fd src/
+
           # Install dependencies
           echo "Installing dependencies..."
           npm ci --prefer-offline --no-audit --force
@@ -166,15 +176,18 @@ jobs:
           echo "Generating Prisma client..."
           npx prisma generate
 
-          # Run database migrations (extract DATABASE_URL from PM2)
-          echo "Running database migrations..."
+          # Extract DATABASE_URL from PM2 (needed for migrations and build)
+          echo "Extracting environment from PM2..."
           PROD_ID=$(pm2 id instacares 2>/dev/null | tr -d '[]' || echo "")
           if [ -n "$PROD_ID" ]; then
             export DATABASE_URL="$(pm2 env $PROD_ID 2>/dev/null | grep '^DATABASE_URL' | sed 's/^DATABASE_URL: //')"
           fi
+
+          # Run database migrations
+          echo "Running database migrations..."
           npx prisma migrate deploy || echo "Migration completed (or no pending migrations)"
 
-          # Build application (NEXT_PUBLIC vars read from .env, secrets from PM2)
+          # Build application (DATABASE_URL needed for Prisma client init at build time)
           echo "Building application..."
           export SKIP_ENV_VALIDATION=true
           npm run build
@@ -200,39 +213,39 @@ jobs:
           # Test 1: Homepage
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3005)
           if echo "$STATUS" | grep -qE "200|302"; then
-            echo "✅ Homepage: HTTP $STATUS"
+            echo "Homepage: HTTP $STATUS - PASS"
             PASS=$((PASS+1))
           else
-            echo "❌ Homepage: HTTP $STATUS"
+            echo "Homepage: HTTP $STATUS - FAIL"
             FAIL=$((FAIL+1))
           fi
 
           # Test 2: Health API
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3005/api/health)
           if [ "$STATUS" = "200" ]; then
-            echo "✅ Health API: HTTP $STATUS"
+            echo "Health API: HTTP $STATUS - PASS"
             PASS=$((PASS+1))
           else
-            echo "❌ Health API: HTTP $STATUS"
+            echo "Health API: HTTP $STATUS - FAIL"
             FAIL=$((FAIL+1))
           fi
 
           # Test 3: Caregivers API
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3005/api/caregivers)
           if echo "$STATUS" | grep -qE "200|304"; then
-            echo "✅ Caregivers API: HTTP $STATUS"
+            echo "Caregivers API: HTTP $STATUS - PASS"
             PASS=$((PASS+1))
           else
-            echo "❌ Caregivers API: HTTP $STATUS"
+            echo "Caregivers API: HTTP $STATUS - FAIL"
             FAIL=$((FAIL+1))
           fi
 
           # Test 4: PM2 status
           if pm2 list | grep -q "instacares.*online"; then
-            echo "✅ PM2 process: online"
+            echo "PM2 process: online - PASS"
             PASS=$((PASS+1))
           else
-            echo "❌ PM2 process: not online"
+            echo "PM2 process: not online - FAIL"
             FAIL=$((FAIL+1))
           fi
 
@@ -240,7 +253,7 @@ jobs:
           echo "Smoke tests: $PASS passed, $FAIL failed"
 
           if [ "$FAIL" -gt 0 ]; then
-            echo "⚠️ Some smoke tests failed — check logs"
+            echo "Some smoke tests failed - check logs"
             pm2 logs instacares --lines 20 --nostream || true
             exit 1
           fi
@@ -273,36 +286,48 @@ jobs:
 
       - name: Rollback to Previous Version
         run: |
-          echo "⚠️ Deployment failed, initiating rollback..."
+          echo "Deployment failed, checking for rollback..."
 
           ssh -o StrictHostKeyChecking=no root@72.60.71.43 << 'ROLLBACK_EOF'
           cd /var/www/instacaresv2
 
-          # Stop current services
+          # Check for backup BEFORE stopping anything
+          LATEST_BACKUP=$(ls -t /var/backups/instacares/backup-*.tar.gz 2>/dev/null | head -n 1)
+
+          if [ -z "$LATEST_BACKUP" ]; then
+            echo "No backup found - attempting to restart current version instead"
+            pm2 restart instacares --update-env || true
+            pm2 restart socket-server --update-env || true
+            pm2 save
+            echo "Restarted existing processes"
+            exit 0
+          fi
+
+          echo "Rolling back to: $LATEST_BACKUP"
+
+          # Stop services only after confirming backup exists
           pm2 stop instacares || true
           pm2 stop socket-server || true
 
-          # Find latest backup
-          LATEST_BACKUP=$(ls -t /var/backups/instacares/backup-*.tar.gz 2>/dev/null | head -n 1)
+          # Restore from backup
+          tar -xzf "$LATEST_BACKUP" -C /var/www/instacaresv2/
 
-          if [ -n "$LATEST_BACKUP" ]; then
-            echo "Rolling back to: $LATEST_BACKUP"
-            tar -xzf "$LATEST_BACKUP" -C /var/www/instacaresv2/
+          # Rebuild after rollback
+          npm ci --prefer-offline --no-audit --force
+          npx prisma generate
 
-            # Rebuild after rollback
-            npm ci --prefer-offline --no-audit --force
-            npx prisma generate
-            export SKIP_ENV_VALIDATION=true
-            npm run build
-
-            # Restart services (preserves PM2 environment variables)
-            pm2 restart instacares --update-env || pm2 start ecosystem.config.js --env production
-            pm2 restart socket-server --update-env || true
-            pm2 save
-
-            echo "✅ Rollback completed"
-          else
-            echo "❌ No backup found — manual intervention required"
-            exit 1
+          # Extract DATABASE_URL for build
+          PROD_ID=$(pm2 id instacares 2>/dev/null | tr -d '[]' || echo "")
+          if [ -n "$PROD_ID" ]; then
+            export DATABASE_URL="$(pm2 env $PROD_ID 2>/dev/null | grep '^DATABASE_URL' | sed 's/^DATABASE_URL: //')"
           fi
+          export SKIP_ENV_VALIDATION=true
+          npm run build
+
+          # Restart services (preserves PM2 environment variables)
+          pm2 restart instacares --update-env || pm2 start ecosystem.config.js --env production
+          pm2 restart socket-server --update-env || true
+          pm2 save
+
+          echo "Rollback completed"
           ROLLBACK_EOF
