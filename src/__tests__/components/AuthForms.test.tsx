@@ -52,6 +52,20 @@ vi.mock('../../contexts/LanguageContext', () => ({
   }),
 }));
 
+// Mock next/navigation (LoginModal uses useRouter)
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 // Mock SocialLogin component
 vi.mock('../../components/SocialLogin', () => ({
   default: () => <div data-testid="social-login">Social Login Buttons</div>,

@@ -141,6 +141,7 @@ function buildMockRoom(overrides: Record<string, unknown> = {}) {
     id: 'room-1',
     isActive: true,
     lastMessageAt: new Date(),
+    roomType: 'BOOKING',
     booking: {
       id: 'booking-1',
       startTime: new Date(),
@@ -158,6 +159,16 @@ function buildMockRoom(overrides: Record<string, unknown> = {}) {
         email: 'cg@test.com',
         profile: { firstName: 'Jane', lastName: 'Smith', phone: '555-5678', avatar: null },
       },
+    },
+    parent: {
+      id: 'parent-1',
+      email: 'parent@test.com',
+      profile: { firstName: 'John', lastName: 'Doe', phone: '555-1234', avatar: null },
+    },
+    caregiver: {
+      id: 'cg-1',
+      email: 'cg@test.com',
+      profile: { firstName: 'Jane', lastName: 'Smith', phone: '555-5678', avatar: null },
     },
     messages: [
       {
@@ -212,9 +223,9 @@ describe('GET /api/chat/rooms', () => {
     );
   });
 
-  it('filters out rooms without bookings', async () => {
+  it('includes direct rooms without bookings', async () => {
     mockAuthParent();
-    const roomWithNoBooking = { ...buildMockRoom(), booking: null };
+    const roomWithNoBooking = { ...buildMockRoom({ id: 'room-2', roomType: 'DIRECT' }), booking: null };
     mockDb.chatRoom.findMany.mockResolvedValue([buildMockRoom(), roomWithNoBooking] as any);
 
     const req = new NextRequest('http://localhost:3005/api/chat/rooms');
@@ -223,7 +234,9 @@ describe('GET /api/chat/rooms', () => {
     expect(res!.status).toBe(200);
     const body = await res!.json();
     expect(body.success).toBe(true);
-    expect(body.data).toHaveLength(1); // only the room with booking
+    expect(body.data).toHaveLength(2); // both booking and direct rooms
+    expect(body.data[0].booking).not.toBeNull(); // booking room has booking data
+    expect(body.data[1].booking).toBeNull(); // direct room has no booking
   });
 
   it('returns empty array when no rooms exist', async () => {
