@@ -3,6 +3,7 @@ import { apiError, ApiErrors } from '@/lib/api-utils';
 import Stripe from 'stripe';
 import { stripe } from '@/lib/stripe';
 import { headers } from 'next/headers';
+import { getStripeConfig } from '@/lib/payment-modes';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,10 +18,17 @@ export async function POST(request: NextRequest) {
     if (!stripe) {
       return ApiErrors.internal('Stripe is not configured');
     }
+
+    const webhookSecret = getStripeConfig().webhookSecret;
+    if (!webhookSecret) {
+      console.error('[Webhook] STRIPE_WEBHOOK_SECRET is not configured');
+      return ApiErrors.internal('Webhook secret not configured');
+    }
+
     event = stripe.webhooks.constructEvent(
       body,
       signature,
-      process.env.STRIPE_WEBHOOK_SECRET!
+      webhookSecret
     );
   } catch (err: unknown) {
     console.error('Webhook signature verification failed:', err instanceof Error ? err.message : String(err));
@@ -372,8 +380,44 @@ async function handleFailedPayment(failedPayment: Stripe.PaymentIntent) {
     return;
   }
 
-  // Send failure notification to parent
-  // Update booking status to 'payment_failed'
+  try {
+    const { default: db } = await import('@/lib/db');
+    const parentEmail = failedPayment.metadata?.parentEmail;
+
+    if (!parentEmail) {
+      console.warn('[Webhook] Failed payment missing parentEmail in metadata:', failedPayment.id);
+      return;
+    }
+
+    const parent = await db.user.findUnique({
+      where: { email: parentEmail },
+      select: { id: true },
+    });
+
+    if (!parent) {
+      console.warn('[Webhook] Parent not found for failed payment:', parentEmail);
+      return;
+    }
+
+    const errorMessage = failedPayment.last_payment_error?.message || 'Your payment could not be processed';
+    const amount = (failedPayment.amount / 100).toFixed(2);
+
+    await db.notification.create({
+      data: {
+        userId: parent.id,
+        type: 'PAYMENT_FAILED',
+        title: 'Payment Failed',
+        message: `Your payment of $${amount} CAD failed: ${errorMessage}. Please update your payment method and try again.`,
+        resourceType: 'payment',
+        resourceId: failedPayment.id,
+      },
+    });
+
+    console.log('[Webhook] Parent notified of failed payment:', failedPayment.id);
+  } catch (error: unknown) {
+    console.error('[Webhook] Error handling failed payment:', error instanceof Error ? error.message : String(error));
+    throw error;
+  }
 }
 
 async function handleExtensionPaymentFailed(failedPayment: Stripe.PaymentIntent) {
@@ -448,36 +492,212 @@ async function handleExtensionPaymentFailed(failedPayment: Stripe.PaymentIntent)
 }
 
 async function handleAccountUpdate(account: Stripe.Account) {
-  console.log('Processing account update:', {
+  console.log('[Webhook] Processing account update:', {
     accountId: account.id,
     chargesEnabled: account.charges_enabled,
     detailsSubmitted: account.details_submitted,
     payoutsEnabled: account.payouts_enabled,
   });
-  
-  // Update caregiver account status in your database
-  // Notify caregiver of any required actions
+
+  try {
+    const { default: db } = await import('@/lib/db');
+
+    // Look up caregiver by stripeAccountId
+    const caregiver = await db.caregiver.findFirst({
+      where: { stripeAccountId: account.id },
+      select: { id: true, userId: true, stripeOnboarded: true, canReceivePayments: true },
+    });
+
+    // Also check babysitter by stripeConnectId
+    const babysitter = !caregiver ? await db.babysitter.findFirst({
+      where: { stripeConnectId: account.id },
+      select: { id: true, userId: true, stripeOnboarded: true },
+    }) : null;
+
+    const provider = caregiver || babysitter;
+    if (!provider) {
+      console.warn('[Webhook] No caregiver or babysitter found for Stripe account:', account.id);
+      return;
+    }
+
+    const isOnboarded = account.details_submitted === true;
+    const canReceive = account.charges_enabled === true && account.payouts_enabled === true;
+
+    // Update caregiver or babysitter record
+    if (caregiver) {
+      const wasReceiving = caregiver.canReceivePayments;
+      await db.caregiver.update({
+        where: { id: caregiver.id },
+        data: {
+          stripeOnboarded: isOnboarded,
+          canReceivePayments: canReceive,
+        },
+      });
+
+      // Notify if payments just became enabled
+      if (canReceive && !wasReceiving) {
+        await db.notification.create({
+          data: {
+            userId: caregiver.userId,
+            type: 'PAYMENT_RECEIVED',
+            title: 'Stripe Account Ready',
+            message: 'Your Stripe account is now fully set up. You can receive payments for bookings.',
+            resourceType: 'stripe_account',
+            resourceId: account.id,
+          },
+        });
+      }
+    } else if (babysitter) {
+      const wasOnboarded = babysitter.stripeOnboarded;
+      await db.babysitter.update({
+        where: { id: babysitter.id },
+        data: {
+          stripeOnboarded: isOnboarded,
+        },
+      });
+
+      if (isOnboarded && !wasOnboarded) {
+        await db.notification.create({
+          data: {
+            userId: babysitter.userId,
+            type: 'PAYMENT_RECEIVED',
+            title: 'Stripe Account Ready',
+            message: 'Your Stripe account is now fully set up. You can receive platform payments.',
+            resourceType: 'stripe_account',
+            resourceId: account.id,
+          },
+        });
+      }
+    }
+
+    // Notify if there are pending requirements
+    if (account.requirements?.currently_due && account.requirements.currently_due.length > 0) {
+      await db.notification.create({
+        data: {
+          userId: provider.userId,
+          type: 'BOOKING_UPDATE',
+          title: 'Stripe Action Required',
+          message: `Your Stripe account has pending requirements: ${account.requirements.currently_due.join(', ')}. Please complete them to continue receiving payments.`,
+          resourceType: 'stripe_account',
+          resourceId: account.id,
+        },
+      });
+    }
+
+    console.log('[Webhook] Account update processed for:', account.id);
+  } catch (error: unknown) {
+    console.error('[Webhook] Error handling account update:', error instanceof Error ? error.message : String(error));
+    throw error;
+  }
 }
 
 async function handlePayoutPaid(payout: Stripe.Payout) {
-  console.log('Processing successful payout:', {
+  console.log('[Webhook] Processing successful payout:', {
     payoutId: payout.id,
     amount: payout.amount,
     destination: payout.destination,
     arrivalDate: payout.arrival_date,
   });
-  
-  // Update payout records in database
-  // Send payout confirmation to caregiver
+
+  try {
+    const { default: db } = await import('@/lib/db');
+
+    // Payout destination is the Connect account ID (from the event's account field)
+    // For Connect payouts, the event is sent to our webhook with the connected account context
+    // We need to find the caregiver/babysitter by their Stripe account
+    const connectAccountId = (payout as Stripe.Payout & { account?: string }).account;
+
+    if (!connectAccountId) {
+      console.warn('[Webhook] Payout event missing account context:', payout.id);
+      return;
+    }
+
+    const caregiver = await db.caregiver.findFirst({
+      where: { stripeAccountId: connectAccountId },
+      select: { userId: true },
+    });
+
+    const babysitter = !caregiver ? await db.babysitter.findFirst({
+      where: { stripeConnectId: connectAccountId },
+      select: { userId: true },
+    }) : null;
+
+    const provider = caregiver || babysitter;
+    if (!provider) {
+      console.warn('[Webhook] No provider found for payout account:', connectAccountId);
+      return;
+    }
+
+    const amount = (payout.amount / 100).toFixed(2);
+
+    await db.notification.create({
+      data: {
+        userId: provider.userId,
+        type: 'PAYMENT_RECEIVED',
+        title: 'Payout Sent',
+        message: `A payout of $${amount} CAD has been sent to your bank account. It should arrive within 1-2 business days.`,
+        resourceType: 'payout',
+        resourceId: payout.id,
+      },
+    });
+
+    console.log('[Webhook] Provider notified of payout:', payout.id);
+  } catch (error: unknown) {
+    console.error('[Webhook] Error handling payout paid:', error instanceof Error ? error.message : String(error));
+    throw error;
+  }
 }
 
 async function handlePayoutFailed(failedPayout: Stripe.Payout) {
-  console.log('Processing failed payout:', {
+  console.log('[Webhook] Processing failed payout:', {
     payoutId: failedPayout.id,
     failureCode: failedPayout.failure_code,
     failureMessage: failedPayout.failure_message,
   });
-  
-  // Notify caregiver of payout failure
-  // Provide instructions for resolving the issue
+
+  try {
+    const { default: db } = await import('@/lib/db');
+
+    const connectAccountId = (failedPayout as Stripe.Payout & { account?: string }).account;
+
+    if (!connectAccountId) {
+      console.warn('[Webhook] Failed payout event missing account context:', failedPayout.id);
+      return;
+    }
+
+    const caregiver = await db.caregiver.findFirst({
+      where: { stripeAccountId: connectAccountId },
+      select: { userId: true },
+    });
+
+    const babysitter = !caregiver ? await db.babysitter.findFirst({
+      where: { stripeConnectId: connectAccountId },
+      select: { userId: true },
+    }) : null;
+
+    const provider = caregiver || babysitter;
+    if (!provider) {
+      console.warn('[Webhook] No provider found for failed payout account:', connectAccountId);
+      return;
+    }
+
+    const amount = (failedPayout.amount / 100).toFixed(2);
+    const failureMessage = failedPayout.failure_message || 'Unknown error';
+
+    await db.notification.create({
+      data: {
+        userId: provider.userId,
+        type: 'PAYMENT_FAILED',
+        title: 'Payout Failed',
+        message: `Your payout of $${amount} CAD failed: ${failureMessage}. Please check your bank details in your Stripe dashboard.`,
+        resourceType: 'payout',
+        resourceId: failedPayout.id,
+      },
+    });
+
+    console.log('[Webhook] Provider notified of failed payout:', failedPayout.id);
+  } catch (error: unknown) {
+    console.error('[Webhook] Error handling failed payout:', error instanceof Error ? error.message : String(error));
+    throw error;
+  }
 }
