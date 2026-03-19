@@ -40,7 +40,7 @@ interface ChatOverview {
 
 interface ChatRoomSummary {
   id: string;
-  bookingId: string;
+  bookingId: string | null;
   parentName: string;
   caregiverName: string;
   messageCount: number;
@@ -58,7 +58,7 @@ interface ChatRoomDetails {
     endTime: string;
     totalAmount: number;
     address: string;
-  };
+  } | null;
   participants: {
     parent: {
       id: string;
@@ -980,27 +980,31 @@ function AdminChatManagement({ adminUserId }: AdminChatManagementProps) {
                     <CalendarIcon className="h-4 w-4 mr-2" />
                     Booking Info
                   </h4>
-                  <div className="grid grid-cols-1 gap-2 text-sm">
-                    <div className="flex justify-between py-1">
-                      <span className="text-gray-600">Status:</span>
-                      <span className={`font-medium px-2 py-0.5 rounded text-xs ${
-                        selectedChatRoom.booking.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                        selectedChatRoom.booking.status === 'CONFIRMED' ? 'bg-blue-100 text-blue-700' :
-                        selectedChatRoom.booking.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {selectedChatRoom.booking.status}
-                      </span>
+                  {selectedChatRoom.booking ? (
+                    <div className="grid grid-cols-1 gap-2 text-sm">
+                      <div className="flex justify-between py-1">
+                        <span className="text-gray-600">Status:</span>
+                        <span className={`font-medium px-2 py-0.5 rounded text-xs ${
+                          selectedChatRoom.booking.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
+                          selectedChatRoom.booking.status === 'CONFIRMED' ? 'bg-blue-100 text-blue-700' :
+                          selectedChatRoom.booking.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {selectedChatRoom.booking.status}
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-1">
+                        <span className="text-gray-600">Amount:</span>
+                        <span className="font-medium text-gray-900">{formatCurrency(selectedChatRoom.booking.totalAmount)}</span>
+                      </div>
+                      <div className="flex justify-between py-1">
+                        <span className="text-gray-600">Date:</span>
+                        <span className="font-medium text-gray-900">{new Date(selectedChatRoom.booking.startTime).toLocaleDateString()}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between py-1">
-                      <span className="text-gray-600">Amount:</span>
-                      <span className="font-medium text-gray-900">{formatCurrency(selectedChatRoom.booking.totalAmount)}</span>
-                    </div>
-                    <div className="flex justify-between py-1">
-                      <span className="text-gray-600">Date:</span>
-                      <span className="font-medium text-gray-900">{new Date(selectedChatRoom.booking.startTime).toLocaleDateString()}</span>
-                    </div>
-                  </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">No booking associated with this chat.</p>
+                  )}
                 </div>
 
                 {/* Admin Actions */}
