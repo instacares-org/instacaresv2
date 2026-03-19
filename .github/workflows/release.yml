@@ -57,7 +57,7 @@ jobs:
           Once merged, production deploys automatically to instacares.com.
 
           ### Pre-merge Checklist
-          - [ ] Changes tested on staging (instacares.net)
+          - [ ] Changes tested on staging (instacares.xyz)
           - [ ] No broken features on staging
 
           ---
@@ -84,7 +84,7 @@ jobs:
           Once merged, production deploys automatically to instacares.com.
 
           ### Pre-merge Checklist
-          - [ ] Changes tested on staging (instacares.net)
+          - [ ] Changes tested on staging (instacares.xyz)
           - [ ] No broken features on staging
 
           ---

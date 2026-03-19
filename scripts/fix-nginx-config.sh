@@ -9,11 +9,11 @@ echo "🔧 Fixing nginx configuration for InstaCares..."
 sudo cp /etc/nginx/sites-available/default /etc/nginx/sites-available/default.backup.$(date +%Y%m%d-%H%M%S)
 
 # Create nginx configuration for InstaCares
-sudo tee /etc/nginx/sites-available/instacares.net > /dev/null << 'EOF'
+sudo tee /etc/nginx/sites-available/instacares.xyz > /dev/null << 'EOF'
 server {
     listen 80;
     listen [::]:80;
-    server_name instacares.net www.instacares.net;
+    server_name instacares.xyz www.instacares.xyz;
 
     # Redirect HTTP to HTTPS
     return 301 https://$server_name$request_uri;
@@ -22,11 +22,11 @@ server {
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name instacares.net www.instacares.net;
+    server_name instacares.xyz www.instacares.xyz;
 
     # SSL Configuration (Hostinger manages SSL certificates)
-    ssl_certificate /etc/ssl/certs/instacares.net.crt;
-    ssl_certificate_key /etc/ssl/private/instacares.net.key;
+    ssl_certificate /etc/ssl/certs/instacares.xyz.crt;
+    ssl_certificate_key /etc/ssl/private/instacares.xyz.key;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
 
@@ -113,7 +113,7 @@ server {
 EOF
 
 # Enable the site
-sudo ln -sf /etc/nginx/sites-available/instacares.net /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/instacares.xyz /etc/nginx/sites-enabled/
 
 # Remove default nginx site if it exists
 sudo rm -f /etc/nginx/sites-enabled/default
@@ -138,7 +138,7 @@ if [ $? -eq 0 ]; then
     echo "- Security headers added"
     echo "- Gzip compression enabled"
     echo ""
-    echo "🌐 Your site should now be accessible at: https://instacares.net"
+    echo "🌐 Your site should now be accessible at: https://instacares.xyz"
     
 else
     echo "❌ Nginx configuration has errors. Please check the syntax."
@@ -153,4 +153,4 @@ echo "🎯 Testing the connection..."
 curl -I http://localhost:3005 || echo "⚠️  App might not be running on port 3005"
 
 echo ""
-echo "🚀 Setup complete! Visit https://instacares.net to test."
+echo "🚀 Setup complete! Visit https://instacares.xyz to test."

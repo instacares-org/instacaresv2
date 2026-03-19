@@ -20,12 +20,22 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'instacares.net',
+        hostname: 'instacares.xyz',
         pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'instacares.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'instacares.net',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'instacares.ca',
         pathname: '/**',
       },
       {

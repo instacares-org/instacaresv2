@@ -11,9 +11,9 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3007,
-        NEXTAUTH_URL: 'https://instacares.net',
-        NEXT_PUBLIC_BASE_URL: 'https://instacares.net',
-        NEXT_PUBLIC_SOCKET_URL: 'https://instacares.net',
+        NEXTAUTH_URL: 'https://instacares.xyz',
+        NEXT_PUBLIC_BASE_URL: 'https://instacares.xyz',
+        NEXT_PUBLIC_SOCKET_URL: 'https://instacares.xyz',
         PAYMENT_MODE: 'test',
       },
       kill_timeout: 5000,
@@ -36,7 +36,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3008,
-        CORS_ORIGINS: 'https://instacares.net,https://www.instacares.net',
+        CORS_ORIGINS: 'https://instacares.xyz,https://www.instacares.xyz',
       },
       kill_timeout: 5000,
       autorestart: true,

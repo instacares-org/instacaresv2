@@ -61,7 +61,7 @@ jobs:
 
     environment:
       name: staging
-      url: https://instacares.net
+      url: https://instacares.xyz
 
     steps:
       - name: Setup SSH
@@ -107,8 +107,8 @@ jobs:
             export NEXTAUTH_SECRET="$(pm2 env $STAGING_ID 2>/dev/null | grep '^NEXTAUTH_SECRET' | sed 's/^NEXTAUTH_SECRET: //')"
           fi
           export SKIP_ENV_VALIDATION=true
-          export NEXTAUTH_URL="https://instacares.net"
-          export NEXT_PUBLIC_BASE_URL="https://instacares.net"
+          export NEXTAUTH_URL="https://instacares.xyz"
+          export NEXT_PUBLIC_BASE_URL="https://instacares.xyz"
 
           # Apply schema changes to database (safe for adding new models)
           echo "Pushing schema changes to database..."
@@ -190,4 +190,4 @@ jobs:
           echo "## Staging Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **URL:** https://instacares.net" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** https://instacares.xyz" >> $GITHUB_STEP_SUMMARY

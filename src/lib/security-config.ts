@@ -76,7 +76,7 @@ export const SECURITY_CONFIG = {
   // Allowed origins for CORS
   CORS: {
     ORIGINS: process.env.NODE_ENV === 'production' 
-      ? ['https://instacares.com', 'https://www.instacares.com']
+      ? ['https://instacares.com', 'https://www.instacares.com', 'https://instacares.net', 'https://www.instacares.net', 'https://instacares.ca', 'https://www.instacares.ca']
       : ['http://localhost:3000', 'http://127.0.0.1:3000'],
   },
 

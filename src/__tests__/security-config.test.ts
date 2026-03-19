@@ -112,6 +112,8 @@ describe('Security Configuration', () => {
 
       expect(SECURITY_CONFIG.CORS.ORIGINS).toContain('https://instacares.com');
       expect(SECURITY_CONFIG.CORS.ORIGINS).toContain('https://www.instacares.com');
+      expect(SECURITY_CONFIG.CORS.ORIGINS).toContain('https://instacares.net');
+      expect(SECURITY_CONFIG.CORS.ORIGINS).toContain('https://instacares.ca');
       expect(SECURITY_CONFIG.CORS.ORIGINS).not.toContain('http://localhost:3000');
     });
 

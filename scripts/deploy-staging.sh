@@ -9,7 +9,7 @@ echo "🚀 Starting InstaCares staging deployment..."
 
 # Configuration
 APP_NAME="instacares-staging"
-STAGING_HOST="${STAGING_HOST:-staging.instacares.com}"
+STAGING_HOST="${STAGING_HOST:-instacares.xyz}"
 STAGING_USER="${STAGING_USER:-staging_user}"
 STAGING_PATH="${STAGING_PATH:-/var/www/instacares-staging}"
 

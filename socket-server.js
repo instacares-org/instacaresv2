@@ -202,7 +202,7 @@ const io = new Server(httpServer, {
     origin: process.env.CORS_ORIGINS
       ? process.env.CORS_ORIGINS.split(',')
       : process.env.NODE_ENV === 'production'
-        ? ['https://instacares.com', 'https://www.instacares.com']
+        ? ['https://instacares.com', 'https://www.instacares.com', 'https://instacares.net', 'https://www.instacares.net', 'https://instacares.ca', 'https://www.instacares.ca']
         : ['http://localhost:3000', 'http://localhost:3005'],
     methods: ['GET', 'POST'],
     credentials: true
