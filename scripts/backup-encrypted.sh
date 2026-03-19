@@ -40,13 +40,16 @@ fi
 
 # Fill any missing vars from PM2 (secrets live in PM2, not .env)
 if command -v pm2 &>/dev/null; then
-  if [ -z "${DATABASE_URL:-}" ]; then
-    PM2_DB_URL=$(pm2 env 1 2>/dev/null | grep '^DATABASE_URL:' | sed 's/^DATABASE_URL: *//')
-    [ -n "${PM2_DB_URL}" ] && export DATABASE_URL="${PM2_DB_URL}"
-  fi
-  if [ -z "${FIELD_ENCRYPTION_KEY:-}" ]; then
-    PM2_ENC_KEY=$(pm2 env 1 2>/dev/null | grep '^FIELD_ENCRYPTION_KEY:' | sed 's/^FIELD_ENCRYPTION_KEY: *//')
-    [ -n "${PM2_ENC_KEY}" ] && export FIELD_ENCRYPTION_KEY="${PM2_ENC_KEY}"
+  PROD_ID=$(pm2 id instacares 2>/dev/null | tr -d '[]' | cut -d, -f1)
+  if [ -n "${PROD_ID}" ]; then
+    if [ -z "${DATABASE_URL:-}" ]; then
+      PM2_DB_URL=$(pm2 env "$PROD_ID" 2>/dev/null | grep '^DATABASE_URL:' | sed 's/^DATABASE_URL: *//')
+      [ -n "${PM2_DB_URL}" ] && export DATABASE_URL="${PM2_DB_URL}"
+    fi
+    if [ -z "${FIELD_ENCRYPTION_KEY:-}" ]; then
+      PM2_ENC_KEY=$(pm2 env "$PROD_ID" 2>/dev/null | grep '^FIELD_ENCRYPTION_KEY:' | sed 's/^FIELD_ENCRYPTION_KEY: *//')
+      [ -n "${PM2_ENC_KEY}" ] && export FIELD_ENCRYPTION_KEY="${PM2_ENC_KEY}"
+    fi
   fi
 fi
 

@@ -891,7 +891,7 @@ function AdminChatManagement({ adminUserId }: AdminChatManagementProps) {
                         </div>
                         
                         <div className="text-xs text-gray-500 truncate">
-                          ID: {room.bookingId.slice(-8)}
+                          ID: {room.bookingId?.slice(-8) ?? 'N/A'}
                           {room.lastActivity && (
                             <span className="ml-2">
                               {new Date(room.lastActivity).toLocaleDateString()}
