@@ -109,6 +109,11 @@ jobs:
           export SKIP_ENV_VALIDATION=true
           export NEXTAUTH_URL="https://instacares.net"
           export NEXT_PUBLIC_BASE_URL="https://instacares.net"
+
+          # Apply schema changes to database (safe for adding new models)
+          echo "Pushing schema changes to database..."
+          npx prisma db push --skip-generate
+
           npm run build
 
           # Restart only staging processes

@@ -271,17 +271,24 @@ function MessagesContainerInner({
     const currentRoom = rooms.find((room: any) => room.id === roomId);
     const unreadCount = currentRoom?.unreadCount || 0;
 
+    // Optimistically set unread count to 0 in local state immediately
+    if (unreadCount > 0) {
+      setRooms(prev => prev.map(r =>
+        r.id === roomId ? { ...r, unreadCount: 0 } : r
+      ));
+      if (onMessageRead) {
+        onMessageRead(unreadCount);
+      }
+    }
+
     // Mark via socket
     markMessagesRead(roomId, userId);
 
-    // Also mark via API
+    // Also mark via API (cache gets invalidated server-side)
     fetch(`/api/chat/${roomId}/read?userId=${userId}`, {
       method: 'POST',
     }).then(() => {
-      fetchRooms(true); // Silent refresh
-      if (unreadCount > 0 && onMessageRead) {
-        onMessageRead(unreadCount);
-      }
+      fetchRooms(true); // Silent refresh to sync with server
     }).catch(err => {
       console.error('Error marking messages as read:', err);
     });
@@ -295,6 +302,11 @@ function MessagesContainerInner({
   }, [selectedRoom, isConnected, startTyping, userId, userName]);
 
   const selectedRoomData = rooms.find((room: any) => room.id === selectedRoom);
+
+  // Mobile: go back to room list
+  const handleBack = useCallback(() => {
+    setSelectedRoom(null);
+  }, []);
 
   if (loading) {
     return (
@@ -339,8 +351,11 @@ function MessagesContainerInner({
 
   return (
     <div className="h-full flex bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden">
-      {/* Messages List */}
-      <div className="w-1/3 min-w-0 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+      {/* Messages List — full width on mobile, 1/3 on desktop. Hidden on mobile when a room is selected. */}
+      <div className={`min-w-0 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden
+        ${selectedRoom ? 'hidden md:block' : 'w-full'}
+        md:w-1/3`}
+      >
         <EnhancedMessages
           userId={userId}
           userType={userType}
@@ -352,8 +367,11 @@ function MessagesContainerInner({
         />
       </div>
 
-      {/* Chat Interface */}
-      <div className="flex-1 min-w-0 bg-white dark:bg-gray-800 overflow-hidden">
+      {/* Chat Interface — full width on mobile, flex-1 on desktop. Hidden on mobile when no room selected. */}
+      <div className={`min-w-0 bg-white dark:bg-gray-800 overflow-hidden
+        ${selectedRoom ? 'w-full' : 'hidden md:block'}
+        md:flex-1`}
+      >
         <EnhancedChatInterface
           room={selectedRoomData}
           messages={messages}
@@ -363,6 +381,7 @@ function MessagesContainerInner({
           isTyping={isTyping}
           typingUser={typingUser || undefined}
           onTyping={handleTyping}
+          onBack={handleBack}
         />
       </div>
     </div>

@@ -181,6 +181,7 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
   const [showAddCaregiverModal, setShowAddCaregiverModal] = useState(false);
   const [loginUserType, setLoginUserType] = useState<'parent' | 'caregiver' | 'babysitter' | null>(null);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
@@ -341,6 +342,20 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
     setShowSignupModal(true);
     closeAllOverlays();
   };
+
+  // Count active advanced filters (everything below the basic Where/When/Children)
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (currentFilters.providerType !== 'all') count++;
+    if (currentFilters.priceRange !== 'any') count++;
+    if (currentFilters.ageGroups.length > 0) count++;
+    if (currentFilters.specialServices.length > 0) count++;
+    if (currentFilters.experience !== 'any') count++;
+    if (currentFilters.availability.length > 0) count++;
+    if (currentFilters.highlyRated) count++;
+    if (currentFilters.sortBy !== 'recommended') count++;
+    return count;
+  }, [currentFilters]);
 
   const buildSearchUrl = () => {
     const params = new URLSearchParams();
@@ -1293,6 +1308,7 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
               setEndDate(null);
               setInfantCount(0);
               setChildrenCount(0);
+              setShowMobileFilters(false);
               updateFilters({
                 providerType: 'all',
                 priceRange: 'any',
@@ -1407,8 +1423,31 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
             </div>
           </div>
 
-          {/* Divider */}
-          <hr className="border-gray-200 dark:border-gray-700" />
+          {/* Filters Toggle Button */}
+          <button
+            onClick={() => setShowMobileFilters(!showMobileFilters)}
+            className="w-full flex items-center justify-between p-3.5 bg-gray-50 dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl hover:border-rose-300 dark:hover:border-rose-600 transition-all"
+          >
+            <div className="flex items-center gap-2">
+              <AdjustmentsHorizontalIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+              <span className="text-sm font-bold text-gray-900 dark:text-gray-100">Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="min-w-[20px] h-5 px-1.5 bg-rose-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+            </div>
+            <svg
+              className={`w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${showMobileFilters ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {/* Collapsible Filter Content */}
+          {showMobileFilters && (
+          <div className="space-y-6">
 
           {/* Provider Type */}
           <div className="space-y-2">
@@ -1625,6 +1664,9 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
               <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:bg-rose-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
             </label>
           </div>
+
+          </div>
+          )}
         </div>
 
         {/* Fixed bottom search button */}

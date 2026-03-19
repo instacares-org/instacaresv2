@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server';
 import { apiSuccess, apiError, ApiErrors } from '@/lib/api-utils';
 import { withAuth } from '@/lib/auth-middleware';
 
+export const dynamic = 'force-dynamic';
+
 // Enhanced cleanup endpoint to identify and remove duplicate bookings by patterns
 export async function POST(request: NextRequest) {
   try {

@@ -1,12 +1,12 @@
 import { apiSuccess, apiError } from '@/lib/api-utils';
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db';
 
-const prisma = new PrismaClient();
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
     // Check database connectivity
-    await prisma.$queryRaw`SELECT 1`;
+    await db.$queryRaw`SELECT 1`;
     
     const healthStatus = {
       status: 'healthy',

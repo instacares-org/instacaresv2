@@ -232,7 +232,7 @@ export function addCSRFHeader(headers: HeadersInit = {}): HeadersInit {
     const csrfToken = document.cookie
       .split('; ')
       .find(row => row.startsWith(`${CSRF_COOKIE_NAME}=`))
-      ?.split('=')[1];
+      ?.split('=').slice(1).join('=');
 
     if (csrfToken) {
       return {
@@ -254,7 +254,7 @@ export function useCSRFToken(): string | null {
   return document.cookie
     .split('; ')
     .find(row => row.startsWith(`${CSRF_COOKIE_NAME}=`))
-    ?.split('=')[1] || null;
+    ?.split('=').slice(1).join('=') || null;
 }
 
 /**
@@ -266,5 +266,5 @@ export function getCSRFTokenFromCookie(): string | null {
   return document.cookie
     .split('; ')
     .find(row => row.startsWith(`${CSRF_COOKIE_NAME}=`))
-    ?.split('=')[1] || null;
+    ?.split('=').slice(1).join('=') || null;
 }

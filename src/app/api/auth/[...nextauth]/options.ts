@@ -248,20 +248,50 @@ export const authOptions: NextAuthOptions = {
               throw new Error('2FA_REQUIRED');
             }
 
-            // Verify the provided 2FA token
-            const sanitizedToken = twoFactorToken.replace(/[\s-]/g, '');
-            if (!/^\d{6}$/.test(sanitizedToken)) {
-              throw new Error('Invalid 2FA code format');
-            }
+            // Determine if this is a recovery code (XXXX-XXXX) or a TOTP code (6 digits)
+            const isRecoveryCode = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(twoFactorToken.trim());
 
-            const secret = isEncrypted(user.twoFactorSecret)
-              ? decryptField(user.twoFactorSecret)
-              : user.twoFactorSecret;
+            if (isRecoveryCode) {
+              // ── Recovery code flow ────────────────────────────────
+              const recoveryCodeInput = twoFactorToken.trim().toUpperCase();
+              const recoveryCodes = await prisma.recoveryCode.findMany({
+                where: { userId: user.id, used: false },
+              });
 
-            const otpResult = otpVerifySync({ token: sanitizedToken, secret });
-            if (!otpResult.valid) {
-              await recordFailedAttempt(email);
-              throw new Error('Invalid 2FA code');
+              let matched = false;
+              for (const rc of recoveryCodes) {
+                const isMatch = await bcrypt.compare(recoveryCodeInput, rc.codeHash);
+                if (isMatch) {
+                  // Mark the recovery code as used
+                  await prisma.recoveryCode.update({
+                    where: { id: rc.id },
+                    data: { used: true, usedAt: new Date() },
+                  });
+                  matched = true;
+                  break;
+                }
+              }
+
+              if (!matched) {
+                await recordFailedAttempt(email);
+                throw new Error('Invalid recovery code');
+              }
+            } else {
+              // ── TOTP code flow ────────────────────────────────────
+              const sanitizedToken = twoFactorToken.replace(/[\s-]/g, '');
+              if (!/^\d{6}$/.test(sanitizedToken)) {
+                throw new Error('Invalid 2FA code format');
+              }
+
+              const secret = isEncrypted(user.twoFactorSecret)
+                ? decryptField(user.twoFactorSecret)
+                : user.twoFactorSecret;
+
+              const otpResult = otpVerifySync({ token: sanitizedToken, secret });
+              if (!otpResult.valid) {
+                await recordFailedAttempt(email);
+                throw new Error('Invalid 2FA code');
+              }
             }
           }
 
@@ -300,6 +330,7 @@ export const authOptions: NextAuthOptions = {
             isBabysitter: user.isBabysitter,
             babysitter: user.babysitter,
             mustChangePassword: user.mustChangePassword,
+            twoFactorEnabled: user.twoFactorEnabled,
             // Dual-role support - include from database
             isParent: user.isParent,
             isCaregiver: user.isCaregiver,
@@ -312,6 +343,7 @@ export const authOptions: NextAuthOptions = {
             error.message === '2FA_REQUIRED' ||
             error.message === 'Invalid 2FA code' ||
             error.message === 'Invalid 2FA code format' ||
+            error.message === 'Invalid recovery code' ||
             error.message.startsWith('Account is') ||
             error.message.startsWith('Account has') ||
             error.message.startsWith('Too many login')
@@ -482,6 +514,7 @@ export const authOptions: NextAuthOptions = {
       if (token) {
         session.user.needsProfileCompletion = token.needsProfileCompletion as boolean;
         session.user.mustChangePassword = token.mustChangePassword as boolean;
+        session.user.twoFactorEnabled = token.twoFactorEnabled as boolean;
         session.user.isParent = token.isParent as boolean;
         session.user.isCaregiver = token.isCaregiver as boolean;
         session.user.isBabysitter = token.isBabysitter as boolean;
@@ -503,6 +536,7 @@ export const authOptions: NextAuthOptions = {
               approvalStatus: true,
               isActive: true,
               mustChangePassword: true,
+              twoFactorEnabled: true,
               caregiver: true,
               // Dual role support
               isParent: true,
@@ -534,6 +568,7 @@ export const authOptions: NextAuthOptions = {
               caregiver: dbUser.caregiver,
               needsProfileCompletion: needsCompletion,
               mustChangePassword: dbUser.mustChangePassword,
+              twoFactorEnabled: dbUser.twoFactorEnabled,
               // Dual role support
               isParent: dbUser.isParent,
               isCaregiver: dbUser.isCaregiver,
@@ -563,6 +598,7 @@ export const authOptions: NextAuthOptions = {
           token.caregiver = (user as any).caregiver;
           token.needsProfileCompletion = false; // Credentials users have complete profiles
           token.mustChangePassword = (user as any).mustChangePassword || false;
+          token.twoFactorEnabled = (user as any).twoFactorEnabled || false;
           // Dual role support for credentials provider
           token.isParent = (user as any).isParent;
           token.isCaregiver = (user as any).isCaregiver;
@@ -626,6 +662,7 @@ export const authOptions: NextAuthOptions = {
               approvalStatus: true,
               isActive: true,
               mustChangePassword: true,
+              twoFactorEnabled: true,
               // Dual role support - refresh on every request
               isParent: true,
               isCaregiver: true,
@@ -648,6 +685,7 @@ export const authOptions: NextAuthOptions = {
             token.approvalStatus = dbUser.approvalStatus;
             token.isActive = dbUser.isActive;
             token.mustChangePassword = dbUser.mustChangePassword;
+            token.twoFactorEnabled = dbUser.twoFactorEnabled;
             // Dual role support - update on every request
             token.isParent = dbUser.isParent;
             token.isCaregiver = dbUser.isCaregiver;

@@ -2,7 +2,8 @@
 
 import { HeartIcon, MapPinIcon, ClockIcon, ShieldCheckIcon, ChatBubbleLeftEllipsisIcon } from "@heroicons/react/24/outline";
 import { StarIcon as StarIconSolid, HeartIcon as HeartIconSolid } from "@heroicons/react/24/solid";
-import { useState, memo, useMemo } from "react";
+import { useState, useEffect, useCallback, memo, useMemo } from "react";
+import { addCSRFHeader } from '@/lib/csrf';
 import CaregiverProfileImage from "./CaregiverProfileImage";
 import BabysitterDetailModal from "./BabysitterDetailModal";
 import BookBabysitterModal from "./BookBabysitterModal";
@@ -41,11 +42,49 @@ export interface BabysitterCardData {
 interface BabysitterCardProps {
   babysitter: BabysitterCardData;
   isSelected?: boolean;
+  isFavorited?: boolean;
+  onFavoriteToggle?: (providerId: string, isFavorited: boolean) => void;
 }
 
-function BabysitterCard({ babysitter, isSelected }: BabysitterCardProps) {
+function BabysitterCard({ babysitter, isSelected, isFavorited: isFavoritedProp, onFavoriteToggle }: BabysitterCardProps) {
   const { isAuthenticated, isParent, user } = useAuth();
-  const [isFavorited, setIsFavorited] = useState(false);
+  const [isFavorited, setIsFavorited] = useState(isFavoritedProp ?? false);
+  const [favLoading, setFavLoading] = useState(false);
+
+  useEffect(() => {
+    if (isFavoritedProp !== undefined) setIsFavorited(isFavoritedProp);
+  }, [isFavoritedProp]);
+
+  const handleFavoriteToggle = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isAuthenticated || !isParent) return;
+    if (favLoading) return;
+
+    const providerId = babysitter.userId;
+    const newState = !isFavorited;
+    setIsFavorited(newState);
+    setFavLoading(true);
+
+    try {
+      const res = await fetch('/api/favorites', {
+        method: 'POST',
+        headers: addCSRFHeader({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ providerId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const serverState = data.data?.isFavorited ?? newState;
+        setIsFavorited(serverState);
+        onFavoriteToggle?.(providerId, serverState);
+      } else {
+        setIsFavorited(!newState);
+      }
+    } catch {
+      setIsFavorited(!newState);
+    } finally {
+      setFavLoading(false);
+    }
+  }, [isAuthenticated, isParent, isFavorited, favLoading, babysitter.userId, onFavoriteToggle]);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
@@ -109,19 +148,19 @@ function BabysitterCard({ babysitter, isSelected }: BabysitterCardProps) {
           fill={true}
           className="w-full h-full"
         />
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsFavorited(!isFavorited);
-          }}
-          className="absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-white/80 hover:bg-white transition shadow-sm"
-        >
-          {isFavorited ? (
-            <HeartIconSolid className="h-4 w-4 shrink-0 text-violet-500" />
-          ) : (
-            <HeartIcon className="h-4 w-4 shrink-0 text-gray-700" />
-          )}
-        </button>
+        {isAuthenticated && isParent && (
+          <button
+            onClick={handleFavoriteToggle}
+            disabled={favLoading}
+            className="absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-white/80 hover:bg-white transition shadow-sm"
+          >
+            {isFavorited ? (
+              <HeartIconSolid className="h-4 w-4 shrink-0 text-violet-500" />
+            ) : (
+              <HeartIcon className="h-4 w-4 shrink-0 text-gray-700" />
+            )}
+          </button>
+        )}
 
         {/* Trust Badges */}
         <div className="absolute top-2 left-2 flex flex-col space-y-1">

@@ -17,6 +17,7 @@ declare module "next-auth" {
       caregiver?: Caregiver | null;
       needsProfileCompletion?: boolean;
       mustChangePassword?: boolean;
+      twoFactorEnabled?: boolean;
       lastLogin?: string;
       createdAt?: string;
       isBabysitter?: boolean;
@@ -58,6 +59,7 @@ declare module "next-auth/jwt" {
     lastLogin?: string;
     needsProfileCompletion?: boolean;
     mustChangePassword?: boolean;
+    twoFactorEnabled?: boolean;
     // Dual role support
     isParent?: boolean;
     isCaregiver?: boolean;

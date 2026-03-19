@@ -23,7 +23,8 @@ import {
   CheckCircle,
   AlertCircle,
   MessageCircle,
-  HelpCircle
+  HelpCircle,
+  Heart
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -45,6 +46,8 @@ import ReviewList from '../../components/ReviewList';
 import ChildProfile from '../../components/ChildProfile';
 import ThemeToggle from '../../components/ThemeToggle';
 import UserSupportTickets from '../../components/UserSupportTickets';
+import CaregiverCard, { Caregiver } from '../../components/CaregiverCard';
+import BabysitterCard, { BabysitterCardData } from '../../components/BabysitterCard';
 import ExtensionPaymentBanner from '../../components/ExtensionPaymentBanner';
 import { useUserTimezone } from '../../hooks/useUserTimezone';
 // Dynamic import for BookingChatModal to reduce initial bundle size (socket.io-client)
@@ -162,11 +165,142 @@ interface ParentProfile {
   children: Child[];
 }
 
+// Saved Providers Tab
+function SavedProvidersTab({ userId }: { userId: string }) {
+  const [favorites, setFavorites] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchFavorites = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/favorites');
+      if (res.ok) {
+        const data = await res.json();
+        setFavorites(data.data?.favorites || []);
+      }
+    } catch (err) {
+      console.error('Error fetching favorites:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFavorites();
+  }, [fetchFavorites]);
+
+  const handleUnfavorite = useCallback((_providerId: string, isFavorited: boolean) => {
+    if (!isFavorited) {
+      // Remove from list when unfavorited
+      setFavorites(prev => prev.filter(f => f.provider.id !== _providerId));
+    }
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-green-500 border-t-transparent mx-auto"></div>
+        <p className="mt-3 text-gray-500 dark:text-gray-400 text-sm">Loading saved providers...</p>
+      </div>
+    );
+  }
+
+  if (favorites.length === 0) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center">
+        <Heart className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">No saved providers yet</h3>
+        <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
+          Browse caregivers and babysitters and click the heart icon to save your favorites.
+        </p>
+        <Link
+          href="/"
+          className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition"
+        >
+          Browse Providers
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Saved Providers</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{favorites.length} provider{favorites.length !== 1 ? 's' : ''} saved</p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {favorites.map((fav) => {
+          const provider = fav.provider;
+          if (provider.isCaregiver && provider.caregiver) {
+            const caregiverData: Caregiver = {
+              id: provider.id,
+              caregiverId: provider.caregiver.id,
+              name: provider.name || `${provider.profile?.firstName || ''} ${provider.profile?.lastName || ''}`.trim(),
+              image: provider.profile?.avatar || provider.image || '',
+              profilePhoto: provider.profile?.avatar || undefined,
+              rating: provider.caregiver.averageRating || 0,
+              reviewCount: provider._count?.receivedReviews || 0,
+              hourlyRate: provider.caregiver.hourlyRate || 0,
+              distance: '',
+              description: provider.caregiver.bio || '',
+              specialties: provider.caregiver.specialties || [],
+              location: { lat: 0, lng: 0, address: '' },
+              availability: '',
+              verified: false,
+              experience: `${provider.caregiver.experienceYears || 0} years`,
+              city: provider.profile?.city || '',
+            };
+            return (
+              <CaregiverCard
+                key={fav.id}
+                caregiver={caregiverData}
+                isFavorited={true}
+                onFavoriteToggle={handleUnfavorite}
+              />
+            );
+          }
+          if (provider.isBabysitter && provider.babysitter) {
+            const babysitterData: BabysitterCardData = {
+              id: provider.babysitter.id,
+              userId: provider.id,
+              type: 'babysitter',
+              firstName: provider.profile?.firstName || '',
+              lastName: provider.profile?.lastName || '',
+              avatar: provider.profile?.avatar || null,
+              city: provider.profile?.city || '',
+              state: provider.profile?.state || '',
+              bio: provider.babysitter.bio || '',
+              experienceYears: provider.babysitter.experienceYears || 0,
+              hourlyRate: provider.babysitter.hourlyRate || 0,
+              averageRating: provider.babysitter.averageRating || null,
+              reviewCount: provider._count?.receivedReviews || 0,
+              trustBadges: [],
+              acceptsOnsitePayment: provider.babysitter.acceptsOnsitePayment || false,
+              stripeOnboarded: provider.babysitter.stripeOnboarded || false,
+              availability: [],
+            };
+            return (
+              <BabysitterCard
+                key={fav.id}
+                babysitter={babysitterData}
+                isFavorited={true}
+                onFavoriteToggle={handleUnfavorite}
+              />
+            );
+          }
+          return null;
+        })}
+      </div>
+    </div>
+  );
+}
+
 const ParentDashboardContent: React.FC = () => {
   const { user, loading: authLoading, isAuthenticated, isParent, logout, refreshUser } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'overview' | 'profile' | 'bookings' | 'messages' | 'notifications' | 'children' | 'support'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'profile' | 'bookings' | 'messages' | 'notifications' | 'children' | 'saved' | 'support'>('overview');
   const [profile, setProfile] = useState<ParentProfile | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -251,7 +385,7 @@ const ParentDashboardContent: React.FC = () => {
   useEffect(() => {
     const tabParam = searchParams.get('tab');
     if (tabParam && ['overview', 'profile', 'bookings', 'messages', 'notifications', 'children', 'support'].includes(tabParam)) {
-      setActiveTab(tabParam as 'overview' | 'profile' | 'bookings' | 'messages' | 'notifications' | 'children' | 'support');
+      setActiveTab(tabParam as 'overview' | 'profile' | 'bookings' | 'messages' | 'notifications' | 'children' | 'saved' | 'support');
       console.log('🔗 URL tab parameter detected:', tabParam, '- switching to tab');
       
       // Clear the URL parameter to keep the URL clean
@@ -766,7 +900,7 @@ const ParentDashboardContent: React.FC = () => {
     setReviewBooking(null);
   }, []);
 
-  const handleTabChange = useCallback((tab: 'overview' | 'profile' | 'bookings' | 'messages' | 'children' | 'notifications' | 'support') => {
+  const handleTabChange = useCallback((tab: 'overview' | 'profile' | 'bookings' | 'messages' | 'children' | 'notifications' | 'saved' | 'support') => {
     setActiveTab(tab);
 
     if (tab === 'messages') {
@@ -1095,6 +1229,17 @@ const ParentDashboardContent: React.FC = () => {
                   )}
                 </button>
                 <button
+                  onClick={() => handleTabChange('saved')}
+                  className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                    activeTab === 'saved'
+                      ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300'
+                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <Heart className="h-5 w-5 mr-3" />
+                  Saved Providers
+                </button>
+                <button
                   onClick={() => handleTabChange('support')}
                   className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md ${
                     activeTab === 'support'
@@ -1176,6 +1321,9 @@ const ParentDashboardContent: React.FC = () => {
                 addBookingNotification={addBookingNotification}
                 addSystemNotification={addSystemNotification}
               />
+            )}
+            {activeTab === 'saved' && user && (
+              <SavedProvidersTab userId={user.id} />
             )}
             {activeTab === 'support' && user && (
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow">

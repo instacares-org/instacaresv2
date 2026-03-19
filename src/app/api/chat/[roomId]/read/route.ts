@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { withAuth } from '@/lib/auth-middleware';
 import { logger, getClientInfo } from '@/lib/logger';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
+import { apiCache, cacheKeys } from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,6 +58,10 @@ export async function POST(
         readAt: new Date(),
       },
     });
+
+    // Invalidate chat rooms cache so next fetch reflects updated unread counts
+    const userType = user.userType?.toLowerCase() || 'parent';
+    await apiCache.delete(cacheKeys.chatRooms(user.id, userType));
 
     logger.info('Messages marked as read', {
       userId: user.id,

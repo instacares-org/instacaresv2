@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { AdjustmentsHorizontalIcon, MapIcon, ListBulletIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import Header, { FilterState } from "../../components/Header";
 import CaregiverCard, { Caregiver } from "../../components/CaregiverCard";
 import BabysitterCard, { BabysitterCardData } from "../../components/BabysitterCard";
+import { useAuth } from "@/contexts/AuthContext";
 import { geocodeLocation } from "@/lib/geocoding";
 import { MapViewport, getRadiusFromZoom } from "../../components/CaregiverMap";
 
@@ -330,6 +331,7 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 
 function SearchPageContent() {
   const searchParams = useSearchParams();
+  const { isAuthenticated, isParent } = useAuth();
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [selectedCaregiver, setSelectedCaregiver] = useState<Caregiver | null>(null);
   const [hoveredCaregiver, setHoveredCaregiver] = useState<Caregiver | null>(null);
@@ -372,6 +374,40 @@ function SearchPageContent() {
     highlyRated: false,
     sortBy: 'recommended'
   });
+
+  const [favoriteMap, setFavoriteMap] = useState<Record<string, boolean>>({});
+
+  // Fetch favorite status for all displayed providers
+  const fetchFavorites = useCallback(async (caregiverIds: string[], babysitterUserIds: string[]) => {
+    if (!isAuthenticated || !isParent) return;
+    const allIds = [...caregiverIds, ...babysitterUserIds].filter(Boolean);
+    if (allIds.length === 0) return;
+    try {
+      const response = await fetch(`/api/favorites/check?providerIds=${allIds.join(',')}`);
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data?.favorites) {
+          setFavoriteMap(result.data.favorites);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching favorites:', error);
+    }
+  }, [isAuthenticated, isParent]);
+
+  // Fetch favorites when caregivers or babysitters change
+  useEffect(() => {
+    if (!isAuthenticated || !isParent) return;
+    const caregiverIds = allCaregivers.map(c => c.id);
+    const babysitterUserIds = allBabysitters.map(b => b.userId);
+    if (caregiverIds.length > 0 || babysitterUserIds.length > 0) {
+      fetchFavorites(caregiverIds, babysitterUserIds);
+    }
+  }, [allCaregivers, allBabysitters, isAuthenticated, isParent, fetchFavorites]);
+
+  const handleFavoriteToggle = useCallback((providerId: string, isFavorited: boolean) => {
+    setFavoriteMap(prev => ({ ...prev, [providerId]: isFavorited }));
+  }, []);
 
   // Function to get coordinates from search location
   const getCoordinatesFromLocation = (location: string): {lat: number, lng: number} | null => {
@@ -1279,11 +1315,15 @@ function SearchPageContent() {
                                 onHover={setHoveredCaregiver}
                                 isSelected={selectedCaregiver?.id === item.data.id}
                                 showContactInfo={showCaregiverContactInfo}
+                                isFavorited={favoriteMap[item.data.id]}
+                                onFavoriteToggle={handleFavoriteToggle}
                               />
                             ) : (
                               <BabysitterCard
                                 key={`b-${item.data.id}`}
                                 babysitter={item.data as BabysitterCardData}
+                                isFavorited={favoriteMap[(item.data as BabysitterCardData).userId]}
+                                onFavoriteToggle={handleFavoriteToggle}
                               />
                             )
                           ))}

@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { verifyAdminAuth } from '@/lib/adminAuth';
 import { logAuditEvent } from '@/lib/audit-log';
 
+export const dynamic = 'force-dynamic';
+
 const verifyCaregiverSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Must be a valid email address'),
 });

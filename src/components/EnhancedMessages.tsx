@@ -29,6 +29,7 @@ import { useSocket } from '@/context/SocketContext';
 
 interface ChatRoom {
   id: string;
+  roomType?: 'BOOKING' | 'DIRECT';
   booking: {
     id: string;
     startTime: string;
@@ -55,6 +56,16 @@ interface ChatRoom {
         phone?: string;
         avatar?: string;
       };
+    };
+  } | null;
+  otherParty?: {
+    id: string;
+    email: string;
+    profile: {
+      firstName: string;
+      lastName: string;
+      phone?: string;
+      avatar?: string;
     };
   };
   lastMessage?: {
@@ -111,8 +122,10 @@ export default function EnhancedMessages({
     return onlineUsers.has(otherUserId);
   };
 
-  // Get the other user for each room
+  // Get the other user for each room (use otherParty which works for both booking and direct rooms)
   const getOtherUser = (room: ChatRoom) => {
+    if (room.otherParty) return room.otherParty;
+    if (!room.booking) return undefined;
     return userType === 'parent' ? room.booking.caregiver : room.booking.parent;
   };
 
@@ -125,9 +138,9 @@ export default function EnhancedMessages({
       filtered = filtered.filter(room => {
         const otherUser = getOtherUser(room);
         const userName = `${otherUser?.profile?.firstName || ''} ${otherUser?.profile?.lastName || ''}`.toLowerCase();
-        const bookingAddress = room.booking.address.toLowerCase();
+        const bookingAddress = (room.booking?.address || '').toLowerCase();
         const lastMessage = room.lastMessage?.content.toLowerCase() || '';
-        
+
         return userName.includes(searchQuery.toLowerCase()) ||
                bookingAddress.includes(searchQuery.toLowerCase()) ||
                lastMessage.includes(searchQuery.toLowerCase());
@@ -154,16 +167,16 @@ export default function EnhancedMessages({
     return filtered.sort((a, b) => {
       switch (sortBy) {
         case 'recent':
-          return new Date(b.lastMessageAt || b.booking.startTime).getTime() - 
-                 new Date(a.lastMessageAt || a.booking.startTime).getTime();
+          return new Date(b.lastMessageAt || b.booking?.startTime || 0).getTime() -
+                 new Date(a.lastMessageAt || a.booking?.startTime || 0).getTime();
         case 'unread':
           return b.unreadCount - a.unreadCount;
         case 'upcoming':
-          return new Date(a.booking.startTime).getTime() - new Date(b.booking.startTime).getTime();
+          return new Date(a.booking?.startTime || 0).getTime() - new Date(b.booking?.startTime || 0).getTime();
         case 'status':
           const statusOrder = { 'CONFIRMED': 0, 'IN_PROGRESS': 1, 'PENDING': 2, 'COMPLETED': 3 };
-          return (statusOrder[a.booking.status as keyof typeof statusOrder] || 4) - 
-                 (statusOrder[b.booking.status as keyof typeof statusOrder] || 4);
+          return (statusOrder[(a.booking?.status || '') as keyof typeof statusOrder] || 4) -
+                 (statusOrder[(b.booking?.status || '') as keyof typeof statusOrder] || 4);
         case 'name':
           const aName = getOtherUser(a)?.profile?.firstName || '';
           const bName = getOtherUser(b)?.profile?.firstName || '';
@@ -333,6 +346,7 @@ export default function EnhancedMessages({
             <div className="w-1.5 h-1.5 bg-orange-500 rounded-full mr-1.5"></div>
             <span className="text-gray-600 dark:text-gray-400">
               {rooms.filter(r => {
+                if (!r.booking?.startTime) return false;
                 const startTime = new Date(r.booking.startTime);
                 const now = new Date();
                 return startTime > now && startTime.getTime() - now.getTime() < 24 * 60 * 60 * 1000;
@@ -386,7 +400,8 @@ export default function EnhancedMessages({
           filteredAndSortedRooms.map((room) => {
             const otherUser = getOtherUser(room);
             const userName = `${otherUser?.profile?.firstName || ''} ${otherUser?.profile?.lastName || ''}`.trim() || 'Unknown User';
-            const bookingStatus = getBookingStatus(room.booking);
+            const isDirectRoom = room.roomType === 'DIRECT' || !room.booking;
+            const bookingStatus = isDirectRoom ? { text: 'Direct', color: 'text-violet-600 bg-violet-50' } : getBookingStatus(room.booking);
             const isSelected = selectedRooms.has(room.id);
             
             return (
@@ -460,29 +475,36 @@ export default function EnhancedMessages({
                             <StarIcon className="h-4 w-4 text-yellow-500 dark:text-yellow-400" />
                           )}
                           <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {formatTime(room.lastMessageAt || room.booking.startTime)}
+                            {formatTime(room.lastMessageAt || room.booking?.startTime || new Date().toISOString())}
                           </span>
                         </div>
                       </div>
 
-                      {/* Booking Info */}
-                      <div className="flex items-center text-xs text-gray-600 dark:text-gray-400 mb-1.5 space-x-2 overflow-hidden">
-                        <div className="flex items-center whitespace-nowrap">
-                          <CalendarIcon className="h-2.5 w-2.5 mr-0.5 flex-shrink-0" />
-                          {new Date(room.booking.startTime).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                      {/* Booking Info (only for booking rooms) */}
+                      {room.booking ? (
+                        <div className="flex items-center text-xs text-gray-600 dark:text-gray-400 mb-1.5 space-x-2 overflow-hidden">
+                          <div className="flex items-center whitespace-nowrap">
+                            <CalendarIcon className="h-2.5 w-2.5 mr-0.5 flex-shrink-0" />
+                            {new Date(room.booking.startTime).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                          </div>
+                          <div className="flex items-center whitespace-nowrap">
+                            <ClockIcon className="h-2.5 w-2.5 mr-0.5 flex-shrink-0" />
+                            {new Date(room.booking.startTime).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </div>
+                          <div className="flex items-center whitespace-nowrap">
+                            <UserIcon className="h-2.5 w-2.5 mr-0.5 flex-shrink-0" />
+                            {room.booking.childrenCount}
+                          </div>
                         </div>
-                        <div className="flex items-center whitespace-nowrap">
-                          <ClockIcon className="h-2.5 w-2.5 mr-0.5 flex-shrink-0" />
-                          {new Date(room.booking.startTime).toLocaleTimeString([], { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
+                      ) : (
+                        <div className="flex items-center text-xs text-violet-500 dark:text-violet-400 mb-1.5">
+                          <ChatBubbleLeftRightIcon className="h-2.5 w-2.5 mr-0.5 flex-shrink-0" />
+                          <span>Direct message</span>
                         </div>
-                        <div className="flex items-center whitespace-nowrap">
-                          <UserIcon className="h-2.5 w-2.5 mr-0.5 flex-shrink-0" />
-                          {room.booking.childrenCount}
-                        </div>
-                      </div>
+                      )}
 
                       {/* Last Message */}
                       {room.lastMessage && (
@@ -494,11 +516,13 @@ export default function EnhancedMessages({
                         </p>
                       )}
 
-                      {/* Location */}
-                      <div className="flex items-center mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                        <MapPinIcon className="h-2.5 w-2.5 mr-0.5" />
-                        <span className="truncate">{room.booking.address.split(',')[0]}</span>
-                      </div>
+                      {/* Location (only for booking rooms) */}
+                      {room.booking?.address && (
+                        <div className="flex items-center mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                          <MapPinIcon className="h-2.5 w-2.5 mr-0.5" />
+                          <span className="truncate">{room.booking.address.split(',')[0]}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Quick Actions */}

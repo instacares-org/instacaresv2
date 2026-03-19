@@ -3,7 +3,8 @@
 import Image from "next/image";
 import { StarIcon, HeartIcon, MapPinIcon, ClockIcon, ShieldCheckIcon, ChatBubbleLeftEllipsisIcon } from "@heroicons/react/24/outline";
 import { StarIcon as StarIconSolid, HeartIcon as HeartIconSolid } from "@heroicons/react/24/solid";
-import { useState, memo, useMemo } from "react";
+import { useState, useEffect, useCallback, memo, useMemo } from "react";
+import { addCSRFHeader } from '@/lib/csrf';
 import CaregiverProfileImage from "./CaregiverProfileImage";
 import BookingModal from "./BookingModal";
 import CaregiverDetailModal from "./CaregiverDetailModal";
@@ -77,12 +78,49 @@ interface CaregiverCardProps {
   caregiver: Caregiver;
   onHover?: (caregiver: Caregiver | null) => void;
   isSelected?: boolean;
+  isFavorited?: boolean;
+  onFavoriteToggle?: (providerId: string, isFavorited: boolean) => void;
 }
 
-function CaregiverCard({ caregiver, onHover, isSelected, showContactInfo = false }: CaregiverCardProps) {
+function CaregiverCard({ caregiver, onHover, isSelected, showContactInfo = false, isFavorited: isFavoritedProp, onFavoriteToggle }: CaregiverCardProps) {
   const { t } = useLanguage();
   const { isAuthenticated, isParent, user } = useAuth();
-  const [isFavorited, setIsFavorited] = useState(false);
+  const [isFavorited, setIsFavorited] = useState(isFavoritedProp ?? false);
+  const [favLoading, setFavLoading] = useState(false);
+
+  useEffect(() => {
+    if (isFavoritedProp !== undefined) setIsFavorited(isFavoritedProp);
+  }, [isFavoritedProp]);
+
+  const handleFavoriteToggle = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isAuthenticated || !isParent) return;
+    if (favLoading) return;
+
+    const newState = !isFavorited;
+    setIsFavorited(newState); // Optimistic update
+    setFavLoading(true);
+
+    try {
+      const res = await fetch('/api/favorites', {
+        method: 'POST',
+        headers: addCSRFHeader({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ providerId: caregiver.id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const serverState = data.data?.isFavorited ?? newState;
+        setIsFavorited(serverState);
+        onFavoriteToggle?.(caregiver.id, serverState);
+      } else {
+        setIsFavorited(!newState); // Revert on failure
+      }
+    } catch {
+      setIsFavorited(!newState); // Revert on error
+    } finally {
+      setFavLoading(false);
+    }
+  }, [isAuthenticated, isParent, isFavorited, favLoading, caregiver.id, onFavoriteToggle]);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
@@ -132,19 +170,19 @@ function CaregiverCard({ caregiver, onHover, isSelected, showContactInfo = false
           fill={true}
           className="w-full h-full"
         />
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsFavorited(!isFavorited);
-          }}
-          className="absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-white/80 hover:bg-white transition shadow-sm"
-        >
-          {isFavorited ? (
-            <HeartIconSolid className="h-4 w-4 shrink-0 text-rose-500" />
-          ) : (
-            <HeartIcon className="h-4 w-4 shrink-0 text-gray-700" />
-          )}
-        </button>
+        {isAuthenticated && isParent && (
+          <button
+            onClick={handleFavoriteToggle}
+            disabled={favLoading}
+            className="absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-white/80 hover:bg-white transition shadow-sm"
+          >
+            {isFavorited ? (
+              <HeartIconSolid className="h-4 w-4 shrink-0 text-rose-500" />
+            ) : (
+              <HeartIcon className="h-4 w-4 shrink-0 text-gray-700" />
+            )}
+          </button>
+        )}
         
         {/* Enhanced Trust Indicators - Brand Aligned Colors */}
         <div className="absolute top-2 left-2 flex flex-col space-y-1">

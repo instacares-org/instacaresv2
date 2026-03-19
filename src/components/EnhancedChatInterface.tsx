@@ -18,7 +18,8 @@ import {
   CalendarIcon,
   ClockIcon,
   UserGroupIcon,
-  StarIcon
+  StarIcon,
+  ArrowLeftIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -41,6 +42,7 @@ interface Message {
 
 interface ChatRoom {
   id: string;
+  roomType?: 'BOOKING' | 'DIRECT';
   booking: {
     id: string;
     startTime: string;
@@ -71,6 +73,16 @@ interface ChatRoom {
         avatar?: string;
       };
     };
+  } | null;
+  otherParty?: {
+    id: string;
+    email: string;
+    profile: {
+      firstName: string;
+      lastName: string;
+      phone?: string;
+      avatar?: string;
+    };
   };
   isActive: boolean;
 }
@@ -84,6 +96,7 @@ interface EnhancedChatInterfaceProps {
   isTyping?: boolean;
   typingUser?: string;
   onTyping?: () => void;
+  onBack?: () => void;
 }
 
 export default function EnhancedChatInterface({
@@ -94,7 +107,8 @@ export default function EnhancedChatInterface({
   userId,
   isTyping,
   typingUser,
-  onTyping
+  onTyping,
+  onBack
 }: EnhancedChatInterfaceProps) {
   const [messageInput, setMessageInput] = useState('');
   const [showRoomInfo, setShowRoomInfo] = useState(false);
@@ -138,13 +152,14 @@ export default function EnhancedChatInterface({
     );
   }
 
-  const otherUser = userType === 'parent' ? room.booking.caregiver : room.booking.parent;
+  const isDirectRoom = room.roomType === 'DIRECT' || !room.booking;
+  const otherUser = room.otherParty || (room.booking ? (userType === 'parent' ? room.booking.caregiver : room.booking.parent) : undefined);
   const otherUserName = `${otherUser?.profile?.firstName || ''} ${otherUser?.profile?.lastName || ''}`.trim();
-  
+
   const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    return new Date(dateString).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 
@@ -164,10 +179,11 @@ export default function EnhancedChatInterface({
   };
 
   const getBookingStatus = () => {
+    if (!room.booking) return { text: 'Direct Message', color: 'text-violet-600' };
     const now = new Date();
     const startTime = new Date(room.booking.startTime);
     const endTime = new Date(room.booking.endTime);
-    
+
     if (room.booking.status === 'COMPLETED') return { text: 'Completed', color: 'text-green-600' };
     if (room.booking.status === 'CANCELLED') return { text: 'Cancelled', color: 'text-red-600' };
     if (now >= startTime && now <= endTime) return { text: 'In Progress', color: 'text-blue-600' };
@@ -193,6 +209,16 @@ export default function EnhancedChatInterface({
       <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm">
         <div className="flex items-center justify-between min-w-0">
           <div className="flex items-center space-x-3 min-w-0 flex-1">
+            {/* Back button — mobile only */}
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="md:hidden p-1.5 -ml-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition flex-shrink-0"
+                title="Back to conversations"
+              >
+                <ArrowLeftIcon className="h-5 w-5" />
+              </button>
+            )}
             {/* Avatar */}
             <div className="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0">
               {otherUser?.profile?.avatar ? (
@@ -217,11 +243,15 @@ export default function EnhancedChatInterface({
                 <span className={`${bookingStatus.color} font-medium whitespace-nowrap`}>
                   {bookingStatus.text}
                 </span>
-                <span className="flex-shrink-0">•</span>
-                <span className="truncate">{new Date(room.booking.startTime).toLocaleDateString()}</span>
+                {room.booking && (
+                  <>
+                    <span className="flex-shrink-0">&bull;</span>
+                    <span className="truncate">{new Date(room.booking.startTime).toLocaleDateString()}</span>
+                  </>
+                )}
                 {isTyping && typingUser && (
                   <>
-                    <span className="flex-shrink-0">•</span>
+                    <span className="flex-shrink-0">&bull;</span>
                     <span className="text-blue-600 whitespace-nowrap">typing...</span>
                   </>
                 )}
@@ -264,33 +294,35 @@ export default function EnhancedChatInterface({
           </div>
         </div>
 
-        {/* Booking Info Banner */}
-        <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4 text-sm">
-              <div className="flex items-center">
-                <CalendarIcon className="h-4 w-4 mr-1 text-blue-600 dark:text-blue-400" />
-                <span className="text-gray-700 dark:text-gray-300">{new Date(room.booking.startTime).toLocaleDateString()}</span>
+        {/* Booking Info Banner (only for booking rooms) */}
+        {room.booking && (
+          <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4 text-sm">
+                <div className="flex items-center">
+                  <CalendarIcon className="h-4 w-4 mr-1 text-blue-600 dark:text-blue-400" />
+                  <span className="text-gray-700 dark:text-gray-300">{new Date(room.booking.startTime).toLocaleDateString()}</span>
+                </div>
+                <div className="flex items-center">
+                  <ClockIcon className="h-4 w-4 mr-1 text-blue-600 dark:text-blue-400" />
+                  <span className="text-gray-700 dark:text-gray-300">
+                    {formatTime(room.booking.startTime)} - {formatTime(room.booking.endTime)}
+                  </span>
+                </div>
+                <div className="flex items-center">
+                  <UserGroupIcon className="h-4 w-4 mr-1 text-blue-600 dark:text-blue-400" />
+                  <span className="text-gray-700 dark:text-gray-300">{room.booking.childrenCount} child{room.booking.childrenCount !== 1 ? 'ren' : ''}</span>
+                </div>
               </div>
-              <div className="flex items-center">
-                <ClockIcon className="h-4 w-4 mr-1 text-blue-600 dark:text-blue-400" />
-                <span className="text-gray-700 dark:text-gray-300">
-                  {formatTime(room.booking.startTime)} - {formatTime(room.booking.endTime)}
-                </span>
-              </div>
-              <div className="flex items-center">
-                <UserGroupIcon className="h-4 w-4 mr-1 text-blue-600 dark:text-blue-400" />
-                <span className="text-gray-700 dark:text-gray-300">{room.booking.childrenCount} child{room.booking.childrenCount !== 1 ? 'ren' : ''}</span>
-              </div>
+              <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                ${(room.booking.totalAmount / 100).toFixed(2)}
+              </span>
             </div>
-            <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
-              ${(room.booking.totalAmount / 100).toFixed(2)}
-            </span>
           </div>
-        </div>
+        )}
 
-        {/* Booking Actions */}
-        {showBookingActions && (
+        {/* Booking Actions (only for booking rooms) */}
+        {showBookingActions && room.booking && (
           <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
             <div className="flex space-x-2">
               {userType === 'caregiver' && room.booking.status === 'CONFIRMED' && (
@@ -319,13 +351,15 @@ export default function EnhancedChatInterface({
       {/* Room Info Sidebar */}
       {showRoomInfo && (
         <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-          <h4 className="font-medium text-gray-900 dark:text-white mb-3">Booking Details</h4>
+          <h4 className="font-medium text-gray-900 dark:text-white mb-3">{room.booking ? 'Booking Details' : 'Contact Details'}</h4>
           <div className="space-y-2 text-sm">
-            <div className="flex items-start">
-              <MapPinIcon className="h-4 w-4 mr-2 text-gray-500 dark:text-gray-400 mt-0.5" />
-              <span className="text-gray-700 dark:text-gray-300">{room.booking.address}</span>
-            </div>
-            {room.booking.specialRequests && (
+            {room.booking?.address && (
+              <div className="flex items-start">
+                <MapPinIcon className="h-4 w-4 mr-2 text-gray-500 dark:text-gray-400 mt-0.5" />
+                <span className="text-gray-700 dark:text-gray-300">{room.booking.address}</span>
+              </div>
+            )}
+            {room.booking?.specialRequests && (
               <div className="flex items-start">
                 <StarIcon className="h-4 w-4 mr-2 text-gray-500 dark:text-gray-400 mt-0.5" />
                 <div>
@@ -334,10 +368,12 @@ export default function EnhancedChatInterface({
                 </div>
               </div>
             )}
-            <div className="flex items-center">
-              <span className="text-gray-600 dark:text-gray-400 font-medium mr-2">Rate:</span>
-              <span className="text-gray-700 dark:text-gray-300">${room.booking.hourlyRate}/hour</span>
-            </div>
+            {room.booking?.hourlyRate && (
+              <div className="flex items-center">
+                <span className="text-gray-600 dark:text-gray-400 font-medium mr-2">Rate:</span>
+                <span className="text-gray-700 dark:text-gray-300">${room.booking.hourlyRate}/hour</span>
+              </div>
+            )}
             <div className="flex items-center">
               <span className="text-gray-600 dark:text-gray-400 font-medium mr-2">Contact:</span>
               <span className="text-gray-700 dark:text-gray-300">{otherUser?.email}</span>

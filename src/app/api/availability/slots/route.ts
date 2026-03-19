@@ -3,6 +3,8 @@ import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 import { withAuth } from '@/lib/auth-middleware';
 import { AvailabilityService } from '@/lib/availabilityService';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/availability/slots - Get available slots
 export async function GET(request: NextRequest) {
   try {

@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Header, { FilterState } from "../components/Header";
 import Banner from "../components/Banner";
 import CaregiverCard, { Caregiver } from "../components/CaregiverCard";
 import BabysitterCard, { BabysitterCardData } from "../components/BabysitterCard";
 import Footer from "../components/Footer";
 import { useLanguage } from "../contexts/LanguageContext";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function Home() {
   const { t } = useLanguage();
+  const { isAuthenticated, isParent } = useAuth();
   const [caregivers, setCaregivers] = useState<Caregiver[]>([]);
   const [allCaregivers, setAllCaregivers] = useState<Caregiver[]>([]); // Store all caregivers for filtering
   const [allBabysitters, setAllBabysitters] = useState<BabysitterCardData[]>([]);
@@ -33,6 +35,39 @@ export default function Home() {
   const [locationPermission, setLocationPermission] = useState<'prompt' | 'granted' | 'denied'>('prompt');
   const [selectedRadius, setSelectedRadius] = useState(20); // Default 20km - temporarily increased to test Fazila's image
   const [showContactInfo, setShowContactInfo] = useState(false); // Platform setting for showing contact info
+  const [favoriteMap, setFavoriteMap] = useState<Record<string, boolean>>({});
+
+  // Fetch favorite status for all displayed providers
+  const fetchFavorites = useCallback(async (caregiverIds: string[], babysitterUserIds: string[]) => {
+    if (!isAuthenticated || !isParent) return;
+    const allIds = [...caregiverIds, ...babysitterUserIds].filter(Boolean);
+    if (allIds.length === 0) return;
+    try {
+      const response = await fetch(`/api/favorites/check?providerIds=${allIds.join(',')}`);
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data?.favorites) {
+          setFavoriteMap(result.data.favorites);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching favorites:', error);
+    }
+  }, [isAuthenticated, isParent]);
+
+  // Fetch favorites when caregivers or babysitters change
+  useEffect(() => {
+    if (!isAuthenticated || !isParent) return;
+    const caregiverIds = allCaregivers.map(c => c.id);
+    const babysitterUserIds = allBabysitters.map(b => b.userId);
+    if (caregiverIds.length > 0 || babysitterUserIds.length > 0) {
+      fetchFavorites(caregiverIds, babysitterUserIds);
+    }
+  }, [allCaregivers, allBabysitters, isAuthenticated, isParent, fetchFavorites]);
+
+  const handleFavoriteToggle = useCallback((providerId: string, isFavorited: boolean) => {
+    setFavoriteMap(prev => ({ ...prev, [providerId]: isFavorited }));
+  }, []);
 
   // Haversine formula to calculate distance between two points
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -741,12 +776,16 @@ export default function Home() {
                 <CaregiverCard
                   key={`c-${caregiver.id}`}
                   caregiver={caregiver}
+                  isFavorited={favoriteMap[caregiver.id]}
+                  onFavoriteToggle={handleFavoriteToggle}
                 />
               ))}
               {filteredBabysitters.map((babysitter) => (
                 <BabysitterCard
                   key={`b-${babysitter.id}`}
                   babysitter={babysitter}
+                  isFavorited={favoriteMap[babysitter.userId]}
+                  onFavoriteToggle={handleFavoriteToggle}
                 />
               ))}
             </div>

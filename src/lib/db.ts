@@ -306,18 +306,26 @@ export const bookingOperations = {
 
       // Update slot occupancy and create SlotBooking junction record
       if (availabilitySlot) {
-        // Update slot occupancy
-        const newOccupancy = availabilitySlot.currentOccupancy + data.childrenCount;
-        const newAvailableSpots = availabilitySlot.totalCapacity - newOccupancy;
-
-        await tx.availabilitySlot.update({
-          where: { id: availabilitySlot.id },
+        // Atomic conditional update using optimistic locking.
+        // The `where` clause includes `currentOccupancy` so the UPDATE only succeeds
+        // if no other transaction has modified the slot since we read it.
+        // This prevents double-booking race conditions.
+        const newAvailableSpots = availabilitySlot.totalCapacity - availabilitySlot.currentOccupancy - data.childrenCount;
+        const updated = await tx.availabilitySlot.updateMany({
+          where: {
+            id: availabilitySlot.id,
+            currentOccupancy: availabilitySlot.currentOccupancy, // Optimistic lock
+          },
           data: {
-            currentOccupancy: newOccupancy,
-            availableSpots: newAvailableSpots,
-            status: newAvailableSpots <= 0 ? 'BOOKED' : 'AVAILABLE'
-          }
+            currentOccupancy: { increment: data.childrenCount },
+            availableSpots: { decrement: data.childrenCount },
+            status: newAvailableSpots <= 0 ? 'BOOKED' : 'AVAILABLE',
+          },
         });
+
+        if (updated.count === 0) {
+          throw new Error('Slot was modified concurrently. Please try again.');
+        }
 
         // Create SlotBooking junction record
         await tx.slotBooking.create({
@@ -330,6 +338,7 @@ export const bookingOperations = {
           }
         });
 
+        const newOccupancy = availabilitySlot.currentOccupancy + data.childrenCount;
         console.log(`Updated slot ${availabilitySlot.id}: occupancy ${newOccupancy}/${availabilitySlot.totalCapacity}, available: ${newAvailableSpots}`);
       }
 

@@ -4,6 +4,8 @@ import Stripe from 'stripe';
 import { stripe } from '@/lib/stripe';
 import { headers } from 'next/headers';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const headersList = await headers();
@@ -248,6 +250,7 @@ async function handleSuccessfulPayment(paymentIntent: Stripe.PaymentIntent) {
       return;
     }
     console.error('❌ Error creating booking from payment:', error instanceof Error ? error.message : String(error));
+    throw error; // Re-throw so the outer handler returns 500 and Stripe retries
   }
 }
 
@@ -261,8 +264,7 @@ async function handleExtensionPayment(paymentIntent: Stripe.PaymentIntent) {
   });
 
   if (!extensionId) {
-    console.error('[Webhook] Extension payment missing extensionId in metadata:', paymentIntent.id);
-    return;
+    throw new Error(`[Webhook] Extension payment missing extensionId in metadata: ${paymentIntent.id}`);
   }
 
   try {
@@ -287,8 +289,7 @@ async function handleExtensionPayment(paymentIntent: Stripe.PaymentIntent) {
     });
 
     if (!extension) {
-      console.error('[Webhook] BookingExtension not found for extensionId:', extensionId);
-      return;
+      throw new Error(`[Webhook] BookingExtension not found for extensionId: ${extensionId}`);
     }
 
     // Idempotency: if the extension is already PAID, skip duplicate processing
@@ -385,8 +386,7 @@ async function handleExtensionPaymentFailed(failedPayment: Stripe.PaymentIntent)
   });
 
   if (!extensionId) {
-    console.error('[Webhook] Failed extension payment missing extensionId in metadata:', failedPayment.id);
-    return;
+    throw new Error(`[Webhook] Failed extension payment missing extensionId in metadata: ${failedPayment.id}`);
   }
 
   try {
@@ -404,8 +404,7 @@ async function handleExtensionPaymentFailed(failedPayment: Stripe.PaymentIntent)
     });
 
     if (!extension) {
-      console.error('[Webhook] BookingExtension not found for failed payment, extensionId:', extensionId);
-      return;
+      throw new Error(`[Webhook] BookingExtension not found for failed payment, extensionId: ${extensionId}`);
     }
 
     // If already in a terminal state, skip

@@ -20,7 +20,7 @@ function getCSRFTokenFromCookie(): string | null {
   );
   
   if (csrfCookie) {
-    const rawToken = csrfCookie.split('=')[1];
+    const rawToken = csrfCookie.split('=').slice(1).join('=');
     // Don't decode here - send the raw URL-encoded token to match the cookie
     return rawToken;
   }

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { generateSecret, generateURI } from 'otplib';
 import QRCode from 'qrcode';
+import bcrypt from 'bcryptjs';
 import { withAuth } from '@/lib/auth-middleware';
 import { apiSuccess, ApiErrors } from '@/lib/api-utils';
 import { db } from '@/lib/db';
@@ -72,6 +73,20 @@ export async function POST(request: NextRequest) {
       // Format as XXXX-XXXX for readability
       recoveryCodes.push(`${code.slice(0, 4)}-${code.slice(4)}`);
     }
+
+    // ── Hash and store recovery codes ─────────────────────────────
+    // Delete any existing recovery codes for this user before creating new ones
+    await db.recoveryCode.deleteMany({ where: { userId } });
+
+    // Hash each recovery code with bcrypt before storing
+    const hashedCodes = await Promise.all(
+      recoveryCodes.map(async (code) => ({
+        userId,
+        codeHash: await bcrypt.hash(code, 10),
+      }))
+    );
+
+    await db.recoveryCode.createMany({ data: hashedCodes });
 
     // ── Store encrypted secret (2FA remains disabled until verify) ─
     // Encrypt the secret before persisting to protect it at rest

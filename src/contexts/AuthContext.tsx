@@ -108,7 +108,7 @@ export interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  login: (email: string, password: string, userType?: 'parent' | 'caregiver' | 'babysitter', rememberMe?: boolean) => Promise<{ success: boolean; error?: string; status?: string }>;
+  login: (email: string, password: string, userType?: 'parent' | 'caregiver' | 'babysitter', rememberMe?: boolean, twoFactorToken?: string) => Promise<{ success: boolean; error?: string; status?: string }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   isAuthenticated: boolean;
@@ -254,20 +254,26 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     email: string,
     password: string,
     userType?: 'parent' | 'caregiver' | 'babysitter',
-    rememberMe: boolean = false
+    rememberMe: boolean = false,
+    twoFactorToken?: string
   ): Promise<{ success: boolean; error?: string; status?: string }> => {
     try {
       const result = await signIn('credentials', {
         email,
         password,
         userType,
+        twoFactorToken: twoFactorToken || '',
         redirect: false,
       });
 
       if (result?.error) {
+        // Detect 2FA required signal from backend
+        if (result.error === '2FA_REQUIRED') {
+          return { success: false, error: '2FA_REQUIRED', status: '2fa_required' };
+        }
         // Handle specific error messages from NextAuth
-        return { 
-          success: false, 
+        return {
+          success: false,
           error: result.error,
           status: result.error.includes('pending approval') ? 'pending_approval' : undefined
         };
