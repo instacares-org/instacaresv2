@@ -41,14 +41,10 @@ export async function POST(request: NextRequest) {
     // Validate input
     const validatedData = registerSchema.parse(body);
 
-    // Check if user already has a babysitter profile
+    // Check if user already has a babysitter profile (e.g., created during OAuth signup)
     const existingBabysitter = await db.babysitter.findUnique({
       where: { userId }
     });
-
-    if (existingBabysitter) {
-      return ApiErrors.badRequest('Babysitter profile already exists');
-    }
 
     // Create or update user profile
     await db.userProfile.upsert({
@@ -76,17 +72,31 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Create babysitter profile
-    const babysitter = await db.babysitter.create({
-      data: {
-        userId,
-        bio: validatedData.bio,
-        experienceYears: validatedData.experienceYears,
-        experienceSummary: validatedData.experienceSummary,
-        hourlyRate: validatedData.hourlyRate,
-        status: 'PENDING_VERIFICATION',
-      }
-    });
+    let babysitter;
+    if (existingBabysitter) {
+      // Update existing babysitter record (OAuth users already have one with defaults)
+      babysitter = await db.babysitter.update({
+        where: { userId },
+        data: {
+          bio: validatedData.bio,
+          experienceYears: validatedData.experienceYears,
+          experienceSummary: validatedData.experienceSummary,
+          hourlyRate: validatedData.hourlyRate,
+        }
+      });
+    } else {
+      // Create new babysitter profile
+      babysitter = await db.babysitter.create({
+        data: {
+          userId,
+          bio: validatedData.bio,
+          experienceYears: validatedData.experienceYears,
+          experienceSummary: validatedData.experienceSummary,
+          hourlyRate: validatedData.hourlyRate,
+          status: 'PENDING_VERIFICATION',
+        }
+      });
+    }
 
     // Update user flags
     await db.user.update({
@@ -99,7 +109,7 @@ export async function POST(request: NextRequest) {
     return apiSuccess({
       babysitterId: babysitter.id,
       nextStep: 'documents'
-    }, 'Babysitter registration started');
+    }, existingBabysitter ? 'Babysitter profile updated' : 'Babysitter registration started');
 
   } catch (error) {
     console.error('Babysitter registration error:', error);

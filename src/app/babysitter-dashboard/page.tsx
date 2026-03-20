@@ -71,6 +71,8 @@ function BabysitterDashboardContent() {
             await refreshUser();
             setProfileCompletedInSession(true);
             setShowOAuthCompletionModal(false);
+            // Redirect to full registration to complete bio, rate, documents, etc.
+            router.push('/babysitter/register');
           }}
         />
       )}

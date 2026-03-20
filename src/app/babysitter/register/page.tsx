@@ -733,6 +733,8 @@ export default function BabysitterRegisterPage() {
     { title: 'Review', icon: CheckCircle },
   ];
 
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
   // Redirect if not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -740,17 +742,72 @@ export default function BabysitterRegisterPage() {
     }
   }, [authLoading, isAuthenticated, router]);
 
-  // Pre-fill user data if available
+  // Fetch existing babysitter profile and pre-fill all fields
   useEffect(() => {
-    if (user?.profile) {
-      setFormData(prev => ({
-        ...prev,
-        firstName: user.profile?.firstName || '',
-        lastName: user.profile?.lastName || '',
-        phone: user.profile?.phone || '',
-      }));
-    }
-  }, [user]);
+    if (!isAuthenticated || authLoading) return;
+
+    const fetchExistingProfile = async () => {
+      try {
+        const res = await fetch('/api/babysitter/register');
+        const data = await res.json();
+
+        if (data.data?.registered && data.data?.babysitter) {
+          const bs = data.data.babysitter;
+          const profile = data.data.profile;
+
+          // If already past PENDING_VERIFICATION, redirect to dashboard
+          if (bs.status !== 'PENDING_VERIFICATION') {
+            router.push('/babysitter-dashboard');
+            return;
+          }
+
+          // Pre-fill babysitter-specific fields
+          setFormData(prev => ({
+            ...prev,
+            firstName: profile?.firstName || prev.firstName,
+            lastName: profile?.lastName || prev.lastName,
+            phone: profile?.phone || prev.phone,
+            dateOfBirth: profile?.dateOfBirth ? new Date(profile.dateOfBirth).toISOString().split('T')[0] : prev.dateOfBirth,
+            streetAddress: profile?.streetAddress || prev.streetAddress,
+            city: profile?.city || prev.city,
+            state: profile?.state || prev.state,
+            zipCode: profile?.zipCode || prev.zipCode,
+            bio: bs.bio || prev.bio,
+            experienceYears: bs.experienceYears || prev.experienceYears,
+            experienceSummary: bs.experienceSummary || prev.experienceSummary,
+            hourlyRate: bs.hourlyRate || prev.hourlyRate,
+          }));
+        } else if (user?.profile) {
+          // No babysitter record yet — just pre-fill from user profile
+          setFormData(prev => ({
+            ...prev,
+            firstName: user.profile?.firstName || '',
+            lastName: user.profile?.lastName || '',
+            phone: user.profile?.phone || '',
+            dateOfBirth: user.profile?.dateOfBirth ? new Date(user.profile.dateOfBirth).toISOString().split('T')[0] : '',
+            streetAddress: user.profile?.streetAddress || '',
+            city: user.profile?.city || '',
+            state: user.profile?.state || '',
+            zipCode: user.profile?.zipCode || '',
+          }));
+        }
+      } catch {
+        // Fallback to basic user profile pre-fill
+        if (user?.profile) {
+          setFormData(prev => ({
+            ...prev,
+            firstName: user.profile?.firstName || '',
+            lastName: user.profile?.lastName || '',
+            phone: user.profile?.phone || '',
+          }));
+        }
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+
+    fetchExistingProfile();
+  }, [isAuthenticated, authLoading, user, router]);
 
   const updateFormData = (data: Record<string, unknown>) => {
     setFormData(prev => ({ ...prev, ...data }));
@@ -906,7 +963,7 @@ export default function BabysitterRegisterPage() {
     }
   };
 
-  if (authLoading) {
+  if (authLoading || loadingProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-[#8B5CF6]" />
