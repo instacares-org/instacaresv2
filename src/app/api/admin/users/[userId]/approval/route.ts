@@ -203,29 +203,60 @@ export async function POST(
       }
     }
 
-    // If user also has a babysitter record, sync its status
-    if (updatedUser.babysitter) {
+    // If user is a babysitter, sync babysitter record status (or create if missing)
+    if (updatedUser.isBabysitter || updatedUser.userType === 'BABYSITTER') {
       const babysitterStatusMap: Record<string, 'APPROVED' | 'REJECTED' | 'SUSPENDED'> = {
         'APPROVED': 'APPROVED',
         'REJECTED': 'REJECTED',
         'SUSPENDED': 'SUSPENDED',
       };
       const newBabysitterStatus = babysitterStatusMap[action];
-      if (newBabysitterStatus && updatedUser.babysitter.status !== newBabysitterStatus) {
-        await prisma.babysitter.update({
-          where: { id: updatedUser.babysitter.id },
-          data: {
-            status: newBabysitterStatus,
-            ...(action === 'APPROVED' ? { approvedAt: new Date(), isAvailable: true } : {}),
-            ...(action === 'SUSPENDED' ? { isAvailable: false } : {}),
-          }
-        });
-        logger.info('Synced babysitter status with user approval', {
-          userId,
-          babysitterId: updatedUser.babysitter.id,
-          previousStatus: updatedUser.babysitter.status,
-          newStatus: newBabysitterStatus,
-        });
+
+      if (updatedUser.babysitter) {
+        // Update existing babysitter record
+        if (newBabysitterStatus && updatedUser.babysitter.status !== newBabysitterStatus) {
+          await prisma.babysitter.update({
+            where: { id: updatedUser.babysitter.id },
+            data: {
+              status: newBabysitterStatus,
+              ...(action === 'APPROVED' ? { approvedAt: new Date(), isAvailable: true } : {}),
+              ...(action === 'SUSPENDED' ? { isAvailable: false } : {}),
+            }
+          });
+          logger.info('Synced babysitter status with user approval', {
+            userId,
+            babysitterId: updatedUser.babysitter.id,
+            previousStatus: updatedUser.babysitter.status,
+            newStatus: newBabysitterStatus,
+          });
+        }
+      } else if (action === 'APPROVED') {
+        // Auto-create babysitter record if missing (e.g., OAuth signup)
+        try {
+          await prisma.babysitter.create({
+            data: {
+              userId: userId,
+              bio: '',
+              experienceYears: 0,
+              hourlyRate: 20,
+              status: 'APPROVED',
+              approvedAt: new Date(),
+              isAvailable: true,
+              phoneVerified: false,
+              emailVerified: false,
+            }
+          });
+          logger.info('Auto-created babysitter record for approved user', {
+            userId,
+            email: updatedUser.email,
+            adminId: permCheck.user!.id,
+          });
+        } catch (babysitterCreateError) {
+          logger.error('Failed to auto-create babysitter record', babysitterCreateError, {
+            userId,
+            email: updatedUser.email,
+          });
+        }
       }
     }
 

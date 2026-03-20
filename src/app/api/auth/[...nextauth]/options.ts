@@ -466,6 +466,27 @@ export const authOptions: NextAuthOptions = {
             include: { profile: true }
           });
 
+          // Create Babysitter profile record for babysitter OAuth signups
+          // This is required for the babysitter to appear in /api/babysitters listings
+          if (isBabysitterRole) {
+            try {
+              await prisma.babysitter.create({
+                data: {
+                  userId: dbUser.id,
+                  bio: '',
+                  experienceYears: 0,
+                  hourlyRate: 20, // Default rate, babysitter can update later
+                  status: 'PENDING_VERIFICATION',
+                  phoneVerified: false,
+                  emailVerified: false,
+                }
+              });
+            } catch (babysitterError) {
+              // Don't fail OAuth flow if babysitter record creation fails
+              console.error('Failed to create babysitter profile during OAuth:', babysitterError);
+            }
+          }
+
           // Send welcome email to new OAuth user
           try {
             await emailService.sendWelcomeEmail(user.email, {
