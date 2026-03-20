@@ -19,6 +19,8 @@ export default function BookingsPage() {
     // Redirect to appropriate dashboard based on user type
     if (session.user.userType === 'PARENT') {
       router.push('/parent-dashboard?tab=bookings');
+    } else if (session.user.userType === 'BABYSITTER') {
+      router.push('/babysitter-dashboard');
     } else if (session.user.userType === 'CAREGIVER') {
       router.push('/caregiver-dashboard?tab=bookings');
     } else {

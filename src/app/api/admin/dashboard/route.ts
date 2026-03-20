@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
           totalUsers: 0,
           totalBookings: 0,
           totalCaregivers: 0,
+          totalBabysitters: 0,
           totalParents: 0,
           totalAdmins: 0,
           activeBookings: 0,
@@ -60,6 +61,7 @@ export async function GET(request: NextRequest) {
       // User stats (count queries)
       totalUsers,
       totalCaregivers,
+      totalBabysitters,
       totalParents,
       totalAdmins,
       pendingApprovals,
@@ -88,6 +90,7 @@ export async function GET(request: NextRequest) {
       // User count queries
       db.user.count(),
       db.user.count({ where: { userType: 'CAREGIVER' } }),
+      db.user.count({ where: { userType: 'BABYSITTER' } }),
       db.user.count({ where: { userType: 'PARENT' } }),
       db.user.count({ where: { userType: 'ADMIN' } }),
       db.user.count({ where: { approvalStatus: 'PENDING' } }),
@@ -211,6 +214,7 @@ export async function GET(request: NextRequest) {
         totalUsers,
         totalBookings,
         totalCaregivers,
+        totalBabysitters,
         totalParents,
         totalAdmins,
         activeBookings,

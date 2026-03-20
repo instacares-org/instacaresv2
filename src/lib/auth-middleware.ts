@@ -7,7 +7,7 @@ import { SECURITY_CONFIG, logSecurityEvent } from './security-config';
  */
 export async function withAuth(
   request: NextRequest,
-  requiredUserType?: 'PARENT' | 'CAREGIVER' | 'ADMIN' | 'SUPERVISOR' | 'ANY',
+  requiredUserType?: 'PARENT' | 'CAREGIVER' | 'BABYSITTER' | 'ADMIN' | 'SUPERVISOR' | 'ANY',
   requireApproval: boolean = false
 ) {
   try {
@@ -78,11 +78,13 @@ export async function withAuth(
       // Handle both boolean and truthy values for isParent/isCaregiver
       const hasParentRole = Boolean(token.isParent) || token.userType === 'PARENT';
       const hasCaregiverRole = Boolean(token.isCaregiver) || token.userType === 'CAREGIVER';
+      const hasBabysitterRole = Boolean(token.isBabysitter) || token.userType === 'BABYSITTER';
       const isAdmin = token.userType === 'ADMIN' || token.userType === 'SUPERVISOR';
 
       const hasRequiredRole = isAdmin ||
         (requiredUserType === 'PARENT' && hasParentRole) ||
         (requiredUserType === 'CAREGIVER' && hasCaregiverRole) ||
+        (requiredUserType === 'BABYSITTER' && hasBabysitterRole) ||
         (requiredUserType === 'ADMIN' && isAdmin) ||
         (requiredUserType === 'SUPERVISOR' && isAdmin);
 

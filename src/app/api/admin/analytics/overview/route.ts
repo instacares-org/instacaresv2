@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
       db.user.count({ 
         where: { 
           createdAt: { gte: startDate },
-          userType: { in: ['PARENT', 'CAREGIVER'] }
+          userType: { in: ['PARENT', 'CAREGIVER', 'BABYSITTER'] }
         }
       }),
       
@@ -131,7 +131,7 @@ export async function GET(request: NextRequest) {
         _count: { city: true },
         where: { 
           city: { not: null },
-          user: { userType: { in: ['PARENT', 'CAREGIVER'] } }
+          user: { userType: { in: ['PARENT', 'CAREGIVER', 'BABYSITTER'] } }
         },
         orderBy: { _count: { city: 'desc' } },
         take: 10
@@ -241,7 +241,7 @@ export async function GET(request: NextRequest) {
       db.user.count({ 
         where: { 
           createdAt: { gte: previousPeriodStart, lt: startDate },
-          userType: { in: ['PARENT', 'CAREGIVER'] }
+          userType: { in: ['PARENT', 'CAREGIVER', 'BABYSITTER'] }
         }
       })
     ]);

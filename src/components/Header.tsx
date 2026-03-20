@@ -135,11 +135,14 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
         localStorage.removeItem('oauthSignupUserType');
         localStorage.removeItem('oauthSignupTimestamp');
 
-        if ((storedUserType as string) === 'babysitter' || user?.isBabysitter) {
+        // Determine the correct dashboard using stored type, session activeRole, or DB userType
+        const effectiveType = storedUserType || user?.activeRole?.toLowerCase() || user?.userType?.toLowerCase() || 'parent';
+
+        if (effectiveType === 'babysitter') {
           console.log('Header: Redirecting babysitter OAuth user to babysitter-dashboard');
           window.location.href = '/babysitter-dashboard';
           return;
-        } else if (storedUserType === 'caregiver') {
+        } else if (effectiveType === 'caregiver') {
           console.log('Header: Redirecting caregiver OAuth user to caregiver-dashboard');
           window.location.href = '/caregiver-dashboard?oauth=true&userType=caregiver';
           return;
@@ -1705,6 +1708,7 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
         isOpen={showOAuthCompletionModal}
         onClose={() => setShowOAuthCompletionModal(false)}
         mode="oauthCompletion"
+        oauthUserType={(oauthUserTypeFromStorage || user?.activeRole?.toLowerCase() || 'parent') as 'parent' | 'caregiver' | 'babysitter'}
         oauthUserData={{
           email: user.email || '',
           firstName: user.profile?.firstName || user.name?.split(' ')[0] || '',
@@ -1712,11 +1716,15 @@ function Header({ activeFilters, onFiltersChange }: HeaderProps = {}) {
           image: user.profile?.avatar || undefined
         }}
         onOAuthComplete={async () => {
-          // Mark profile as completed in this session to prevent modal from reopening
+          // Clear OAuth cookies/localStorage
+          document.cookie = 'oauthIntendedUserType=;path=/;max-age=0';
+          localStorage.removeItem('oauthSignupUserType');
+          localStorage.removeItem('oauthSignupTimestamp');
+          // Refresh user data FIRST to update session with new userType
+          await refreshUser();
+          // Then update local state
           setProfileCompletedInSession(true);
           setShowOAuthCompletionModal(false);
-          // Refresh user data to update needsProfileCompletion status
-          await refreshUser();
         }}
       />
     )}

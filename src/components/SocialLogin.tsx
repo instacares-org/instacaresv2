@@ -39,6 +39,10 @@ export default function SocialLogin({ userType, onSocialLogin }: SocialLoginProp
       localStorage.setItem('oauthSignupTimestamp', Date.now().toString());
       console.log('SocialLogin: Stored oauthSignupUserType in localStorage:', userType);
 
+      // Also set a cookie so the server-side signIn callback can read the intended type
+      // This ensures new OAuth users are created with the correct userType (not always PARENT)
+      document.cookie = `oauthIntendedUserType=${userType};path=/;max-age=600;samesite=lax`;
+
       // Use NextAuth.js signIn with OAuth provider
       // Redirect to appropriate dashboard based on user type where profile completion modal will show
       // Pass userType in callback URL so the system knows if this is a caregiver signup

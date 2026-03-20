@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { verifySync as otpVerifySync } from 'otplib';
+import { headers } from 'next/headers';
 
 import { metrics } from "@/lib/metrics";
 import { emailService } from "@/lib/notifications/email.service";
@@ -177,10 +178,10 @@ export const authOptions: NextAuthOptions = {
 
           // Check if user type matches (if specified)
           if (credentials.userType) {
-            // Special case: babysitters have userType 'CAREGIVER' with isBabysitter flag
+            // Special case: babysitters can have userType 'BABYSITTER' or legacy 'CAREGIVER' with isBabysitter flag
             if (credentials.userType === 'babysitter') {
-              // Babysitters must have isBabysitter=true AND userType='CAREGIVER'
-              if (!user.isBabysitter || user.userType !== 'CAREGIVER') {
+              const isBabysitterUser = user.userType === 'BABYSITTER' || (user.isBabysitter && user.userType === 'CAREGIVER');
+              if (!isBabysitterUser) {
                 await recordFailedAttempt(email);
                 metrics.authFailure("invalid_credentials");
                 return null;
@@ -403,23 +404,51 @@ export const authOptions: NextAuthOptions = {
             lastName = nameParts.slice(1).join(' ') || '';
           }
 
+          // Determine the intended user type from the oauthIntendedUserType cookie
+          // This cookie is set by SocialLogin.tsx before the OAuth redirect
+          let intendedType: 'parent' | 'caregiver' | 'babysitter' = 'parent';
+          try {
+            const headersList = await headers();
+            const cookieHeader = headersList.get('cookie') || '';
+            const match = cookieHeader.split(';')
+              .map(c => c.trim())
+              .find(c => c.startsWith('oauthIntendedUserType='));
+            if (match) {
+              const value = match.split('=')[1];
+              if (value === 'caregiver' || value === 'babysitter' || value === 'parent') {
+                intendedType = value;
+              }
+            }
+          } catch {
+            // Fallback to parent if cookie read fails
+          }
+
+          // Map intended type to DB values — use BABYSITTER userType directly
+          const dbUserType = intendedType === 'babysitter' ? 'BABYSITTER' : intendedType === 'caregiver' ? 'CAREGIVER' : 'PARENT';
+          const isParentRole = intendedType === 'parent';
+          const isCaregiverRole = intendedType === 'caregiver';
+          const isBabysitterRole = intendedType === 'babysitter';
+          // Caregivers/babysitters need admin approval, parents are auto-approved
+          const approvalStatus = intendedType === 'parent' ? 'APPROVED' : 'PENDING';
+
           // Track new user registration
-          metrics.userRegistered("PARENT", "unknown");
-          // Create new user with profile
+          metrics.userRegistered(dbUserType, "unknown");
+          // Create new user with profile using the intended type
           dbUser = await prisma.user.create({
             data: {
               email: user.email,
               name: user.name || "OAuth User",
               emailVerified: new Date(),
               image: user.image,
-              userType: "PARENT",
-              approvalStatus: "APPROVED", // Auto-approve Google OAuth users
+              userType: dbUserType,
+              approvalStatus: approvalStatus,
               isActive: true,
               lastLogin: new Date(),
-              // Dual role support - set isParent for new parent users
-              isParent: true,
-              isCaregiver: false,
-              activeRole: "PARENT",
+              // Dual role support
+              isParent: isParentRole,
+              isCaregiver: isCaregiverRole,
+              isBabysitter: isBabysitterRole,
+              activeRole: dbUserType,
               profile: {
                 create: {
                   firstName: firstName,
@@ -442,7 +471,7 @@ export const authOptions: NextAuthOptions = {
             await emailService.sendWelcomeEmail(user.email, {
               firstName: firstName || 'User',
               lastName: lastName || '',
-              userType: 'PARENT',
+              userType: dbUserType,
             });
           } catch (emailError) {
             // Log email failures without exposing user data in production
@@ -554,10 +583,12 @@ export const authOptions: NextAuthOptions = {
             const needsCompletion = !profileComplete;
 
             // Build the session user object explicitly with spread to ensure all fields are included
-            // ADMIN/SUPERVISOR always use their real userType (activeRole is for parent/caregiver switching)
+            // ADMIN/SUPERVISOR always use their real userType; babysitters get BABYSITTER (backward compat)
             const effectiveUserType = ['ADMIN', 'SUPERVISOR'].includes(dbUser.userType)
               ? dbUser.userType
-              : (dbUser.activeRole || dbUser.userType);
+              : dbUser.isBabysitter
+                ? 'BABYSITTER'
+                : (dbUser.activeRole || dbUser.userType);
             session.user = {
               ...session.user,
               id: dbUser.id,
@@ -620,6 +651,7 @@ export const authOptions: NextAuthOptions = {
                 // Dual role support
                 isParent: true,
                 isCaregiver: true,
+                isBabysitter: true,
                 activeRole: true,
                 profile: {
                   select: {
@@ -635,14 +667,16 @@ export const authOptions: NextAuthOptions = {
             });
             if (dbUser) {
               token.userId = dbUser.id;
-              token.userType = dbUser.userType;
               token.approvalStatus = dbUser.approvalStatus;
               token.isActive = dbUser.isActive;
               token.mustChangePassword = dbUser.mustChangePassword;
               // Dual role support - store in JWT token
               token.isParent = dbUser.isParent;
               token.isCaregiver = dbUser.isCaregiver;
+              token.isBabysitter = dbUser.isBabysitter;
               token.activeRole = dbUser.activeRole;
+              // Compute effective userType — babysitters get BABYSITTER (backward compat for old CAREGIVER+isBabysitter users)
+              token.userType = dbUser.isBabysitter ? 'BABYSITTER' : dbUser.userType;
               // Check if OAuth user needs to complete their profile
               // ADMIN/SUPERVISOR users never need profile completion
               token.needsProfileCompletion = ['ADMIN', 'SUPERVISOR'].includes(dbUser.userType) ? false : !isProfileComplete(dbUser.profile);
@@ -691,10 +725,12 @@ export const authOptions: NextAuthOptions = {
             token.isCaregiver = dbUser.isCaregiver;
             token.isBabysitter = dbUser.isBabysitter;
             token.activeRole = dbUser.activeRole;
-            // ADMIN/SUPERVISOR always use their real userType (activeRole is for parent/caregiver switching)
+            // ADMIN/SUPERVISOR always use their real userType; babysitters get BABYSITTER (backward compat)
             token.userType = ['ADMIN', 'SUPERVISOR'].includes(dbUser.userType)
               ? dbUser.userType
-              : (dbUser.activeRole || dbUser.userType);
+              : dbUser.isBabysitter
+                ? 'BABYSITTER'
+                : (dbUser.activeRole || dbUser.userType);
             // Update profile completion status - ADMIN/SUPERVISOR users never need profile completion
             const effectiveType = token.userType as string;
             token.needsProfileCompletion = ['ADMIN', 'SUPERVISOR'].includes(effectiveType as string) ? false : !isProfileComplete(dbUser.profile);

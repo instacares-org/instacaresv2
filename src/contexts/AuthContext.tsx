@@ -82,7 +82,7 @@ export interface AuthUser {
   id: string;
   email: string;
   name?: string;
-  userType: 'PARENT' | 'CAREGIVER' | 'ADMIN'; // Legacy - current active role
+  userType: 'PARENT' | 'CAREGIVER' | 'BABYSITTER' | 'ADMIN'; // Current active role
   approvalStatus: string;
   isActive: boolean;
   emailVerified: boolean;
@@ -94,7 +94,7 @@ export interface AuthUser {
   // Dual role support
   hasParentRole: boolean;
   hasCaregiverRole: boolean;
-  activeRole: 'PARENT' | 'CAREGIVER' | 'ADMIN';
+  activeRole: 'PARENT' | 'CAREGIVER' | 'BABYSITTER' | 'ADMIN';
   // Babysitter flag
   isBabysitter: boolean;
   // Prisma relation counts (populated when included in queries)

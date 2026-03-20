@@ -64,7 +64,7 @@ interface PendingApproval {
 interface PendingUser {
   id: string;
   email: string;
-  userType: 'PARENT' | 'CAREGIVER' | 'ADMIN';
+  userType: 'PARENT' | 'CAREGIVER' | 'BABYSITTER' | 'ADMIN';
   approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
   createdAt: string;
   profile?: {
@@ -289,6 +289,7 @@ export default function AdminDashboard() {
   const [platformStats, setPlatformStats] = useState({
     totalUsers: 0,
     totalCaregivers: 0,
+    totalBabysitters: 0,
     totalParents: 0,
     totalAdmins: 0,
     pendingVerifications: 0,
@@ -633,6 +634,7 @@ const handleUserApproval = useCallback(async (userId: string, action: 'APPROVED'
           setPlatformStats({
             totalUsers: 0,
             totalCaregivers: 0,
+            totalBabysitters: 0,
             totalParents: 0,
             totalAdmins: 0,
             pendingVerifications: 0,
@@ -653,6 +655,7 @@ const handleUserApproval = useCallback(async (userId: string, action: 'APPROVED'
         setPlatformStats({
           totalUsers: 0,
           totalCaregivers: 0,
+          totalBabysitters: 0,
           totalParents: 0,
           totalAdmins: 0,
           pendingVerifications: 0,
@@ -935,6 +938,13 @@ const handleUserApproval = useCallback(async (userId: string, action: 'APPROVED'
                 subtitle="Active providers"
                 icon={ShieldCheckIcon}
                 color="text-green-600"
+              />
+              <StatCard
+                title="Babysitters"
+                value={platformStats.totalBabysitters || 0}
+                subtitle="Babysitting providers"
+                icon={UsersIcon}
+                color="text-orange-600"
               />
               <StatCard
                 title="Parents"
@@ -1260,6 +1270,7 @@ const handleUserApproval = useCallback(async (userId: string, action: 'APPROVED'
                             <div className="flex items-center space-x-3">
                               <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                                 user.userType === 'CAREGIVER' ? 'text-green-700 bg-green-100' :
+                                user.userType === 'BABYSITTER' ? 'text-orange-700 bg-orange-100' :
                                 user.userType === 'PARENT' ? 'text-blue-700 bg-blue-100' :
                                 'text-purple-700 bg-purple-100'
                               }`}>

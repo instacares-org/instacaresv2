@@ -146,8 +146,15 @@ export default function ProfileCompletionModal({ isOpen, onClose, onComplete }: 
       if (onComplete) {
         onComplete();
       } else {
-        // Default behavior: redirect to parent dashboard
-        router.push('/parent-dashboard');
+        // Default behavior: redirect to the appropriate dashboard based on user's role
+        const role = session?.user?.activeRole || session?.user?.userType || 'PARENT';
+        if (role === 'BABYSITTER') {
+          router.push('/babysitter-dashboard');
+        } else if (role === 'CAREGIVER') {
+          router.push('/caregiver-dashboard');
+        } else {
+          router.push('/parent-dashboard');
+        }
       }
 
       onClose();

@@ -63,6 +63,7 @@ declare module "next-auth/jwt" {
     // Dual role support
     isParent?: boolean;
     isCaregiver?: boolean;
+    isBabysitter?: boolean;
     activeRole?: UserType;
   }
 }

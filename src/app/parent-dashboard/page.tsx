@@ -1369,11 +1369,15 @@ const ParentDashboardContent: React.FC = () => {
             image: user.profile?.avatar || undefined
           }}
           onOAuthComplete={async () => {
-            // Mark profile as completed in this session to prevent modal from reopening
+            // Clear OAuth cookies/localStorage
+            document.cookie = 'oauthIntendedUserType=;path=/;max-age=0';
+            localStorage.removeItem('oauthSignupUserType');
+            localStorage.removeItem('oauthSignupTimestamp');
+            // Refresh user data FIRST to update session with new userType
+            await refreshUser();
+            // Then update local state
             setProfileCompletedInSession(true);
             setShowOAuthCompletionModal(false);
-            // Refresh user data to update needsProfileCompletion status
-            await refreshUser();
           }}
         />
       )}

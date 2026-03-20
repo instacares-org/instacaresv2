@@ -898,10 +898,10 @@ export class EmailService {
     details: {
       firstName: string;
       lastName: string;
-      userType: 'PARENT' | 'CAREGIVER';
+      userType: 'PARENT' | 'CAREGIVER' | 'BABYSITTER';
     }
   ) {
-    const isCaregiver = details.userType === 'CAREGIVER';
+    const isCaregiver = details.userType === 'CAREGIVER' || details.userType === 'BABYSITTER';
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://instacares.com';
     const dashboardUrl = isCaregiver
       ? `${baseUrl}/caregiver-dashboard`

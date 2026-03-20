@@ -342,7 +342,7 @@ function CaregiverDashboardContent() {
   }, [user]);
 
   // Fetch caregiver bio and experience
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchCaregiverProfile references functions defined later; deps intentionally omitted to avoid reordering
+   
   const fetchCaregiverProfile = async () => {
     if (!caregiverId) return;
 
@@ -483,7 +483,7 @@ function CaregiverDashboardContent() {
   }, [fetchBookings]);
 
   // Handle booking extension request
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- references state declared later in component
+   
   const handleExtendBooking = async () => {
     if (!selectedExtendBooking) return;
 
@@ -3291,11 +3291,15 @@ function CaregiverDashboardContent() {
             image: user.profile?.avatar || undefined
           }}
           onOAuthComplete={async () => {
-            // Mark profile as completed in this session to prevent modal from reopening
+            // Clear OAuth cookies/localStorage
+            document.cookie = 'oauthIntendedUserType=;path=/;max-age=0';
+            localStorage.removeItem('oauthSignupUserType');
+            localStorage.removeItem('oauthSignupTimestamp');
+            // Refresh user data FIRST to update session with new userType
+            await refreshUser();
+            // Then update local state
             setProfileCompletedInSession(true);
             setShowOAuthCompletionModal(false);
-            // Refresh user data to update needsProfileCompletion status
-            await refreshUser();
           }}
         />
       )}

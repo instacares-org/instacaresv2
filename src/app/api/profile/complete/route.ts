@@ -95,7 +95,7 @@ const profileCompleteSchema = z.object({
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   // Optional caregiver-specific fields
-  userType: z.enum(['parent', 'caregiver']).optional(),
+  userType: z.enum(['parent', 'caregiver', 'babysitter']).optional(),
   questionnaireData: questionnaireSchema.optional(),
 });
 
