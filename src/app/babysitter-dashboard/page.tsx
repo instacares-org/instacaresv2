@@ -1,14 +1,20 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import BabysitterDashboard from '@/components/BabysitterDashboard';
+import ProfileCompletionModal from '@/components/ProfileCompletionModal';
 import { Loader2 } from 'lucide-react';
 
 export default function BabysitterDashboardPage() {
   const router = useRouter();
-  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const searchParams = useSearchParams();
+  const { user, isAuthenticated, loading: authLoading, refreshUser } = useAuth();
+
+  // OAuth profile completion modal state
+  const [showOAuthCompletionModal, setShowOAuthCompletionModal] = useState(false);
+  const [profileCompletedInSession, setProfileCompletedInSession] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -16,6 +22,26 @@ export default function BabysitterDashboardPage() {
       return;
     }
   }, [authLoading, isAuthenticated, router]);
+
+  // Show profile completion modal when babysitter needs to complete their profile
+  useEffect(() => {
+    const isOAuthCallback = searchParams.get('oauth') === 'true';
+
+    // Clean up URL parameters after detecting OAuth callback
+    if (isOAuthCallback) {
+      window.history.replaceState({}, '', '/babysitter-dashboard');
+    }
+
+    // Show modal if user needs profile completion
+    const shouldShowModal = isAuthenticated &&
+      user?.needsProfileCompletion === true &&
+      !profileCompletedInSession &&
+      !showOAuthCompletionModal;
+
+    if (shouldShowModal) {
+      setShowOAuthCompletionModal(true);
+    }
+  }, [isAuthenticated, user?.needsProfileCompletion, user?.id, profileCompletedInSession, showOAuthCompletionModal, searchParams]);
 
   if (authLoading) {
     return (
@@ -29,5 +55,28 @@ export default function BabysitterDashboardPage() {
     return null;
   }
 
-  return <BabysitterDashboard />;
+  return (
+    <>
+      <BabysitterDashboard />
+
+      {/* OAuth Profile Completion Modal for Babysitters */}
+      {showOAuthCompletionModal && user && (
+        <ProfileCompletionModal
+          isOpen={showOAuthCompletionModal}
+          onClose={() => setShowOAuthCompletionModal(false)}
+          onComplete={async () => {
+            // Clear OAuth cookies/localStorage
+            document.cookie = 'oauthIntendedUserType=;path=/;max-age=0';
+            localStorage.removeItem('oauthSignupUserType');
+            localStorage.removeItem('oauthSignupTimestamp');
+            // Refresh user data FIRST to update session
+            await refreshUser();
+            // Then update local state
+            setProfileCompletedInSession(true);
+            setShowOAuthCompletionModal(false);
+          }}
+        />
+      )}
+    </>
+  );
 }
