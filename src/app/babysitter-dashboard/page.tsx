@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import BabysitterDashboard from '@/components/BabysitterDashboard';
 import ProfileCompletionModal from '@/components/ProfileCompletionModal';
 import { Loader2 } from 'lucide-react';
 
-export default function BabysitterDashboardPage() {
+function BabysitterDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isAuthenticated, loading: authLoading, refreshUser } = useAuth();
@@ -65,18 +65,27 @@ export default function BabysitterDashboardPage() {
           isOpen={showOAuthCompletionModal}
           onClose={() => setShowOAuthCompletionModal(false)}
           onComplete={async () => {
-            // Clear OAuth cookies/localStorage
             document.cookie = 'oauthIntendedUserType=;path=/;max-age=0';
             localStorage.removeItem('oauthSignupUserType');
             localStorage.removeItem('oauthSignupTimestamp');
-            // Refresh user data FIRST to update session
             await refreshUser();
-            // Then update local state
             setProfileCompletedInSession(true);
             setShowOAuthCompletionModal(false);
           }}
         />
       )}
     </>
+  );
+}
+
+export default function BabysitterDashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+      </div>
+    }>
+      <BabysitterDashboardContent />
+    </Suspense>
   );
 }
